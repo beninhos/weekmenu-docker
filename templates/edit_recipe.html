@@ -3,7 +3,7 @@
 <div class="bg-white rounded-lg shadow p-6">
     <h2 class="text-2xl font-bold mb-6">Recept Bewerken</h2>
     
-    <form method="POST" class="space-y-6">
+    <form method="POST" enctype="multipart/form-data" class="space-y-6">
         <div>
             <label class="block text-sm font-medium text-gray-700">Naam</label>
             <input type="text" name="name" required value="{{ recipe.name }}"
@@ -12,13 +12,34 @@
         
         <div>
             <label class="block text-sm font-medium text-gray-700">Kookboek</label>
-            <input type="text" name="cookbook" value="{{ recipe.cookbook or '' }}"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <select name="cookbook" 
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option value="">Selecteer een kookboek</option>
+                {% for cookbook in cookbooks %}
+                <option value="{{ cookbook.id }}" 
+                        {{ 'selected' if cookbook.id == recipe.cookbook_id }}>
+                    {{ cookbook.name }}
+                </option>
+                {% endfor %}
+            </select>
         </div>
         
         <div>
             <label class="block text-sm font-medium text-gray-700">Pagina</label>
             <input type="number" name="page" value="{{ recipe.page or '' }}"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Receptafbeelding</label>
+            {% if recipe.image_path %}
+            <div class="mb-2">
+                <img src="{{ url_for('static', filename=recipe.image_path.replace('static/', '')) }}" 
+                     alt="{{ recipe.name }}" 
+                     class="w-48 h-48 object-cover rounded">
+            </div>
+            {% endif %}
+            <input type="file" name="image" accept="image/*"
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
         </div>
         

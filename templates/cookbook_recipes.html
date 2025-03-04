@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="mb-6">
+    <div class="flex justify-between items-center mb-4">
+        <h1 class="text-2xl font-bold">Recepten in "{{ cookbook.name }}"</h1>
+        <a href="{{ url_for('list_cookbooks') }}" 
+           class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">
+            Terug naar Kookboeken
+        </a>
+    </div>
+
+    {% if cookbook.recipes %}
+    <div class="overflow-x-auto bg-white shadow-md rounded">
+        <table class="min-w-full table-auto">
+            <thead>
+                <tr class="bg-gray-200 text-gray-700 uppercase text-sm">
+                    <th class="py-3 px-4 text-left">Naam</th>
+                    <th class="py-3 px-4 text-left">Pagina</th>
+                    <th class="py-3 px-4 text-left">Acties</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-600">
+                {% for recipe in cookbook.recipes %}
+                <tr class="border-b hover:bg-gray-100">
+                    <td class="py-3 px-4">{{ recipe.name }}</td>
+                    <td class="py-3 px-4">{% if recipe.page %}{{ recipe.page }}{% else %}-{% endif %}</td>
+                    <td class="py-3 px-4">
+                        <a href="{{ url_for('edit_recipe', id=recipe.id) }}" 
+                           class="bg-green-500 hover:bg-green-600 text-white py-1 px-2 rounded text-sm">
+                            Bewerken
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
+        <p>Nog geen recepten toegevoegd voor dit kookboek.</p>
+    </div>
+    {% endif %}
+    
+    <div class="mt-6">
+        <a href="{{ url_for('new_recipe') }}" 
+           class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            Nieuw Recept Toevoegen
+        </a>
+    </div>
+</div>
+{% endblock %}

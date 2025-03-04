@@ -11,6 +11,8 @@ COPY . .
 
 # Maak de data-directory aan
 RUN mkdir -p /data
+RUN mkdir -p /app/static/uploads
+RUN chmod -R 755 /app/static/uploads
 
 # Poort waarop de applicatie draait
 EXPOSE 5001

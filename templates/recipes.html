@@ -3,48 +3,56 @@
 <div class="bg-white rounded-lg shadow p-6">
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold">Recepten</h2>
-        <a href="{{ url_for('new_recipe') }}" 
+        <a href="{{ url_for('new_recipe') }}"
            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
             Nieuw Recept
         </a>
     </div>
-    
     <div class="grid gap-4">
         {% for recipe in recipes %}
-        <div class="border p-4 rounded hover:bg-gray-50">
-            <div class="flex justify-between items-start">
-                <div>
-                    <h3 class="font-bold">{{ recipe.name }}</h3>
-                    {% if recipe.cookbook %}
-                    <p class="text-sm text-gray-600">
-                        {{ recipe.cookbook }}
-                        {% if recipe.page %}
-                        - pagina {{ recipe.page }}
-                        {% endif %}
-                    </p>
-                    {% endif %}
-                </div>
-                <div class="space-x-2">
-                    <a href="{{ url_for('edit_recipe', id=recipe.id) }}" 
-                       class="text-blue-500 hover:text-blue-700">Bewerken</a>
-                    <button onclick="deleteRecipe({{ recipe.id }})" 
-                            class="text-red-500 hover:text-red-700">Verwijderen</button>
-                </div>
+        <div class="border p-4 rounded hover:bg-gray-50 flex">
+            <!-- Voeg afbeelding toe -->
+            {% if recipe.image_path %}
+            <div class="w-24 h-24 mr-4">
+                <img src="{{ url_for('static', filename=recipe.image_path.replace('static/', '')) }}" 
+                     alt="{{ recipe.name }}" 
+                     class="w-full h-full object-cover rounded">
             </div>
+            {% endif %}
             
-            <div class="mt-4">
-                <h4 class="font-medium mb-2">Ingrediënten:</h4>
-                <ul class="list-disc list-inside">
-                    {% for ri in recipe.ingredients %}
-                    <li>{{ ri.amount }} {{ ri.unit }} {{ ri.ingredient.name }}</li>
-                    {% endfor %}
-                </ul>
+            <div class="flex-grow">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="font-bold">{{ recipe.name }}</h3>
+                        {% if recipe.cookbook_relation %}
+                        <p class="text-sm text-gray-600">
+                            {{ recipe.cookbook_relation.name }}
+                            {% if recipe.page %}
+                            - pagina {{ recipe.page }}
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="space-x-2">
+                        <a href="{{ url_for('edit_recipe', id=recipe.id) }}"
+                           class="text-blue-500 hover:text-blue-700">Bewerken</a>
+                        <button onclick="deleteRecipe({{ recipe.id }})"
+                                class="text-red-500 hover:text-red-700">Verwijderen</button>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h4 class="font-medium mb-2">Ingrediënten:</h4>
+                    <ul class="list-disc list-inside">
+                        {% for ri in recipe.ingredients %}
+                        <li>{{ ri.amount }} {{ ri.unit }} {{ ri.ingredient.name }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
             </div>
         </div>
         {% endfor %}
     </div>
 </div>
-
 <script>
 async function deleteRecipe(id) {
     if (confirm('Weet je zeker dat je dit recept wilt verwijderen?')) {

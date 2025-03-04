@@ -1,7 +1,6 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
-from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
 
@@ -35,11 +34,9 @@ class Recipe(db.Model):
     __tablename__ = 'recipe'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    cookbook_id = db.Column(db.Integer, db.ForeignKey('cookbook.id'), nullable=True)
+    cookbook = db.Column(db.String(100))
     page = db.Column(db.Integer)
-    image_path = db.Column(db.String(200), nullable=True)
     ingredients = db.relationship('RecipeIngredient', backref='recipe', lazy=True, cascade='all, delete-orphan')
-    cookbook = db.relationship('Cookbook', back_populates='recipes')
 
 class Ingredient(db.Model):
     __tablename__ = 'ingredient'
@@ -71,8 +68,8 @@ class Cookbook(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
     
-    # Relatie met recepten
-    recipes = db.relationship('Recipe', back_populates='cookbook', lazy=True)
+# Relatie met recepten
+    recipes = db.relationship('Recipe', backref='cookbook_relation', lazy=True)
 
 # Routes
 @app.route('/')
@@ -94,11 +91,6 @@ def week_menu(year, week):
                          days=DAYS,
                          meal_types=MEAL_TYPES)
 
-@app.route('/cookbook/<int:id>/recipes')
-def list_cookbook_recipes(id):
-    cookbook = Cookbook.query.get_or_404(id)
-    return render_template('cookbook_recipes.html', cookbook=cookbook)
-
 @app.route('/recipes')
 def recipes():
     recipes = Recipe.query.all()
@@ -106,22 +98,11 @@ def recipes():
 
 @app.route('/recipe/new', methods=['GET', 'POST'])
 def new_recipe():
-    cookbooks = Cookbook.query.order_by(Cookbook.name).all()
-    
     if request.method == 'POST':
-        # Afbeelding uploaden
-        image = request.files.get('image')
-        image_path = None
-        if image and image.filename:
-            filename = secure_filename(image.filename)
-            image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(app.root_path, image_path))
-        
         recipe = Recipe(
             name=request.form['name'],
-            cookbook_id=request.form.get('cookbook'),
-            page=request.form['page'] if request.form['page'] else None,
-            image_path=image_path
+            cookbook=request.form['cookbook'],
+            page=request.form['page'] if request.form['page'] else None
         )
         db.session.add(recipe)
         db.session.commit()
@@ -150,7 +131,7 @@ def new_recipe():
         db.session.commit()
         return redirect(url_for('recipes'))
     
-    return render_template('new_recipe.html', cookbooks=cookbooks)
+    return render_template('new_recipe.html')
 
 @app.route('/recipe/<int:id>', methods=['DELETE'])
 def delete_recipe(id):
@@ -234,24 +215,13 @@ def shopping_list(year, week):
                          shopping_list=shopping_list,
                          week=week,
                          year=year)
-
 @app.route('/recipe/<int:id>/edit', methods=['GET', 'POST'])
 def edit_recipe(id):
     recipe = Recipe.query.get_or_404(id)
-    cookbooks = Cookbook.query.order_by(Cookbook.name).all()
-    
     if request.method == 'POST':
         recipe.name = request.form['name']
-        recipe.cookbook_id = request.form.get('cookbook')
+        recipe.cookbook = request.form['cookbook']
         recipe.page = request.form['page'] if request.form['page'] else None
-        
-        # Afbeelding uploaden
-        image = request.files.get('image')
-        if image and image.filename:
-            filename = secure_filename(image.filename)
-            image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(app.root_path, image_path))
-            recipe.image_path = image_path
         
         # Verwijder bestaande ingrediënten
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
@@ -280,10 +250,10 @@ def edit_recipe(id):
         db.session.commit()
         return redirect(url_for('recipes'))
     
-    return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks)
+    return render_template('edit_recipe.html', recipe=recipe)
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    os.makedirs(os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')), exist_ok=True)    
-    app.run(host='0.0.0.0', port=5001, debug=True)
+os.makedirs(os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')), exist_ok=True)    
+app.run(host='0.0.0.0', port=5001, debug=True)
