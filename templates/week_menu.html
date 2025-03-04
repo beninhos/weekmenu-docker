@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white rounded-lg shadow p-6">
+    <div class="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
+        <h2 class="text-2xl font-bold">Weekmenu - Week {{ week }}</h2>
+        <div class="flex space-x-4">
+            <a href="{{ url_for('shopping_list', year=year, week=week) }}" 
+               class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-sm md:text-base">
+                Boodschappenlijst
+            </a>
+            <a href="{{ url_for('week_menu', year=year, week=week-1) }}" 
+               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm md:text-base">
+                Vorige Week
+            </a>
+            <a href="{{ url_for('week_menu', year=year, week=week+1) }}" 
+               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm md:text-base">
+                Volgende Week
+            </a>
+        </div>
+    </div>
+    
+    <div id="saveStatus" class="hidden fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg">
+        Wijzigingen opgeslagen
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
+        {% for day_index, day_name in days %}
+        <div class="border p-4 rounded hover:shadow-md transition-shadow duration-200">
+            <h3 class="font-bold mb-2">{{ day_name }}</h3>
+            <div class="space-y-2">
+                {% for meal_code, meal_name in meal_types %}
+                <div>
+                    <label class="block text-sm text-gray-600">{{ meal_name }}</label>
+                    <select class="meal-select w-full border rounded p-1 text-sm" 
+                            data-day="{{ day_index }}" 
+                            data-meal="{{ meal_code }}">
+                        <option value="">- Kies recept -</option>
+                        {% for recipe in recipes %}
+                            {% set selected = false %}
+                            {% for item in menu_items %}
+                                {% if item.day_of_week == day_index and item.meal_type == meal_code and item.recipe_id == recipe.id %}
+                                    {% set selected = true %}
+                                {% endif %}
+                            {% endfor %}
+                            <option value="{{ recipe.id }}" {{ 'selected' if selected }}>
+                                {{ recipe.name }}
+                                {% if recipe.cookbook %}
+                                    ({{ recipe.cookbook }}{% if recipe.page %}, p.{{ recipe.page }}{% endif %})
+                                {% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+const debounce = (func, wait) => {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+};
+
+const showSaveStatus = () => {
+    const status = document.getElementById('saveStatus');
+    status.classList.remove('hidden');
+    setTimeout(() => {
+        status.classList.add('hidden');
+    }, 2000);
+};
+
+const updateMenu = async () => {
+    const menu = [];
+    for (let day = 0; day < 7; day++) {
+        const meals = {};
+        ['ontbijt', 'lunch', 'diner'].forEach(mealType => {
+            const select = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"]`);
+            meals[mealType] = select.value;
+        });
+        menu.push({ day, meals });
+    }
+
+    try {
+        const response = await fetch('/update_menu', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                week: {{ week }},
+                year: {{ year }},
+                menu: menu
+            })
+        });
+
+        if (response.ok) {
+            showSaveStatus();
+        } else {
+            console.error('Error saving menu');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
+};
+
+const debouncedUpdate = debounce(updateMenu, 500);
+
+document.querySelectorAll('.meal-select').forEach(select => {
+    select.addEventListener('change', debouncedUpdate);
+});
+</script>
+{% endblock %}

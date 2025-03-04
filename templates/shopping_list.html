@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white rounded-lg shadow p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">Boodschappenlijst - Week {{ week }}</h2>
+        <button onclick="window.print()" 
+                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            Printen
+        </button>
+    </div>
+    
+    {% set current_category = None %}
+    {% for item in shopping_list %}
+        {% if item.category != current_category %}
+            {% if not loop.first %}
+                </div>
+            {% endif %}
+            
+            <h3 class="font-bold text-lg mt-6 mb-3">{{ item.category }}</h3>
+            <div class="space-y-2">
+            {% set current_category = item.category %}
+        {% endif %}
+        
+        <div class="flex items-center">
+            <input type="checkbox" class="mr-2">
+            <span>{{ item.amount }} {{ item.unit }} {{ item.name }}</span>
+        </div>
+        
+        {% if loop.last %}
+            </div>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<style>
+@media print {
+    nav, button {
+        display: none !important;
+    }
+    .shadow {
+        box-shadow: none !important;
+    }
+    input[type="checkbox"] {
+        border: 1px solid black !important;
+    }
+}
+</style>
+{% endblock %}

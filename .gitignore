@@ -1,0 +1,23 @@
+# Python cache bestanden
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+ENV/
+
+# Database bestanden
+instance/
+*.db
+*.sqlite
+
+# Docker volumes
+data/
+
+# Editor configuratie
+.vscode/
+.idea/
+
+# Log bestanden
+*.log

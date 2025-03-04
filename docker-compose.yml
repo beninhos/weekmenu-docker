@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  weekmenu:
+    build: .
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_RUN_PORT=5001
+      - FLASK_RUN_HOST=10.0.1.3
+      - DATABASE_URL=sqlite:////data/weekmenu.db

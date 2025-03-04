@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-bold mb-6">Recept Bewerken</h2>
+    
+    <form method="POST" class="space-y-6">
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Naam</label>
+            <input type="text" name="name" required value="{{ recipe.name }}"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Kookboek</label>
+            <input type="text" name="cookbook" value="{{ recipe.cookbook or '' }}"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Pagina</label>
+            <input type="number" name="page" value="{{ recipe.page or '' }}"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        
+        <div>
+            <h3 class="text-lg font-medium text-gray-700 mb-2">Ingrediënten</h3>
+            <div id="ingredients" class="space-y-4">
+                {% for ri in recipe.ingredients %}
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="col-span-2">
+                        <input type="text" name="ingredient[]" value="{{ ri.ingredient.name }}"
+                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <input type="number" step="0.1" name="amount[]" value="{{ ri.amount }}"
+                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <input type="text" name="unit[]" value="{{ ri.unit }}"
+                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
+                            {% for cat in ['Groenten', 'Fruit', 'Vlees', 'Vis', 'Zuivel', 'Brood', 'Droogwaren', 'Overig'] %}
+                            <option value="{{ cat }}" {{ 'selected' if ri.ingredient.category == cat }}>
+                                {{ cat }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <button type="button" onclick="addIngredient()"
+                    class="mt-4 text-blue-500 hover:text-blue-700">
+                + Ingrediënt toevoegen
+            </button>
+        </div>
+        
+        <div class="flex justify-end space-x-4">
+            <a href="{{ url_for('recipes') }}"
+               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                Annuleren
+            </a>
+            <button type="submit"
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Opslaan
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function addIngredient() {
+    const container = document.getElementById('ingredients');
+    const newRow = document.createElement('div');
+    newRow.className = 'grid grid-cols-4 gap-4';
+    newRow.innerHTML = `
+        <div class="col-span-2">
+            <input type="text" name="ingredient[]" placeholder="Ingrediënt"
+                   class="block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        <div>
+            <input type="number" step="0.1" name="amount[]" placeholder="Aantal"
+                   class="block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        <div>
+            <input type="text" name="unit[]" placeholder="Eenheid"
+                   class="block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        <div>
+            <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
+                <option value="Groenten">Groenten</option>
+                <option value="Fruit">Fruit</option>
+                <option value="Vlees">Vlees</option>
+                <option value="Vis">Vis</option>
+                <option value="Zuivel">Zuivel</option>
+                <option value="Brood">Brood</option>
+                <option value="Droogwaren">Droogwaren</option>
+                <option value="Overig">Overig</option>
+            </select>
+        </div>
+    `;
+    container.appendChild(newRow);
+}
+</script>
+{% endblock %}
