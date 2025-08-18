@@ -70,6 +70,7 @@ class Cookbook(db.Model):
     __tablename__ = 'cookbook'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
+    image_path = db.Column(db.String(200), nullable=True)  # NIEUW: afbeelding veld
     
     # Relatie met recepten
     recipes = db.relationship('Recipe', back_populates='cookbook', lazy=True)
@@ -97,7 +98,9 @@ def week_menu(year, week):
 @app.route('/cookbook/<int:id>/recipes')
 def list_cookbook_recipes(id):
     cookbook = Cookbook.query.get_or_404(id)
-    return render_template('cookbook_recipes.html', cookbook=cookbook)
+    # Sorteer recepten op paginanummer, recepten zonder pagina komen laatst
+    recipes = sorted(cookbook.recipes, key=lambda x: (x.page is None, x.page or 0))
+    return render_template('cookbook_recipes.html', cookbook=cookbook, recipes=recipes)
 
 @app.route('/recipes')
 def recipes():
@@ -119,7 +122,7 @@ def new_recipe():
         
         recipe = Recipe(
             name=request.form['name'],
-            cookbook_id=request.form.get('cookbook'),
+            cookbook_id=request.form.get('cookbook') if request.form.get('cookbook') else None,
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path
         )
@@ -175,12 +178,40 @@ def new_cookbook():
             flash('Dit kookboek bestaat al')
             return redirect(url_for('new_cookbook'))
         
-        new_cookbook = Cookbook(name=cookbook_name)
+        # Afbeelding uploaden
+        image = request.files.get('image')
+        image_path = None
+        if image and image.filename:
+            filename = secure_filename(image.filename)
+            image_path = os.path.join('static/uploads', filename)
+            image.save(os.path.join(app.root_path, image_path))
+        
+        new_cookbook = Cookbook(name=cookbook_name, image_path=image_path)
         db.session.add(new_cookbook)
         db.session.commit()
         return redirect(url_for('list_cookbooks'))
     
     return render_template('new_cookbook.html')
+
+@app.route('/cookbook/<int:id>/edit', methods=['GET', 'POST'])
+def edit_cookbook(id):
+    cookbook = Cookbook.query.get_or_404(id)
+    
+    if request.method == 'POST':
+        cookbook.name = request.form['name']
+        
+        # Afbeelding uploaden
+        image = request.files.get('image')
+        if image and image.filename:
+            filename = secure_filename(image.filename)
+            image_path = os.path.join('static/uploads', filename)
+            image.save(os.path.join(app.root_path, image_path))
+            cookbook.image_path = image_path
+        
+        db.session.commit()
+        return redirect(url_for('list_cookbooks'))
+    
+    return render_template('edit_cookbook.html', cookbook=cookbook)
 
 @app.route('/update_menu', methods=['POST'])
 def update_menu():
@@ -242,7 +273,7 @@ def edit_recipe(id):
     
     if request.method == 'POST':
         recipe.name = request.form['name']
-        recipe.cookbook_id = request.form.get('cookbook')
+        recipe.cookbook_id = request.form.get('cookbook') if request.form.get('cookbook') else None
         recipe.page = request.form['page'] if request.form['page'] else None
         
         # Afbeelding uploaden
