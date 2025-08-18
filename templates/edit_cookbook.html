@@ -2,24 +2,14 @@
 
 {% block content %}
 <div class="mb-6">
-    <h1 class="text-2xl font-bold mb-4">Nieuw Kookboek Toevoegen</h1>
+    <h1 class="text-2xl font-bold mb-4">Kookboek Bewerken</h1>
     
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
-        {% for message in messages %}
-        <p>{{ message }}</p>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% endwith %}
-    
-    <form method="POST" action="{{ url_for('new_cookbook') }}" enctype="multipart/form-data" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+    <form method="POST" action="{{ url_for('edit_cookbook', id=cookbook.id) }}" enctype="multipart/form-data" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
         <div class="mb-4">
             <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
                 Naam
             </label>
-            <input type="text" id="name" name="name" required
+            <input type="text" id="name" name="name" value="{{ cookbook.name }}" required
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
         </div>
         
@@ -27,9 +17,25 @@
             <label class="block text-gray-700 text-sm font-bold mb-2" for="image">
                 Kookboek Afbeelding
             </label>
+            
+            {% if cookbook.image_path %}
+            <div class="mb-4">
+                <p class="text-sm text-gray-600 mb-2">Huidige afbeelding:</p>
+                <img src="{{ url_for('static', filename=cookbook.image_path.replace('static/', '')) }}" 
+                     alt="{{ cookbook.name }}" 
+                     class="w-32 h-40 object-cover rounded shadow">
+            </div>
+            {% endif %}
+            
             <input type="file" id="image" name="image" accept="image/*"
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            <p class="text-gray-600 text-xs mt-1">Kies een afbeelding voor de voorkant van het kookboek (optioneel)</p>
+            <p class="text-gray-600 text-xs mt-1">
+                {% if cookbook.image_path %}
+                Kies een nieuwe afbeelding om de huidige te vervangen (optioneel)
+                {% else %}
+                Kies een afbeelding voor de voorkant van het kookboek (optioneel)
+                {% endif %}
+            </p>
         </div>
         
         <div class="flex items-center justify-between">
