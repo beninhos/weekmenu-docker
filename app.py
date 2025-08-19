@@ -41,6 +41,7 @@ class Recipe(db.Model):
     image_path = db.Column(db.String(200), nullable=True)
     is_favorite = db.Column(db.Boolean, default=False)  # NIEUW: favorieten
     last_used = db.Column(db.DateTime, nullable=True)  # NIEUW: recent gebruikt
+    usage_count = db.Column(db.Integer, default=0)  # NIEUW: gebruiksfrequentie
     ingredients = db.relationship('RecipeIngredient', backref='recipe', lazy=True, cascade='all, delete-orphan')
     cookbook = db.relationship('Cookbook', back_populates='recipes')
 
@@ -238,10 +239,20 @@ def update_menu():
     try:
         data = request.get_json()
         
+        # Haal oude menu items op om te zien welke recepten werden weggehaald
+        old_items = MenuItem.query.filter_by(
+            week_number=data['week'],
+            year=data['year']
+        ).all()
+        
+        # Verwijder oude menu items
         MenuItem.query.filter_by(
             week_number=data['week'],
             year=data['year']
         ).delete()
+        
+        # Track welke recepten worden toegevoegd
+        new_recipe_ids = set()
         
         for day in data['menu']:
             for meal_type, meal_data in day['meals'].items():
@@ -255,6 +266,7 @@ def update_menu():
                     people_count = 4
                 
                 if recipe_id:
+                    new_recipe_ids.add(int(recipe_id))
                     menu_item = MenuItem(
                         day_of_week=day['day'],
                         meal_type=meal_type,
@@ -264,6 +276,13 @@ def update_menu():
                         year=data['year']
                     )
                     db.session.add(menu_item)
+        
+        # Update usage statistics voor nieuwe recepten
+        for recipe_id in new_recipe_ids:
+            recipe = Recipe.query.get(recipe_id)
+            if recipe:
+                recipe.usage_count = (recipe.usage_count or 0) + 1
+                recipe.last_used = datetime.now()
         
         db.session.commit()
         return jsonify({'status': 'success'})
@@ -361,6 +380,56 @@ def edit_recipe(id):
         return redirect(url_for('recipes'))
     
     return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks)
+
+# NIEUWE ROUTES VOOR FAVORIETEN EN QUICK ACCESS
+
+@app.route('/recipe/<int:id>/toggle_favorite', methods=['POST'])
+def toggle_favorite(id):
+    """Toggle favorite status van een recept"""
+    try:
+        recipe = Recipe.query.get_or_404(id)
+        recipe.is_favorite = not recipe.is_favorite
+        db.session.commit()
+        return jsonify({
+            'status': 'success', 
+            'is_favorite': recipe.is_favorite
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+@app.route('/api/quick_access_recipes')
+def get_quick_access_recipes():
+    """API endpoint voor favorieten, recent en populaire recepten"""
+    try:
+        # Favorieten (max 10)
+        favorites = Recipe.query.filter_by(is_favorite=True).order_by(Recipe.name).limit(10).all()
+        
+        # Recent gebruikt (max 10, laatste eerst)
+        recent = Recipe.query.filter(Recipe.last_used.isnot(None)).order_by(Recipe.last_used.desc()).limit(10).all()
+        
+        # Populair (max 10, hoogste usage_count eerst)
+        popular = Recipe.query.filter(Recipe.usage_count > 0).order_by(Recipe.usage_count.desc()).limit(10).all()
+        
+        def format_recipe(recipe):
+            return {
+                'id': recipe.id,
+                'name': recipe.name,
+                'serves': recipe.serves or 4,
+                'cookbook_abbr': recipe.cookbook.abbreviation if recipe.cookbook else None,
+                'page': recipe.page,
+                'is_favorite': recipe.is_favorite,
+                'usage_count': recipe.usage_count or 0,
+                'image_path': recipe.image_path
+            }
+        
+        return jsonify({
+            'favorites': [format_recipe(r) for r in favorites],
+            'recent': [format_recipe(r) for r in recent],
+            'popular': [format_recipe(r) for r in popular]
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
 
 if __name__ == '__main__':
     with app.app_context():
