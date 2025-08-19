@@ -11,6 +11,13 @@
         </div>
         
         <div>
+            <label class="block text-sm font-medium text-gray-700">Voor hoeveel personen</label>
+            <input type="number" name="serves" value="{{ recipe.serves or 4 }}" min="1" max="20"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <p class="text-gray-600 text-xs mt-1">Aantal personen waarvoor dit recept is bedoeld</p>
+        </div>
+        
+        <div>
             <label class="block text-sm font-medium text-gray-700">Kookboek</label>
             <select name="cookbook" 
                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">

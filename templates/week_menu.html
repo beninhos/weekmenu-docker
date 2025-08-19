@@ -29,27 +29,65 @@
             <h3 class="font-bold mb-2">{{ day_name }}</h3>
             <div class="space-y-2">
                 {% for meal_code, meal_name in meal_types %}
-                <div>
+                <div class="relative">
                     <label class="block text-sm text-gray-600">{{ meal_name }}</label>
-                    <select class="meal-select w-full border rounded p-1 text-sm" 
-                            data-day="{{ day_index }}" 
-                            data-meal="{{ meal_code }}">
-                        <option value="">- Kies recept -</option>
-                        {% for recipe in recipes %}
-                            {% set selected = false %}
-                            {% for item in menu_items %}
-                                {% if item.day_of_week == day_index and item.meal_type == meal_code and item.recipe_id == recipe.id %}
-                                    {% set selected = true %}
+                    
+                    <!-- Hidden input to store selected recipe ID -->
+                    <input type="hidden" 
+                           class="meal-input" 
+                           data-day="{{ day_index }}" 
+                           data-meal="{{ meal_code }}"
+                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.recipe_id }}{% endif %}{% endfor %}">
+                    
+                    <!-- Search input -->
+                    <input type="text" 
+                           class="recipe-search w-full border rounded p-1 text-sm mb-1" 
+                           data-day="{{ day_index }}" 
+                           data-meal="{{ meal_code }}"
+                           placeholder="Zoek recept..."
+                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
+                           autocomplete="off">
+                    
+                    <!-- People count input (only show when recipe is selected) -->
+                    {% set current_people = 4 %}
+                    {% for item in menu_items %}
+                        {% if item.day_of_week == day_index and item.meal_type == meal_code and item.recipe_id %}
+                            {% set current_people = item.people_count or 4 %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <div class="people-count-container {% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code and item.recipe_id %}{% else %}hidden{% endif %}{% endfor %}">
+                        <div class="flex items-center space-x-2 mb-1">
+                            <label class="text-xs text-gray-500">Voor:</label>
+                            <input type="number" 
+                                   class="people-input w-12 border rounded px-1 text-xs text-center" 
+                                   data-day="{{ day_index }}" 
+                                   data-meal="{{ meal_code }}"
+                                   value="{{ current_people }}"
+                                   min="1" max="20">
+                            <span class="text-xs text-gray-500">pers.</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Recipe info display (only when selected) -->
+                    {% for item in menu_items %}
+                        {% if item.day_of_week == day_index and item.meal_type == meal_code %}
+                            {% for recipe in recipes %}
+                                {% if recipe.id == item.recipe_id %}
+                                <div class="recipe-info text-xs text-gray-600 mt-1">
+                                    {% if recipe.cookbook %}
+                                        {{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}{% if recipe.page %} p.{{ recipe.page }}{% endif %}
+                                    {% endif %}
+                                </div>
                                 {% endif %}
                             {% endfor %}
-                            <option value="{{ recipe.id }}" {{ 'selected' if selected }}>
-                                {{ recipe.name }}
-                                {% if recipe.cookbook %}
-                                    ({{ recipe.cookbook }}{% if recipe.page %}, p.{{ recipe.page }}{% endif %})
-                                {% endif %}
-                            </option>
-                        {% endfor %}
-                    </select>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <!-- Dropdown results -->
+                    <div class="recipe-dropdown absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-b max-h-60 overflow-y-auto hidden z-10 shadow-lg">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -58,7 +96,22 @@
     </div>
 </div>
 
+<!-- Hidden recipe data for JavaScript -->
 <script>
+const recipes = [
+    {% for recipe in recipes %}
+    {
+        id: {{ recipe.id }},
+        name: "{{ recipe.name }}",
+        serves: {{ recipe.serves or 4 }},
+        cookbook: {% if recipe.cookbook %}"{{ recipe.cookbook.name }}"{% else %}null{% endif %},
+        cookbookAbbr: {% if recipe.cookbook %}"{{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}"{% else %}null{% endif %},
+        page: {% if recipe.page %}{{ recipe.page }}{% else %}null{% endif %},
+        displayName: "{{ recipe.name }}{% if recipe.cookbook %} ({{ recipe.cookbook.name }}{% if recipe.page %}, p.{{ recipe.page }}{% endif %}){% endif %}"
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
 const debounce = (func, wait) => {
     let timeout;
     return function executedFunction(...args) {
@@ -84,8 +137,12 @@ const updateMenu = async () => {
     for (let day = 0; day < 7; day++) {
         const meals = {};
         ['ontbijt', 'lunch', 'diner'].forEach(mealType => {
-            const select = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"]`);
-            meals[mealType] = select.value;
+            const recipeInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].meal-input`);
+            const peopleInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].people-input`);
+            meals[mealType] = {
+                recipe_id: recipeInput.value,
+                people_count: peopleInput ? parseInt(peopleInput.value) || 4 : 4
+            };
         });
         menu.push({ day, meals });
     }
@@ -115,8 +172,161 @@ const updateMenu = async () => {
 
 const debouncedUpdate = debounce(updateMenu, 500);
 
-document.querySelectorAll('.meal-select').forEach(select => {
-    select.addEventListener('change', debouncedUpdate);
+// Search functionality
+function filterRecipes(query) {
+    if (!query) return recipes;
+    
+    return recipes.filter(recipe => 
+        recipe.displayName.toLowerCase().includes(query.toLowerCase())
+    );
+}
+
+function showDropdown(searchInput, filteredRecipes) {
+    const dropdown = searchInput.parentNode.querySelector('.recipe-dropdown');
+    
+    if (filteredRecipes.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+    
+    dropdown.innerHTML = filteredRecipes.map(recipe => 
+        `<div class="recipe-option p-2 hover:bg-gray-100 cursor-pointer text-sm" data-recipe-id="${recipe.id}" data-recipe-name="${recipe.name}" data-cookbook-abbr="${recipe.cookbookAbbr}" data-page="${recipe.page}" data-serves="${recipe.serves}">
+            <div class="font-medium">${recipe.name}</div>
+            ${recipe.cookbook ? `<div class="text-xs text-gray-600">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''} • ${recipe.serves} pers.</div>` : ''}
+        </div>`
+    ).join('');
+    
+    dropdown.classList.remove('hidden');
+    
+    // Add click handlers to options
+    dropdown.querySelectorAll('.recipe-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const recipeId = option.dataset.recipeId;
+            const recipeName = option.dataset.recipeName;
+            const cookbookAbbr = option.dataset.cookbookAbbr;
+            const page = option.dataset.page;
+            const serves = option.dataset.serves;
+            
+            searchInput.value = recipeName;
+            const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
+            hiddenInput.value = recipeId;
+            
+            // Update recipe info display
+            updateRecipeInfo(searchInput, cookbookAbbr, page, serves);
+            
+            dropdown.classList.add('hidden');
+            debouncedUpdate();
+        });
+    });
+}
+
+function updateRecipeInfo(searchInput, cookbookAbbr, page, serves) {
+    // Remove existing recipe info
+    const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
+    if (existingInfo) {
+        existingInfo.remove();
+    }
+    
+    // Add new recipe info if cookbook exists
+    if (cookbookAbbr && cookbookAbbr !== 'null') {
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'recipe-info text-xs text-gray-600 mt-1';
+        infoDiv.textContent = cookbookAbbr + (page && page !== 'null' ? ` p.${page}` : '');
+        searchInput.parentNode.insertBefore(infoDiv, searchInput.nextSibling);
+    }
+    
+    // Show people count container and set default
+    const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
+    const peopleInput = searchInput.parentNode.querySelector('.people-input');
+    if (peopleContainer) {
+        peopleContainer.classList.remove('hidden');
+        if (peopleInput && serves) {
+            peopleInput.value = serves;
+        }
+    }
+}
+
+function hideDropdown(searchInput) {
+    setTimeout(() => {
+        const dropdown = searchInput.parentNode.querySelector('.recipe-dropdown');
+        dropdown.classList.add('hidden');
+    }, 200); // Small delay to allow clicks
+}
+
+// Initialize search inputs
+document.querySelectorAll('.recipe-search').forEach(searchInput => {
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value;
+        
+        if (query.length > 0) {
+            const filteredRecipes = filterRecipes(query);
+            showDropdown(searchInput, filteredRecipes);
+        } else {
+            // Clear selection when input is empty
+            const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
+            hiddenInput.value = '';
+            
+            // Remove recipe info
+            const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
+            if (existingInfo) {
+                existingInfo.remove();
+            }
+            
+            // Hide people count container
+            const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
+            if (peopleContainer) {
+                peopleContainer.classList.add('hidden');
+            }
+            
+            hideDropdown(searchInput);
+            debouncedUpdate();
+        }
+    });
+    
+    searchInput.addEventListener('blur', (e) => {
+        hideDropdown(searchInput);
+    });
+    
+    // Clear selection when input is manually cleared
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            setTimeout(() => {
+                if (searchInput.value === '') {
+                    const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
+                    hiddenInput.value = '';
+                    
+                    // Remove recipe info
+                    const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
+                    if (existingInfo) {
+                        existingInfo.remove();
+                    }
+                    
+                    // Hide people count container
+                    const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
+                    if (peopleContainer) {
+                        peopleContainer.classList.add('hidden');
+                    }
+                    
+                    debouncedUpdate();
+                }
+            }, 10);
+        }
+    });
+});
+
+// Initialize people count inputs
+document.querySelectorAll('.people-input').forEach(peopleInput => {
+    peopleInput.addEventListener('change', debouncedUpdate);
+    peopleInput.addEventListener('input', debouncedUpdate);
+});
+
+// Hide dropdowns when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.relative')) {
+        document.querySelectorAll('.recipe-dropdown').forEach(dropdown => {
+            dropdown.classList.add('hidden');
+        });
+    }
 });
 </script>
 {% endblock %}
