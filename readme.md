@@ -4,11 +4,15 @@ Een web-applicatie om je weekmenu te plannen en automatisch boodschappenlijsten 
 
 ## Functionaliteiten
 
-- Beheer recepten met ingrediënten
+- Beheer recepten met ingrediënten en aantal personen
 - Plan weekmenu's voor ontbijt, lunch en diner
-- Automatisch gegenereerde boodschappenlijst
-- Sortering van boodschappen op categorie
+- Portie aanpassing op basis van aantal personen per maaltijd (automatische herberekening)
+- Automatisch gegenereerde boodschappenlijst op productgroep
+- Autocomplete voor recepten (zoek terwijl je typt)
 - Koppelingen met kookboeken en paginanummers
+- Kookboek afkortingen (voor snelle toegang)
+- Favorieten, recent gebruikt en populaire recepten
+- Afbeelding upload voor recepten en kookboeken
 
 ## Vereisten
 
