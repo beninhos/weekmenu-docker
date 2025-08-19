@@ -44,15 +44,23 @@
                     
                     <div>
                         <h3 class="font-semibold text-lg">{{ recipe.name }}</h3>
-                        {% if recipe.page %}
-                        <p class="text-sm text-gray-600">p.{{ recipe.page }}</p>
-                        {% else %}
-                        <p class="text-sm text-gray-500 italic">Geen paginanummer</p>
-                        {% endif %}
+                        <div class="flex items-center space-x-3 text-sm text-gray-600">
+                            {% if recipe.page %}
+                            <span>p.{{ recipe.page }}</span>
+                            {% else %}
+                            <span class="italic">Geen paginanummer</span>
+                            {% endif %}
+                            <span class="text-blue-600">• {{ recipe.serves or 4 }} pers.</span>
+                        </div>
                     </div>
                 </div>
                 
                 <div class="flex space-x-2">
+                    <button onclick="toggleFavorite({{ recipe.id }}, this)" 
+                            class="favorite-btn bg-yellow-500 hover:bg-yellow-600 text-white py-1 px-2 rounded text-sm"
+                            data-is-favorite="{{ recipe.is_favorite|lower }}">
+                        {{ '⭐' if recipe.is_favorite else '☆' }}
+                    </button>
                     <a href="{{ url_for('edit_recipe', id=recipe.id) }}" 
                        class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm">
                         Bewerken
@@ -82,6 +90,27 @@ async function deleteRecipe(id) {
         if (response.ok) {
             location.reload();
         }
+    }
+}
+
+async function toggleFavorite(recipeId, button) {
+    try {
+        const response = await fetch(`/recipe/${recipeId}/toggle_favorite`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            // Update button appearance
+            button.textContent = data.is_favorite ? '⭐' : '☆';
+            button.dataset.isFavorite = data.is_favorite;
+        }
+    } catch (error) {
+        console.error('Error toggling favorite:', error);
     }
 }
 </script>

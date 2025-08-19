@@ -21,3 +21,8 @@ Een web-applicatie om je weekmenu te plannen en automatisch boodschappenlijsten 
 ```bash
 git clone https://github.com/yourusername/weekmenu-planner.git
 cd weekmenu-planner
+mkdir -p static/uploads
+chmod 755 static/uploads
+mkdir data
+chmod 755 data
+docker-compose up

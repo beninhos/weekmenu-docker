@@ -14,6 +14,7 @@ instance/
 
 # Docker volumes
 data/
+static/uploads/
 
 # Editor configuratie
 .vscode/
@@ -21,3 +22,10 @@ data/
 
 # Log bestanden
 *.log
+
+# Uploaded images (te groot voor git)
+static/uploads/*.jpg
+static/uploads/*.jpeg
+static/uploads/*.png
+static/uploads/*.gif
+static/uploads/*.webp
