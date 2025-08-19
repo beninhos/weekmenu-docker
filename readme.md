@@ -16,13 +16,16 @@ Een web-applicatie om je weekmenu te plannen en automatisch boodschappenlijsten 
 - Docker Compose
 
 ## Installatie
-
-1. Clone de repository:
 ```bash
-git clone https://github.com/yourusername/weekmenu-planner.git
-cd weekmenu-planner
-mkdir -p static/uploads
-chmod 755 static/uploads
-mkdir data
-chmod 755 data
-docker-compose up
+### Vereisten
+- Docker
+- Docker Compose
+
+git clone https://github.com/beninhos/weekmenu-docker.git
+cd weekmenu-docker
+mkdir -p static/uploads data
+chmod 755 static/uploads 
+cmod 755 data
+docker-compose up --build
+# → http://localhost:5001
+
