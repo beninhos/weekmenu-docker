@@ -35,9 +35,12 @@ class Recipe(db.Model):
     __tablename__ = 'recipe'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
+    serves = db.Column(db.Integer, default=4)  # NIEUW: aantal personen
     cookbook_id = db.Column(db.Integer, db.ForeignKey('cookbook.id'), nullable=True)
     page = db.Column(db.Integer)
     image_path = db.Column(db.String(200), nullable=True)
+    is_favorite = db.Column(db.Boolean, default=False)  # NIEUW: favorieten
+    last_used = db.Column(db.DateTime, nullable=True)  # NIEUW: recent gebruikt
     ingredients = db.relationship('RecipeIngredient', backref='recipe', lazy=True, cascade='all, delete-orphan')
     cookbook = db.relationship('Cookbook', back_populates='recipes')
 
@@ -62,6 +65,7 @@ class MenuItem(db.Model):
     day_of_week = db.Column(db.Integer, nullable=False)
     meal_type = db.Column(db.String(20), nullable=False)
     recipe_id = db.Column(db.Integer, db.ForeignKey('recipe.id'))
+    people_count = db.Column(db.Integer, default=4)  # NIEUW: aantal personen voor dit menu item
     week_number = db.Column(db.Integer, nullable=False)
     year = db.Column(db.Integer, nullable=False)
     recipe = db.relationship('Recipe')
@@ -272,12 +276,16 @@ def shopping_list(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     shopping_dict = {}
     
+    print(f"DEBUG: Found {len(menu_items)} menu items for week {week}/{year}")  # Debug info
+    
     for item in menu_items:
         if item.recipe:
             # Calculate portion multiplier
             recipe_serves = item.recipe.serves or 4
             people_count = item.people_count or 4
             multiplier = people_count / recipe_serves
+            
+            print(f"DEBUG: Recipe {item.recipe.name}: serves {recipe_serves}, cooking for {people_count}, multiplier {multiplier}")  # Debug info
             
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
@@ -298,6 +306,8 @@ def shopping_list(year, week):
         for k, v in shopping_dict.items()
     ]
     shopping_list.sort(key=lambda x: (x['category'], x['name']))
+    
+    print(f"DEBUG: Final shopping list has {len(shopping_list)} items")  # Debug info
     
     return render_template('shopping_list.html',
                          shopping_list=shopping_list,
