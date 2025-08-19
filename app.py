@@ -70,6 +70,7 @@ class Cookbook(db.Model):
     __tablename__ = 'cookbook'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
+    abbreviation = db.Column(db.String(10), nullable=True)  # NIEUW: afkorting veld
     image_path = db.Column(db.String(200), nullable=True)  # NIEUW: afbeelding veld
     
     # Relatie met recepten
@@ -122,6 +123,7 @@ def new_recipe():
         
         recipe = Recipe(
             name=request.form['name'],
+            serves=int(request.form.get('serves', 4)),
             cookbook_id=request.form.get('cookbook') if request.form.get('cookbook') else None,
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path
@@ -171,12 +173,18 @@ def list_cookbooks():
 def new_cookbook():
     if request.method == 'POST':
         cookbook_name = request.form['name']
+        abbreviation = request.form.get('abbreviation', '').strip()
         
         # Controleer of cookbook al bestaat
         existing_cookbook = Cookbook.query.filter_by(name=cookbook_name).first()
         if existing_cookbook:
             flash('Dit kookboek bestaat al')
             return redirect(url_for('new_cookbook'))
+        
+        # Maak automatisch afkorting als geen opgegeven
+        if not abbreviation:
+            words = cookbook_name.split()
+            abbreviation = ''.join(word[0].upper() for word in words if word)[:5]
         
         # Afbeelding uploaden
         image = request.files.get('image')
@@ -186,7 +194,7 @@ def new_cookbook():
             image_path = os.path.join('static/uploads', filename)
             image.save(os.path.join(app.root_path, image_path))
         
-        new_cookbook = Cookbook(name=cookbook_name, image_path=image_path)
+        new_cookbook = Cookbook(name=cookbook_name, abbreviation=abbreviation, image_path=image_path)
         db.session.add(new_cookbook)
         db.session.commit()
         return redirect(url_for('list_cookbooks'))
@@ -199,6 +207,14 @@ def edit_cookbook(id):
     
     if request.method == 'POST':
         cookbook.name = request.form['name']
+        abbreviation = request.form.get('abbreviation', '').strip()
+        
+        # Update afkorting of maak automatisch aan
+        if abbreviation:
+            cookbook.abbreviation = abbreviation
+        else:
+            words = cookbook.name.split()
+            cookbook.abbreviation = ''.join(word[0].upper() for word in words if word)[:5]
         
         # Afbeelding uploaden
         image = request.files.get('image')
@@ -224,12 +240,22 @@ def update_menu():
         ).delete()
         
         for day in data['menu']:
-            for meal_type, recipe_id in day['meals'].items():
+            for meal_type, meal_data in day['meals'].items():
+                # Handle both old format (string) and new format (dict)
+                if isinstance(meal_data, dict):
+                    recipe_id = meal_data.get('recipe_id')
+                    people_count = meal_data.get('people_count', 4)
+                else:
+                    # Backward compatibility
+                    recipe_id = meal_data
+                    people_count = 4
+                
                 if recipe_id:
                     menu_item = MenuItem(
                         day_of_week=day['day'],
                         meal_type=meal_type,
                         recipe_id=recipe_id,
+                        people_count=people_count,
                         week_number=data['week'],
                         year=data['year']
                     )
@@ -248,15 +274,27 @@ def shopping_list(year, week):
     
     for item in menu_items:
         if item.recipe:
+            # Calculate portion multiplier
+            recipe_serves = item.recipe.serves or 4
+            people_count = item.people_count or 4
+            multiplier = people_count / recipe_serves
+            
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
+                adjusted_amount = ri.amount * multiplier
+                
                 if key in shopping_dict:
-                    shopping_dict[key] += ri.amount
+                    shopping_dict[key] += adjusted_amount
                 else:
-                    shopping_dict[key] = ri.amount
+                    shopping_dict[key] = adjusted_amount
     
     shopping_list = [
-        {'name': k[0], 'amount': v, 'unit': k[1], 'category': k[2]}
+        {
+            'name': k[0], 
+            'amount': round(v, 2), 
+            'unit': k[1], 
+            'category': k[2]
+        }
         for k, v in shopping_dict.items()
     ]
     shopping_list.sort(key=lambda x: (x['category'], x['name']))
@@ -273,6 +311,7 @@ def edit_recipe(id):
     
     if request.method == 'POST':
         recipe.name = request.form['name']
+        recipe.serves = int(request.form.get('serves', 4))
         recipe.cookbook_id = request.form.get('cookbook') if request.form.get('cookbook') else None
         recipe.page = request.form['page'] if request.form['page'] else None
         

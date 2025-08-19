@@ -13,6 +13,15 @@
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
         </div>
         
+        <div class="mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="abbreviation">
+                Afkorting (voor weekmenu)
+            </label>
+            <input type="text" id="abbreviation" name="abbreviation" value="{{ cookbook.abbreviation or '' }}" maxlength="10" placeholder="bijv. SWJ"
+                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+            <p class="text-gray-600 text-xs mt-1">Kort (max 10 tekens) voor in weekmenu.</p>
+        </div>
+        
         <div class="mb-6">
             <label class="block text-gray-700 text-sm font-bold mb-2" for="image">
                 Kookboek Afbeelding
