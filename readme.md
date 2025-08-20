@@ -21,9 +21,6 @@ Een web-applicatie om je weekmenu te plannen en automatisch boodschappenlijsten 
 
 ## Installatie
 ```bash
-### Vereisten
-- Docker
-- Docker Compose
 
 git clone https://github.com/beninhos/weekmenu-docker.git
 cd weekmenu-docker
