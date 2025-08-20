@@ -1,277 +1,56 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
+
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <div class="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
-        <h2 class="text-2xl font-bold">Weekmenu - Week {{ week }}</h2>
-        <div class="flex space-x-4">
-            <a href="{{ url_for('shopping_list', year=year, week=week) }}" 
-               class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-sm md:text-base">
-                Boodschappenlijst
-            </a>
-            <a href="{{ url_for('week_menu', year=year, week=week-1) }}" 
-               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm md:text-base">
-                Vorige Week
-            </a>
-            <a href="{{ url_for('week_menu', year=year, week=week+1) }}" 
-               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm md:text-base">
-                Volgende Week
-            </a>
-        </div>
-    </div>
+<div class="mb-6">
+    <h1 class="text-2xl font-bold mb-4">Nieuw Kookboek Toevoegen</h1>
     
-    <div id="saveStatus" class="hidden fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg">
-        Wijzigingen opgeslagen
-    </div>
-    
-    <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
-        {% for day_index, day_name in days %}
-        <div class="border p-4 rounded hover:shadow-md transition-shadow duration-200">
-            <h3 class="font-bold mb-2">{{ day_name }}</h3>
-            <div class="space-y-2">
-                {% for meal_code, meal_name in meal_types %}
-                <div class="relative">
-                    <label class="block text-sm text-gray-600">{{ meal_name }}</label>
-                    
-                    <!-- Hidden input to store selected recipe ID -->
-                    <input type="hidden" 
-                           class="meal-input" 
-                           data-day="{{ day_index }}" 
-                           data-meal="{{ meal_code }}"
-                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.recipe_id }}{% endif %}{% endfor %}">
-                    
-                    <!-- Search input -->
-                    <input type="text" 
-                           class="recipe-search w-full border rounded p-1 text-sm" 
-                           data-day="{{ day_index }}" 
-                           data-meal="{{ meal_code }}"
-                           placeholder="Zoek recept..."
-                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
-                           autocomplete="off">
-                    
-                    <!-- Recipe info display (only when selected) -->
-                    {% for item in menu_items %}
-                        {% if item.day_of_week == day_index and item.meal_type == meal_code %}
-                            {% for recipe in recipes %}
-                                {% if recipe.id == item.recipe_id %}
-                                <div class="recipe-info text-xs text-gray-600 mt-1">
-                                    {% if recipe.cookbook %}
-                                        {{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}{% if recipe.page %} p.{{ recipe.page }}{% endif %}
-                                    {% endif %}
-                                </div>
-                                {% endif %}
-                            {% endfor %}
-                        {% endif %}
-                    {% endfor %}
-                    
-                    <!-- Dropdown results -->
-                    <div class="recipe-dropdown absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-b max-h-60 overflow-y-auto hidden z-10 shadow-lg">
-                        <!-- Will be populated by JavaScript -->
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
+        {% for message in messages %}
+        <p>{{ message }}</p>
         {% endfor %}
     </div>
-</div>
-
-<!-- Hidden recipe data for JavaScript -->
-<script>
-const recipes = [
-    {% for recipe in recipes %}
-    {
-        id: {{ recipe.id }},
-        name: "{{ recipe.name }}",
-        cookbook: {% if recipe.cookbook %}"{{ recipe.cookbook.name }}"{% else %}null{% endif %},
-        cookbookAbbr: {% if recipe.cookbook %}"{{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}"{% else %}null{% endif %},
-        page: {% if recipe.page %}{{ recipe.page }}{% else %}null{% endif %},
-        displayName: "{{ recipe.name }}{% if recipe.cookbook %} ({{ recipe.cookbook.name }}{% if recipe.page %}, p.{{ recipe.page }}{% endif %}){% endif %}"
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
-];
-
-const debounce = (func, wait) => {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-};
-
-const showSaveStatus = () => {
-    const status = document.getElementById('saveStatus');
-    status.classList.remove('hidden');
-    setTimeout(() => {
-        status.classList.add('hidden');
-    }, 2000);
-};
-
-const updateMenu = async () => {
-    const menu = [];
-    for (let day = 0; day < 7; day++) {
-        const meals = {};
-        ['ontbijt', 'lunch', 'diner'].forEach(mealType => {
-            const input = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].meal-input`);
-            meals[mealType] = input.value;
-        });
-        menu.push({ day, meals });
-    }
-
-    try {
-        const response = await fetch('/update_menu', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                week: {{ week }},
-                year: {{ year }},
-                menu: menu
-            })
-        });
-
-        if (response.ok) {
-            showSaveStatus();
-        } else {
-            console.error('Error saving menu');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-    }
-};
-
-const debouncedUpdate = debounce(updateMenu, 500);
-
-// Search functionality
-function filterRecipes(query) {
-    if (!query) return recipes;
+    {% endif %}
+    {% endwith %}
     
-    return recipes.filter(recipe => 
-        recipe.displayName.toLowerCase().includes(query.toLowerCase())
-    );
-}
-
-function showDropdown(searchInput, filteredRecipes) {
-    const dropdown = searchInput.parentNode.querySelector('.recipe-dropdown');
-    
-    if (filteredRecipes.length === 0) {
-        dropdown.classList.add('hidden');
-        return;
-    }
-    
-    dropdown.innerHTML = filteredRecipes.map(recipe => 
-        `<div class="recipe-option p-2 hover:bg-gray-100 cursor-pointer text-sm" data-recipe-id="${recipe.id}" data-recipe-name="${recipe.name}" data-cookbook-abbr="${recipe.cookbookAbbr}" data-page="${recipe.page}">
-            <div class="font-medium">${recipe.name}</div>
-            ${recipe.cookbook ? `<div class="text-xs text-gray-600">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''}</div>` : ''}
-        </div>`
-    ).join('');
-    
-    dropdown.classList.remove('hidden');
-    
-    // Add click handlers to options
-    dropdown.querySelectorAll('.recipe-option').forEach(option => {
-        option.addEventListener('click', () => {
-            const recipeId = option.dataset.recipeId;
-            const recipeName = option.dataset.recipeName;
-            const cookbookAbbr = option.dataset.cookbookAbbr;
-            const page = option.dataset.page;
-            
-            searchInput.value = recipeName;
-            const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-            hiddenInput.value = recipeId;
-            
-            // Update recipe info display
-            updateRecipeInfo(searchInput, cookbookAbbr, page);
-            
-            dropdown.classList.add('hidden');
-            debouncedUpdate();
-        });
-    });
-}
-
-function updateRecipeInfo(searchInput, cookbookAbbr, page) {
-    // Remove existing recipe info
-    const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
-    if (existingInfo) {
-        existingInfo.remove();
-    }
-    
-    // Add new recipe info if cookbook exists
-    if (cookbookAbbr && cookbookAbbr !== 'null') {
-        const infoDiv = document.createElement('div');
-        infoDiv.className = 'recipe-info text-xs text-gray-600 mt-1';
-        infoDiv.textContent = cookbookAbbr + (page && page !== 'null' ? ` p.${page}` : '');
-        searchInput.parentNode.insertBefore(infoDiv, searchInput.nextSibling);
-    }
-}
-
-function hideDropdown(searchInput) {
-    setTimeout(() => {
-        const dropdown = searchInput.parentNode.querySelector('.recipe-dropdown');
-        dropdown.classList.add('hidden');
-    }, 200); // Small delay to allow clicks
-}
-
-// Initialize search inputs
-document.querySelectorAll('.recipe-search').forEach(searchInput => {
-    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value;
+    <form method="POST" action="{{ url_for('new_cookbook') }}" enctype="multipart/form-data" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+        <div class="mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
+                Naam
+            </label>
+            <input type="text" id="name" name="name" required
+                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+        </div>
         
-        if (query.length > 0) {
-            const filteredRecipes = filterRecipes(query);
-            showDropdown(searchInput, filteredRecipes);
-        } else {
-            // Clear selection when input is empty
-            const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-            hiddenInput.value = '';
-            
-            // Remove recipe info
-            const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
-            if (existingInfo) {
-                existingInfo.remove();
-            }
-            
-            hideDropdown(searchInput);
-            debouncedUpdate();
-        }
-    });
-    
-    searchInput.addEventListener('blur', (e) => {
-        hideDropdown(searchInput);
-    });
-    
-    // Clear selection when input is manually cleared
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' || e.key === 'Delete') {
-            setTimeout(() => {
-                if (searchInput.value === '') {
-                    const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-                    hiddenInput.value = '';
-                    
-                    // Remove recipe info
-                    const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
-                    if (existingInfo) {
-                        existingInfo.remove();
-                    }
-                    
-                    debouncedUpdate();
-                }
-            }, 10);
-        }
-    });
-});
-
-// Hide dropdowns when clicking outside
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.relative')) {
-        document.querySelectorAll('.recipe-dropdown').forEach(dropdown => {
-            dropdown.classList.add('hidden');
-        });
-    }
-});
-</script>
+        <div class="mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="abbreviation">
+                Afkorting (voor weekmenu)
+            </label>
+            <input type="text" id="abbreviation" name="abbreviation" maxlength="10" placeholder="bijv. SWJ"
+                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+            <p class="text-gray-600 text-xs mt-1">Kort (max 10 tekens) voor in weekmenu. Wordt automatisch aangemaakt als leeg gelaten.</p>
+        </div>
+        
+        <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2" for="image">
+                Kookboek Afbeelding
+            </label>
+            <input type="file" id="image" name="image" accept="image/*"
+                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+            <p class="text-gray-600 text-xs mt-1">Kies een afbeelding voor de voorkant van het kookboek (optioneel)</p>
+        </div>
+        
+        <div class="flex items-center justify-between">
+            <button type="submit" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Opslaan
+            </button>
+            <a href="{{ url_for('list_cookbooks') }}" 
+               class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                Annuleren
+            </a>
+        </div>
+    </form>
+</div>
 {% endblock %}
