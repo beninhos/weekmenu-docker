@@ -39,35 +39,45 @@
                            data-meal="{{ meal_code }}"
                            value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.recipe_id }}{% endif %}{% endfor %}">
                     
+                    <!-- NIEUW: Hidden input to store people count -->
+                    <input type="hidden" 
+                           class="people-input" 
+                           data-day="{{ day_index }}" 
+                           data-meal="{{ meal_code }}"
+                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.people_count or 4 }}{% endif %}{% endfor %}">
+                    
                     <!-- Search input -->
                     <input type="text" 
-                           class="recipe-search w-full border rounded p-1 text-sm mb-1" 
+                           class="recipe-search w-full border rounded p-1 text-sm" 
                            data-day="{{ day_index }}" 
                            data-meal="{{ meal_code }}"
                            placeholder="Zoek recept..."
                            value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
                            autocomplete="off">
                     
-                    <!-- People count input (only show when recipe is selected) -->
-                    {% set current_people = 4 %}
+                    <!-- NIEUW: People count input (only shown when recipe is selected) -->
+                    {% set current_menu_item = None %}
                     {% for item in menu_items %}
-                        {% if item.day_of_week == day_index and item.meal_type == meal_code and item.recipe_id %}
-                            {% set current_people = item.people_count or 4 %}
+                        {% if item.day_of_week == day_index and item.meal_type == meal_code %}
+                            {% set current_menu_item = item %}
                         {% endif %}
                     {% endfor %}
                     
-                    <div class="people-count-container {% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code and item.recipe_id %}{% else %}hidden{% endif %}{% endfor %}">
-                        <div class="flex items-center space-x-2 mb-1">
-                            <label class="text-xs text-gray-500">Voor:</label>
-                            <input type="number" 
-                                   class="people-input w-12 border rounded px-1 text-xs text-center" 
-                                   data-day="{{ day_index }}" 
-                                   data-meal="{{ meal_code }}"
-                                   value="{{ current_people }}"
-                                   min="1" max="20">
-                            <span class="text-xs text-gray-500">pers.</span>
-                        </div>
+                    {% if current_menu_item %}
+                    <div class="people-count-container flex items-center space-x-2 text-xs mt-1">
+                        <label class="text-gray-600">Personen:</label>
+                        <input type="number" 
+                               class="people-count-input w-12 border rounded px-1 py-0.5 text-center text-xs" 
+                               data-day="{{ day_index }}" 
+                               data-meal="{{ meal_code }}"
+                               min="1" 
+                               max="20" 
+                               value="{{ current_menu_item.people_count or 4 }}">
+                        <span class="text-gray-500">
+                            (recept: {% for recipe in recipes %}{% if recipe.id == current_menu_item.recipe_id %}{{ recipe.serves or 4 }}{% endif %}{% endfor %} pers.)
+                        </span>
                     </div>
+                    {% endif %}
                     
                     <!-- Recipe info display (only when selected) -->
                     {% for item in menu_items %}
@@ -94,43 +104,70 @@
         </div>
         {% endfor %}
     </div>
+    
+    <!-- BEHOUDEN: Quick Access sectie voor favorieten, recent, populair -->
+    <div class="mt-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Favorieten -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="text-lg font-bold mb-3 flex items-center">
+                    <span class="text-yellow-500 mr-2">⭐</span> Favorieten
+                </h3>
+                <div id="favorites-list" class="space-y-2">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Recent gebruikt -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="text-lg font-bold mb-3 flex items-center">
+                    <span class="text-blue-500 mr-2">🕒</span> Recent gebruikt
+                </h3>
+                <div id="recent-list" class="space-y-2">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Populair -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="text-lg font-bold mb-3 flex items-center">
+                    <span class="text-green-500 mr-2">📊</span> Populair
+                </h3>
+                <div id="popular-list" class="space-y-2">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- Quick Access sectie -->
-<div class="bg-white rounded-lg shadow p-6 mt-6">
-    <h3 class="text-xl font-bold mb-4">Snelle Toegang</h3>
-    
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Favorieten -->
-        <div>
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center">
-                <span class="text-yellow-500 mr-2">⭐</span>
-                Favorieten
-            </h4>
-            <div id="favorites-list" class="space-y-2">
-                <!-- Wordt gevuld door JavaScript -->
+<!-- Recipe selection modal -->
+<div id="recipeModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 class="text-lg font-bold mb-4" id="modalTitle">Recept toevoegen</h3>
+            <p class="mb-4">Selecteer dag en maaltijd voor <strong id="selectedRecipe"></strong>:</p>
+            
+            <div class="space-y-3">
+                {% for day_index, day_name in days %}
+                <div>
+                    <h4 class="font-medium">{{ day_name }}</h4>
+                    <div class="flex space-x-2 mt-1">
+                        {% for meal_code, meal_name in meal_types %}
+                        <button class="meal-select-btn px-3 py-1 text-sm border rounded hover:bg-gray-100" 
+                                data-day="{{ day_index }}" data-meal="{{ meal_code }}">
+                            {{ meal_name }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
             </div>
-        </div>
-        
-        <!-- Recent gebruikt -->
-        <div>
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center">
-                <span class="text-blue-500 mr-2">🕒</span>
-                Recent gebruikt
-            </h4>
-            <div id="recent-list" class="space-y-2">
-                <!-- Wordt gevuld door JavaScript -->
-            </div>
-        </div>
-        
-        <!-- Populair -->
-        <div>
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center">
-                <span class="text-green-500 mr-2">📊</span>
-                Populair
-            </h4>
-            <div id="popular-list" class="space-y-2">
-                <!-- Wordt gevuld door JavaScript -->
+            
+            <div class="flex justify-end space-x-2 mt-6">
+                <button id="cancelModal" class="px-4 py-2 text-gray-600 border rounded hover:bg-gray-100">
+                    Annuleren
+                </button>
             </div>
         </div>
     </div>
@@ -151,6 +188,8 @@ const recipes = [
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
+
+let selectedRecipeForModal = null;
 
 const debounce = (func, wait) => {
     let timeout;
@@ -179,10 +218,19 @@ const updateMenu = async () => {
         ['ontbijt', 'lunch', 'diner'].forEach(mealType => {
             const recipeInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].meal-input`);
             const peopleInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].people-input`);
-            meals[mealType] = {
-                recipe_id: recipeInput.value,
-                people_count: peopleInput ? parseInt(peopleInput.value) || 4 : 4
-            };
+            const peopleCountInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].people-count-input`);
+            
+            if (recipeInput.value) {
+                // NIEUW: Use visible input if available, otherwise use hidden input
+                const peopleCount = peopleCountInput ? 
+                    parseInt(peopleCountInput.value) || 4 : 
+                    parseInt(peopleInput.value) || 4;
+                
+                meals[mealType] = {
+                    recipe_id: recipeInput.value,
+                    people_count: peopleCount
+                };
+            }
         });
         menu.push({ day, meals });
     }
@@ -221,6 +269,54 @@ function filterRecipes(query) {
     );
 }
 
+// NIEUW: Show people count input when recipe is selected
+function showPeopleCountInput(searchInput, recipe) {
+    // Show people count input
+    let container = searchInput.parentNode.querySelector('.people-count-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'people-count-container flex items-center space-x-2 text-xs mt-1';
+        container.innerHTML = `
+            <label class="text-gray-600">Personen:</label>
+            <input type="number" 
+                   class="people-count-input w-12 border rounded px-1 py-0.5 text-center text-xs" 
+                   data-day="${searchInput.dataset.day}" 
+                   data-meal="${searchInput.dataset.meal}"
+                   min="1" 
+                   max="20" 
+                   value="${recipe.serves}">
+            <span class="text-gray-500 recipe-serves-info">
+                (recept: ${recipe.serves} pers.)
+            </span>
+        `;
+        searchInput.parentNode.insertBefore(container, searchInput.nextSibling);
+        
+        // Add event listener to people count input
+        const peopleCountInput = container.querySelector('.people-count-input');
+        peopleCountInput.addEventListener('change', debouncedUpdate);
+        peopleCountInput.addEventListener('input', debouncedUpdate);
+    } else {
+        // Update serves info
+        const servesInfo = container.querySelector('.recipe-serves-info');
+        if (servesInfo) {
+            servesInfo.textContent = `(recept: ${recipe.serves} pers.)`;
+        }
+        // Update input value to recipe serves as default
+        const peopleCountInput = container.querySelector('.people-count-input');
+        if (peopleCountInput && peopleCountInput.value == 4) { // Only if still default
+            peopleCountInput.value = recipe.serves;
+        }
+    }
+}
+
+// NIEUW: Hide people count input
+function hidePeopleCountInput(searchInput) {
+    const container = searchInput.parentNode.querySelector('.people-count-container');
+    if (container) {
+        container.remove();
+    }
+}
+
 function showDropdown(searchInput, filteredRecipes) {
     const dropdown = searchInput.parentNode.querySelector('.recipe-dropdown');
     
@@ -232,7 +328,7 @@ function showDropdown(searchInput, filteredRecipes) {
     dropdown.innerHTML = filteredRecipes.map(recipe => 
         `<div class="recipe-option p-2 hover:bg-gray-100 cursor-pointer text-sm" data-recipe-id="${recipe.id}" data-recipe-name="${recipe.name}" data-cookbook-abbr="${recipe.cookbookAbbr}" data-page="${recipe.page}" data-serves="${recipe.serves}">
             <div class="font-medium">${recipe.name}</div>
-            ${recipe.cookbook ? `<div class="text-xs text-gray-600">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''} • ${recipe.serves} pers.</div>` : ''}
+            ${recipe.cookbook ? `<div class="text-xs text-gray-600">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''} • ${recipe.serves} personen</div>` : `<div class="text-xs text-gray-600">${recipe.serves} personen</div>`}
         </div>`
     ).join('');
     
@@ -245,14 +341,23 @@ function showDropdown(searchInput, filteredRecipes) {
             const recipeName = option.dataset.recipeName;
             const cookbookAbbr = option.dataset.cookbookAbbr;
             const page = option.dataset.page;
-            const serves = option.dataset.serves;
+            const serves = parseInt(option.dataset.serves) || 4;
             
             searchInput.value = recipeName;
             const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
+            const peopleHiddenInput = searchInput.parentNode.querySelector('.people-input');
+            
             hiddenInput.value = recipeId;
+            peopleHiddenInput.value = serves; // NIEUW: Default to recipe serves
+            
+            // NIEUW: Show people count input with recipe info
+            const recipe = recipes.find(r => r.id == recipeId);
+            if (recipe) {
+                showPeopleCountInput(searchInput, recipe);
+            }
             
             // Update recipe info display
-            updateRecipeInfo(searchInput, cookbookAbbr, page, serves);
+            updateRecipeInfo(searchInput, cookbookAbbr, page);
             
             dropdown.classList.add('hidden');
             debouncedUpdate();
@@ -260,7 +365,7 @@ function showDropdown(searchInput, filteredRecipes) {
     });
 }
 
-function updateRecipeInfo(searchInput, cookbookAbbr, page, serves) {
+function updateRecipeInfo(searchInput, cookbookAbbr, page) {
     // Remove existing recipe info
     const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
     if (existingInfo) {
@@ -272,16 +377,13 @@ function updateRecipeInfo(searchInput, cookbookAbbr, page, serves) {
         const infoDiv = document.createElement('div');
         infoDiv.className = 'recipe-info text-xs text-gray-600 mt-1';
         infoDiv.textContent = cookbookAbbr + (page && page !== 'null' ? ` p.${page}` : '');
-        searchInput.parentNode.insertBefore(infoDiv, searchInput.nextSibling);
-    }
-    
-    // Show people count container and set default
-    const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
-    const peopleInput = searchInput.parentNode.querySelector('.people-input');
-    if (peopleContainer) {
-        peopleContainer.classList.remove('hidden');
-        if (peopleInput && serves) {
-            peopleInput.value = serves;
+        
+        // AANGEPAST: Insert after people count container or after search input
+        const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
+        if (peopleContainer) {
+            searchInput.parentNode.insertBefore(infoDiv, peopleContainer.nextSibling);
+        } else {
+            searchInput.parentNode.insertBefore(infoDiv, searchInput.nextSibling);
         }
     }
 }
@@ -304,18 +406,17 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
         } else {
             // Clear selection when input is empty
             const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
+            const peopleHiddenInput = searchInput.parentNode.querySelector('.people-input');
             hiddenInput.value = '';
+            peopleHiddenInput.value = '';
+            
+            // NIEUW: Hide people count input
+            hidePeopleCountInput(searchInput);
             
             // Remove recipe info
             const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
             if (existingInfo) {
                 existingInfo.remove();
-            }
-            
-            // Hide people count container
-            const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
-            if (peopleContainer) {
-                peopleContainer.classList.add('hidden');
             }
             
             hideDropdown(searchInput);
@@ -333,18 +434,17 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
             setTimeout(() => {
                 if (searchInput.value === '') {
                     const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
+                    const peopleHiddenInput = searchInput.parentNode.querySelector('.people-input');
                     hiddenInput.value = '';
+                    peopleHiddenInput.value = '';
+                    
+                    // NIEUW: Hide people count input
+                    hidePeopleCountInput(searchInput);
                     
                     // Remove recipe info
                     const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
                     if (existingInfo) {
                         existingInfo.remove();
-                    }
-                    
-                    // Hide people count container
-                    const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
-                    if (peopleContainer) {
-                        peopleContainer.classList.add('hidden');
                     }
                     
                     debouncedUpdate();
@@ -354,10 +454,10 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
     });
 });
 
-// Initialize people count inputs
-document.querySelectorAll('.people-input').forEach(peopleInput => {
-    peopleInput.addEventListener('change', debouncedUpdate);
-    peopleInput.addEventListener('input', debouncedUpdate);
+// NIEUW: Add event listeners to existing people count inputs
+document.querySelectorAll('.people-count-input').forEach(input => {
+    input.addEventListener('change', debouncedUpdate);
+    input.addEventListener('input', debouncedUpdate);
 });
 
 // Hide dropdowns when clicking outside
@@ -369,194 +469,99 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// QUICK ACCESS FUNCTIONALITY
-
+// BEHOUDEN: Quick Access functionality
 async function loadQuickAccessRecipes() {
     try {
         const response = await fetch('/api/quick_access_recipes');
         const data = await response.json();
         
-        if (data.status === 'error') {
-            console.error('Error loading quick access recipes:', data.message);
-            return;
-        }
-        
-        // Render favorieten
-        renderRecipeList('favorites-list', data.favorites, true);
-        
-        // Render recent
-        renderRecipeList('recent-list', data.recent, false);
-        
-        // Render populair
-        renderRecipeList('popular-list', data.popular, false);
-        
+        displayRecipeList('favorites-list', data.favorites, '⭐');
+        displayRecipeList('recent-list', data.recent, '🕒');
+        displayRecipeList('popular-list', data.popular, '📊');
     } catch (error) {
-        console.error('Error fetching quick access recipes:', error);
+        console.error('Error loading quick access recipes:', error);
     }
 }
 
-function renderRecipeList(containerId, recipes, showFavoriteToggle) {
+function displayRecipeList(containerId, recipes, icon) {
     const container = document.getElementById(containerId);
+    if (!container) return;
     
     if (recipes.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm italic">Nog geen recepten</p>';
+        container.innerHTML = '<p class="text-gray-500 text-sm">Nog geen recepten</p>';
         return;
     }
     
-    container.innerHTML = recipes.map(recipe => `
-        <div class="recipe-quick-item flex items-center justify-between p-2 bg-gray-50 rounded cursor-pointer hover:bg-gray-100" 
-             data-recipe-id="${recipe.id}" 
-             data-recipe-name="${recipe.name}"
-             data-serves="${recipe.serves}">
-            <div class="flex-grow">
+    container.innerHTML = recipes.map(recipe => {
+        const usageText = containerId === 'popular-list' ? ` (${recipe.usage_count}×)` : '';
+        return `
+            <div class="recipe-quick-item p-2 border rounded hover:bg-white cursor-pointer transition-colors" 
+                 data-recipe='${JSON.stringify(recipe)}'>
                 <div class="font-medium text-sm">${recipe.name}</div>
                 <div class="text-xs text-gray-600">
-                    ${recipe.cookbook_abbr ? recipe.cookbook_abbr + (recipe.page ? ' p.' + recipe.page : '') + ' • ' : ''}
-                    ${recipe.serves} pers.
-                    ${containerId === 'popular-list' ? ' • ' + (recipe.usage_count || 0) + '×' : ''}
+                    ${recipe.cookbook_abbr || ''}${recipe.page ? ` p.${recipe.page}` : ''} • ${recipe.serves} pers.${usageText}
                 </div>
             </div>
-            ${showFavoriteToggle ? `
-                <button class="favorite-toggle text-yellow-500 hover:text-yellow-600 ml-2" 
-                        data-recipe-id="${recipe.id}" 
-                        data-is-favorite="${recipe.is_favorite}">
-                    ${recipe.is_favorite ? '⭐' : '☆'}
-                </button>
-            ` : ''}
-        </div>
-    `).join('');
+        `;
+    }).join('');
     
     // Add click handlers
     container.querySelectorAll('.recipe-quick-item').forEach(item => {
-        item.addEventListener('click', (e) => {
-            if (e.target.classList.contains('favorite-toggle')) {
-                return; // Don't trigger recipe selection when clicking favorite button
-            }
+        item.addEventListener('click', () => {
+            const recipe = JSON.parse(item.dataset.recipe);
+            openRecipeModal(recipe);
+        });
+    });
+}
+
+function openRecipeModal(recipe) {
+    selectedRecipeForModal = recipe;
+    document.getElementById('selectedRecipe').textContent = recipe.name;
+    document.getElementById('recipeModal').classList.remove('hidden');
+}
+
+// Modal functionality
+document.getElementById('cancelModal').addEventListener('click', () => {
+    document.getElementById('recipeModal').classList.add('hidden');
+    selectedRecipeForModal = null;
+});
+
+// Meal selection buttons
+document.querySelectorAll('.meal-select-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (!selectedRecipeForModal) return;
+        
+        const day = parseInt(btn.dataset.day);
+        const meal = btn.dataset.meal;
+        
+        // Find the corresponding inputs
+        const searchInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].recipe-search`);
+        const hiddenInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].meal-input`);
+        const peopleHiddenInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
+        
+        if (searchInput && hiddenInput) {
+            // Set the values
+            searchInput.value = selectedRecipeForModal.name;
+            hiddenInput.value = selectedRecipeForModal.id;
+            peopleHiddenInput.value = selectedRecipeForModal.serves; // NIEUW: Set people count to recipe default
             
-            // Show modal om te kiezen waar het recept moet worden toegevoegd
-            showAddRecipeModal(
-                item.dataset.recipeId,
-                item.dataset.recipeName,
-                item.dataset.serves
-            );
-        });
-    });
-    
-    // Add favorite toggle handlers
-    if (showFavoriteToggle) {
-        container.querySelectorAll('.favorite-toggle').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                await toggleFavorite(btn.dataset.recipeId, btn);
-            });
-        });
-    }
-}
-
-async function toggleFavorite(recipeId, button) {
-    try {
-        const response = await fetch(`/recipe/${recipeId}/toggle_favorite`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            // Update button appearance
-            button.textContent = data.is_favorite ? '⭐' : '☆';
-            button.dataset.isFavorite = data.is_favorite;
+            // NIEUW: Show people count input
+            showPeopleCountInput(searchInput, selectedRecipeForModal);
             
-            // Refresh quick access lists
-            setTimeout(loadQuickAccessRecipes, 100);
-        }
-    } catch (error) {
-        console.error('Error toggling favorite:', error);
-    }
-}
-
-function showAddRecipeModal(recipeId, recipeName, serves) {
-    // Create simple modal
-    const modal = document.createElement('div');
-    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-    modal.innerHTML = `
-        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 class="text-lg font-bold mb-4">Voeg "${recipeName}" toe aan:</h3>
-            <div class="grid grid-cols-7 gap-2 mb-4">
-                ${['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'].map((day, index) => `
-                    <div class="text-center">
-                        <div class="font-medium text-sm mb-2">${day}</div>
-                        <div class="space-y-1">
-                            <button class="add-to-meal w-full text-xs bg-yellow-100 hover:bg-yellow-200 p-1 rounded" 
-                                    data-day="${index}" data-meal="ontbijt">Ontbijt</button>
-                            <button class="add-to-meal w-full text-xs bg-green-100 hover:bg-green-200 p-1 rounded" 
-                                    data-day="${index}" data-meal="lunch">Lunch</button>
-                            <button class="add-to-meal w-full text-xs bg-blue-100 hover:bg-blue-200 p-1 rounded" 
-                                    data-day="${index}" data-meal="diner">Diner</button>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-            <div class="flex justify-end space-x-2">
-                <button class="cancel-modal bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
-                    Annuleren
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Add event listeners
-    modal.querySelectorAll('.add-to-meal').forEach(btn => {
-        btn.addEventListener('click', () => {
-            addRecipeToMeal(recipeId, recipeName, serves, btn.dataset.day, btn.dataset.meal);
-            document.body.removeChild(modal);
-        });
-    });
-    
-    modal.querySelector('.cancel-modal').addEventListener('click', () => {
-        document.body.removeChild(modal);
-    });
-    
-    // Close on background click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            document.body.removeChild(modal);
-        }
-    });
-}
-
-function addRecipeToMeal(recipeId, recipeName, serves, day, meal) {
-    const searchInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].recipe-search`);
-    const hiddenInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].meal-input`);
-    const peopleInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
-    
-    if (searchInput && hiddenInput) {
-        // Set recipe
-        searchInput.value = recipeName;
-        hiddenInput.value = recipeId;
-        
-        // Update people count and show container
-        const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
-        if (peopleContainer) {
-            peopleContainer.classList.remove('hidden');
-            if (peopleInput) {
-                peopleInput.value = serves;
-            }
+            // Update recipe info
+            updateRecipeInfo(searchInput, selectedRecipeForModal.cookbook_abbr, selectedRecipeForModal.page);
+            
+            // Save changes
+            debouncedUpdate();
         }
         
-        // Update menu immediately
-        debouncedUpdate();
-        
-        // Show success message
-        showSaveStatus();
-    }
-}
+        // Close modal
+        document.getElementById('recipeModal').classList.add('hidden');
+        selectedRecipeForModal = null;
+    });
+});
 
-// Load quick access recipes when page loads
+// Load quick access recipes on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadQuickAccessRecipes();
 });
