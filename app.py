@@ -239,11 +239,18 @@ def update_menu():
     try:
         data = request.get_json()
         
-        # Haal oude menu items op om te zien welke recepten werden weggehaald
+        # Haal oude menu items op om te zien welke posities er al waren
         old_items = MenuItem.query.filter_by(
             week_number=data['week'],
             year=data['year']
         ).all()
+        
+        # Verzamel oude menu posities (dag+maaltijd+recept)
+        old_positions = set()
+        for old_item in old_items:
+            if old_item.recipe_id:
+                position = (old_item.day_of_week, old_item.meal_type, old_item.recipe_id)
+                old_positions.add(position)
         
         # Verwijder oude menu items
         MenuItem.query.filter_by(
@@ -251,8 +258,8 @@ def update_menu():
             year=data['year']
         ).delete()
         
-        # Track welke recepten worden toegevoegd
-        new_recipe_ids = set()
+        # Track welke menu posities worden toegevoegd
+        new_positions = set()
         
         for day in data['menu']:
             for meal_type, meal_data in day['meals'].items():
@@ -266,7 +273,10 @@ def update_menu():
                     people_count = 4
                 
                 if recipe_id:
-                    new_recipe_ids.add(int(recipe_id))
+                    recipe_id = int(recipe_id)
+                    position = (day['day'], meal_type, recipe_id)
+                    new_positions.add(position)
+                    
                     menu_item = MenuItem(
                         day_of_week=day['day'],
                         meal_type=meal_type,
@@ -277,11 +287,22 @@ def update_menu():
                     )
                     db.session.add(menu_item)
         
-        # Update usage statistics voor nieuwe recepten
-        for recipe_id in new_recipe_ids:
+        # Verhoog usage_count voor elke nieuwe positie 
+        truly_new_positions = new_positions - old_positions
+        
+        # Update usage statistics voor elke nieuwe positie
+        for position in truly_new_positions:
+            day, meal_type, recipe_id = position
             recipe = Recipe.query.get(recipe_id)
             if recipe:
                 recipe.usage_count = (recipe.usage_count or 0) + 1
+                recipe.last_used = datetime.now()
+        
+        # Update last_used voor alle gebruikte recepten
+        used_recipe_ids = {pos[2] for pos in new_positions}
+        for recipe_id in used_recipe_ids:
+            recipe = Recipe.query.get(recipe_id)
+            if recipe:
                 recipe.last_used = datetime.now()
         
         db.session.commit()
