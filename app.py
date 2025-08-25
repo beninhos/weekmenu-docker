@@ -5,6 +5,15 @@ from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
 
+def format_amount(amount):
+    """Format numbers smart: integers without decimals, decimals when needed"""
+    rounded = round(amount, 2)
+    
+    if rounded == int(rounded):
+        return int(rounded)
+    
+    return f"{rounded:g}"
+
 # Constants
 DAYS = [
     (0, 'Maandag'),
@@ -316,16 +325,12 @@ def shopping_list(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     shopping_dict = {}
     
-    print(f"DEBUG: Found {len(menu_items)} menu items for week {week}/{year}")  # Debug info
-    
     for item in menu_items:
         if item.recipe:
             # Calculate portion multiplier
             recipe_serves = item.recipe.serves or 4
             people_count = item.people_count or 4
             multiplier = people_count / recipe_serves
-            
-            print(f"DEBUG: Recipe {item.recipe.name}: serves {recipe_serves}, cooking for {people_count}, multiplier {multiplier}")  # Debug info
             
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
@@ -339,15 +344,13 @@ def shopping_list(year, week):
     shopping_list = [
         {
             'name': k[0], 
-            'amount': round(v, 2), 
+            'amount': format_amount(v),  # GEWIJZIGD: Slimme formatting
             'unit': k[1], 
             'category': k[2]
         }
         for k, v in shopping_dict.items()
     ]
     shopping_list.sort(key=lambda x: (x['category'], x['name']))
-    
-    print(f"DEBUG: Final shopping list has {len(shopping_list)} items")  # Debug info
     
     return render_template('shopping_list.html',
                          shopping_list=shopping_list,
