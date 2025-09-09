@@ -5,6 +5,15 @@ from werkzeug.utils import secure_filename
 import os
 from pathlib import Path
 
+def format_amount(amount):
+    """Format numbers smart: integers without decimals, decimals when needed"""
+    rounded = round(amount, 2)
+    
+    if rounded == int(rounded):
+        return int(rounded)
+    
+    return f"{rounded:g}"
+
 # Constants
 DAYS = [
     (0, 'Maandag'),
@@ -22,6 +31,29 @@ MEAL_TYPES = [
     ('diner', 'Diner')
 ]
 
+# NIEUW: Uitgebreide categorieën die aansluiten bij supermarktindeling
+PRODUCT_CATEGORIES = [
+    'AGF (Groenten & Fruit)',
+    'Vlees & Vis',
+    'Zuivel & Eieren',
+    'Kaas & Vleeswaren',
+    'Brood & Banket',
+    'Pasta, Rijst & Wereldkeuken',
+    'Conserven & Soepen',
+    'Sauzen & Kruiden',
+    'Bakproducten',
+    'Ontbijt & Broodbeleg',
+    'Dranken',
+    'Diepvries',
+    'Snoep & Koek',
+    'Noten & Gedroogd fruit',
+    'Chips & Borrelnoten',
+    'Baby & Kind',
+    'Huishoudelijk',
+    'Verzorging',
+    'Overig'
+]
+
 # App setup
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'dev'
@@ -35,13 +67,13 @@ class Recipe(db.Model):
     __tablename__ = 'recipe'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    serves = db.Column(db.Integer, default=4)  # NIEUW: aantal personen
+    serves = db.Column(db.Integer, default=4)
     cookbook_id = db.Column(db.Integer, db.ForeignKey('cookbook.id'), nullable=True)
     page = db.Column(db.Integer)
     image_path = db.Column(db.String(200), nullable=True)
-    is_favorite = db.Column(db.Boolean, default=False)  # NIEUW: favorieten
-    last_used = db.Column(db.DateTime, nullable=True)  # NIEUW: recent gebruikt
-    usage_count = db.Column(db.Integer, default=0)  # NIEUW: gebruiksfrequentie
+    is_favorite = db.Column(db.Boolean, default=False)
+    last_used = db.Column(db.DateTime, nullable=True)
+    usage_count = db.Column(db.Integer, default=0)
     ingredients = db.relationship('RecipeIngredient', backref='recipe', lazy=True, cascade='all, delete-orphan')
     cookbook = db.relationship('Cookbook', back_populates='recipes')
 
@@ -66,7 +98,7 @@ class MenuItem(db.Model):
     day_of_week = db.Column(db.Integer, nullable=False)
     meal_type = db.Column(db.String(20), nullable=False)
     recipe_id = db.Column(db.Integer, db.ForeignKey('recipe.id'))
-    people_count = db.Column(db.Integer, default=4)  # NIEUW: aantal personen voor dit menu item
+    people_count = db.Column(db.Integer, default=4)
     week_number = db.Column(db.Integer, nullable=False)
     year = db.Column(db.Integer, nullable=False)
     recipe = db.relationship('Recipe')
@@ -75,10 +107,8 @@ class Cookbook(db.Model):
     __tablename__ = 'cookbook'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
-    abbreviation = db.Column(db.String(10), nullable=True)  # NIEUW: afkorting veld
-    image_path = db.Column(db.String(200), nullable=True)  # NIEUW: afbeelding veld
-    
-    # Relatie met recepten
+    abbreviation = db.Column(db.String(10), nullable=True)
+    image_path = db.Column(db.String(200), nullable=True)
     recipes = db.relationship('Recipe', back_populates='cookbook', lazy=True)
 
 # Routes
@@ -104,14 +134,13 @@ def week_menu(year, week):
 @app.route('/cookbook/<int:id>/recipes')
 def list_cookbook_recipes(id):
     cookbook = Cookbook.query.get_or_404(id)
-    # Sorteer recepten op paginanummer, recepten zonder pagina komen laatst
     recipes = sorted(cookbook.recipes, key=lambda x: (x.page is None, x.page or 0))
     return render_template('cookbook_recipes.html', cookbook=cookbook, recipes=recipes)
 
 @app.route('/recipes')
 def recipes():
     recipes = Recipe.query.all()
-    return render_template('recipes.html', recipes=recipes)
+    return render_template('recipes.html', recipes=recipes, categories=PRODUCT_CATEGORIES)
 
 @app.route('/recipe/new', methods=['GET', 'POST'])
 def new_recipe():
@@ -160,7 +189,7 @@ def new_recipe():
         db.session.commit()
         return redirect(url_for('recipes'))
     
-    return render_template('new_recipe.html', cookbooks=cookbooks)
+    return render_template('new_recipe.html', cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
 
 @app.route('/recipe/<int:id>', methods=['DELETE'])
 def delete_recipe(id):
@@ -180,18 +209,15 @@ def new_cookbook():
         cookbook_name = request.form['name']
         abbreviation = request.form.get('abbreviation', '').strip()
         
-        # Controleer of cookbook al bestaat
         existing_cookbook = Cookbook.query.filter_by(name=cookbook_name).first()
         if existing_cookbook:
             flash('Dit kookboek bestaat al')
             return redirect(url_for('new_cookbook'))
         
-        # Maak automatisch afkorting als geen opgegeven
         if not abbreviation:
             words = cookbook_name.split()
             abbreviation = ''.join(word[0].upper() for word in words if word)[:5]
         
-        # Afbeelding uploaden
         image = request.files.get('image')
         image_path = None
         if image and image.filename:
@@ -214,14 +240,12 @@ def edit_cookbook(id):
         cookbook.name = request.form['name']
         abbreviation = request.form.get('abbreviation', '').strip()
         
-        # Update afkorting of maak automatisch aan
         if abbreviation:
             cookbook.abbreviation = abbreviation
         else:
             words = cookbook.name.split()
             cookbook.abbreviation = ''.join(word[0].upper() for word in words if word)[:5]
         
-        # Afbeelding uploaden
         image = request.files.get('image')
         if image and image.filename:
             filename = secure_filename(image.filename)
@@ -239,36 +263,30 @@ def update_menu():
     try:
         data = request.get_json()
         
-        # Haal oude menu items op om te zien welke posities er al waren
         old_items = MenuItem.query.filter_by(
             week_number=data['week'],
             year=data['year']
         ).all()
         
-        # Verzamel oude menu posities (dag+maaltijd+recept)
         old_positions = set()
         for old_item in old_items:
             if old_item.recipe_id:
                 position = (old_item.day_of_week, old_item.meal_type, old_item.recipe_id)
                 old_positions.add(position)
         
-        # Verwijder oude menu items
         MenuItem.query.filter_by(
             week_number=data['week'],
             year=data['year']
         ).delete()
         
-        # Track welke menu posities worden toegevoegd
         new_positions = set()
         
         for day in data['menu']:
             for meal_type, meal_data in day['meals'].items():
-                # Handle both old format (string) and new format (dict)
                 if isinstance(meal_data, dict):
                     recipe_id = meal_data.get('recipe_id')
                     people_count = meal_data.get('people_count', 4)
                 else:
-                    # Backward compatibility
                     recipe_id = meal_data
                     people_count = 4
                 
@@ -287,10 +305,8 @@ def update_menu():
                     )
                     db.session.add(menu_item)
         
-        # Verhoog usage_count voor elke nieuwe positie 
         truly_new_positions = new_positions - old_positions
         
-        # Update usage statistics voor elke nieuwe positie
         for position in truly_new_positions:
             day, meal_type, recipe_id = position
             recipe = Recipe.query.get(recipe_id)
@@ -298,7 +314,6 @@ def update_menu():
                 recipe.usage_count = (recipe.usage_count or 0) + 1
                 recipe.last_used = datetime.now()
         
-        # Update last_used voor alle gebruikte recepten
         used_recipe_ids = {pos[2] for pos in new_positions}
         for recipe_id in used_recipe_ids:
             recipe = Recipe.query.get(recipe_id)
@@ -316,16 +331,11 @@ def shopping_list(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     shopping_dict = {}
     
-    print(f"DEBUG: Found {len(menu_items)} menu items for week {week}/{year}")  # Debug info
-    
     for item in menu_items:
         if item.recipe:
-            # Calculate portion multiplier
             recipe_serves = item.recipe.serves or 4
             people_count = item.people_count or 4
             multiplier = people_count / recipe_serves
-            
-            print(f"DEBUG: Recipe {item.recipe.name}: serves {recipe_serves}, cooking for {people_count}, multiplier {multiplier}")  # Debug info
             
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
@@ -339,15 +349,13 @@ def shopping_list(year, week):
     shopping_list = [
         {
             'name': k[0], 
-            'amount': round(v, 2), 
+            'amount': format_amount(v),
             'unit': k[1], 
             'category': k[2]
         }
         for k, v in shopping_dict.items()
     ]
     shopping_list.sort(key=lambda x: (x['category'], x['name']))
-    
-    print(f"DEBUG: Final shopping list has {len(shopping_list)} items")  # Debug info
     
     return render_template('shopping_list.html',
                          shopping_list=shopping_list,
@@ -365,7 +373,6 @@ def edit_recipe(id):
         recipe.cookbook_id = request.form.get('cookbook') if request.form.get('cookbook') else None
         recipe.page = request.form['page'] if request.form['page'] else None
         
-        # Afbeelding uploaden
         image = request.files.get('image')
         if image and image.filename:
             filename = secure_filename(image.filename)
@@ -373,7 +380,6 @@ def edit_recipe(id):
             image.save(os.path.join(app.root_path, image_path))
             recipe.image_path = image_path
         
-        # Verwijder bestaande ingrediënten
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
         
         ingredients = request.form.getlist('ingredient[]')
@@ -400,9 +406,7 @@ def edit_recipe(id):
         db.session.commit()
         return redirect(url_for('recipes'))
     
-    return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks)
-
-# NIEUWE ROUTES VOOR FAVORIETEN EN QUICK ACCESS
+    return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
 
 @app.route('/recipe/<int:id>/toggle_favorite', methods=['POST'])
 def toggle_favorite(id):
@@ -423,13 +427,8 @@ def toggle_favorite(id):
 def get_quick_access_recipes():
     """API endpoint voor favorieten, recent en populaire recepten"""
     try:
-        # Favorieten (max 10)
         favorites = Recipe.query.filter_by(is_favorite=True).order_by(Recipe.name).limit(10).all()
-        
-        # Recent gebruikt (max 10, laatste eerst)
         recent = Recipe.query.filter(Recipe.last_used.isnot(None)).order_by(Recipe.last_used.desc()).limit(10).all()
-        
-        # Populair (max 10, hoogste usage_count eerst)
         popular = Recipe.query.filter(Recipe.usage_count > 0).order_by(Recipe.usage_count.desc()).limit(10).all()
         
         def format_recipe(recipe):

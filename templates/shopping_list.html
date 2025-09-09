@@ -9,26 +9,16 @@
         </button>
     </div>
     
-    {% set current_category = None %}
-    {% for item in shopping_list %}
-        {% if item.category != current_category %}
-            {% if not loop.first %}
-                </div>
-            {% endif %}
-            
-            <h3 class="font-bold text-lg mt-6 mb-3">{{ item.category }}</h3>
-            <div class="space-y-2">
-            {% set current_category = item.category %}
-        {% endif %}
-        
-        <div class="flex items-center">
-            <input type="checkbox" class="mr-2">
-            <span>{{ item.amount }} {{ item.unit }} {{ item.name }}</span>
-        </div>
-        
-        {% if loop.last %}
+    {% for category, items in shopping_list|groupby('category') %}
+        <h3 class="font-bold text-lg mt-6 mb-3">{{ category }}</h3>
+        <div class="space-y-2">
+            {% for item in items %}
+            <div class="flex items-center">
+                <input type="checkbox" class="mr-2">
+                <span>{{ item.amount }} {{ item.unit }} {{ item.name }}</span>
             </div>
-        {% endif %}
+            {% endfor %}
+        </div>
     {% endfor %}
 </div>
 
