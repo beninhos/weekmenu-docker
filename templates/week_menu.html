@@ -184,7 +184,7 @@ const recipes = [
         cookbook: {% if recipe.cookbook %}"{{ recipe.cookbook.name }}"{% else %}null{% endif %},
         cookbookAbbr: {% if recipe.cookbook %}"{{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}"{% else %}null{% endif %},
         page: {% if recipe.page %}{{ recipe.page }}{% else %}null{% endif %},
-        displayName: "{{ recipe.name }}{% if recipe.cookbook %} ({{ recipe.cookbook.name }}{% if recipe.page %}, p.{{ recipe.page }}{% endif %}){% endif %}"
+        displayName: "{{ recipe.name }}{% if recipe.cookbook %} ({{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}{% if recipe.page %} p.{{ recipe.page }}{% endif %}){% endif %}"
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 ];
@@ -264,9 +264,26 @@ const debouncedUpdate = debounce(updateMenu, 500);
 function filterRecipes(query) {
     if (!query) return recipes;
     
-    return recipes.filter(recipe => 
-        recipe.displayName.toLowerCase().includes(query.toLowerCase())
-    );
+    const lowerQuery = query.toLowerCase();
+    
+    return recipes.filter(recipe => {
+        // Maak één zoekbare string met alle velden
+        const searchString = [
+            recipe.name,
+            recipe.cookbook,
+            recipe.cookbookAbbr,
+            recipe.page,
+            `p${recipe.page}`
+        ].filter(Boolean).join(' ').toLowerCase();
+        
+        // Voor meerdere woorden: alle woorden moeten gevonden worden
+        if (lowerQuery.includes(' ')) {
+            return lowerQuery.split(' ').every(part => searchString.includes(part));
+        }
+        
+        // Voor enkel woord: gewoon zoeken
+        return searchString.includes(lowerQuery);
+    });
 }
 
 // NIEUW: Show people count input when recipe is selected
