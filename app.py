@@ -47,11 +47,26 @@ PRODUCT_CATEGORIES = [
     'Diepvries',
     'Snoep & Koek',
     'Noten & Gedroogd fruit',
-    'Chips & Borrelnoten',
-    'Baby & Kind',
-    'Huishoudelijk',
-    'Verzorging',
     'Overig'
+]
+
+# Sorteervolgorde voor boodschappenlijst - Supermarkt looproute
+CATEGORY_ORDER_SUPERMARKET = [
+    'AGF (Groenten & Fruit)',           # Bij binnenkomst
+    'Brood & Banket',                   # Vaak vooraan
+    'Kaas & Vleeswaren',                # Versafdeling
+    'Vlees & Vis',                      # Verse afdeling
+    'Zuivel & Eieren',                  # Koeling zijkant
+    'Pasta, Rijst & Wereldkeuken',      # Middenpad
+    'Conserven & Soepen',               # Middenpaden
+    'Sauzen & Kruiden',                 # Middenpaden
+    'Bakproducten',                     # Middenpaden
+    'Ontbijt & Broodbeleg',            # Middenpaden
+    'Snoep & Koek',                    # Vaak bij kassa gebied
+    'Noten & Gedroogd fruit',          # Bij snacks
+    'Dranken',                          # Zwaar, vaak achteraan
+    'Diepvries',                        # Helemaal achteraan
+    'Overig'                            # Rest
 ]
 
 # App setup
@@ -349,13 +364,19 @@ def shopping_list(year, week):
     shopping_list = [
         {
             'name': k[0], 
-            'amount': format_amount(v),
+            'amount': format_amount(v),  # GEWIJZIGD: Slimme formatting
             'unit': k[1], 
             'category': k[2]
         }
         for k, v in shopping_dict.items()
     ]
-    shopping_list.sort(key=lambda x: (x['category'], x['name']))
+    
+    # Sorteer volgens supermarkt looproute
+    category_order = {cat: i for i, cat in enumerate(CATEGORY_ORDER_SUPERMARKET)}
+    shopping_list.sort(key=lambda x: (
+        category_order.get(x['category'], 999),  # 999 voor onbekende categorieën
+        x['name']
+    ))
     
     return render_template('shopping_list.html',
                          shopping_list=shopping_list,
