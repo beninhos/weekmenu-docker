@@ -54,22 +54,22 @@
             <h3 class="text-lg font-medium text-gray-700 mb-2">Ingrediënten</h3>
             <div id="ingredients" class="space-y-4">
                 {% for ri in recipe.ingredients %}
-                <div class="grid grid-cols-4 gap-4">
-                    <div class="col-span-2">
+                <div class="grid grid-cols-12 gap-2">
+                    <div class="col-span-4">
                         <input type="text" name="ingredient[]" value="{{ ri.ingredient.name }}"
                                class="block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
-                    <div>
+                    <div class="col-span-2">
                         <input type="number" step="0.1" name="amount[]" value="{{ ri.amount }}"
                                class="block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
-                    <div>
+                    <div class="col-span-2">
                         <input type="text" name="unit[]" value="{{ ri.unit }}"
                                class="block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
-                    <div>
+                    <div class="col-span-4">
                         <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
-                            {% for cat in ['Groenten', 'Fruit', 'Vlees', 'Vis', 'Zuivel', 'Brood', 'Droogwaren', 'Overig'] %}
+                            {% for cat in categories %}
                             <option value="{{ cat }}" {{ 'selected' if ri.ingredient.category == cat }}>
                                 {{ cat }}
                             </option>
@@ -100,33 +100,31 @@
 </div>
 
 <script>
+const categories = {{ categories | tojson }};
+
 function addIngredient() {
     const container = document.getElementById('ingredients');
     const newRow = document.createElement('div');
-    newRow.className = 'grid grid-cols-4 gap-4';
+    newRow.className = 'grid grid-cols-12 gap-2';
+    
+    let optionsHtml = categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+    
     newRow.innerHTML = `
-        <div class="col-span-2">
+        <div class="col-span-4">
             <input type="text" name="ingredient[]" placeholder="Ingrediënt"
                    class="block w-full rounded-md border-gray-300 shadow-sm">
         </div>
-        <div>
+        <div class="col-span-2">
             <input type="number" step="0.1" name="amount[]" placeholder="Aantal"
                    class="block w-full rounded-md border-gray-300 shadow-sm">
         </div>
-        <div>
+        <div class="col-span-2">
             <input type="text" name="unit[]" placeholder="Eenheid"
                    class="block w-full rounded-md border-gray-300 shadow-sm">
         </div>
-        <div>
+        <div class="col-span-4">
             <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
-                <option value="Groenten">Groenten</option>
-                <option value="Fruit">Fruit</option>
-                <option value="Vlees">Vlees</option>
-                <option value="Vis">Vis</option>
-                <option value="Zuivel">Zuivel</option>
-                <option value="Brood">Brood</option>
-                <option value="Droogwaren">Droogwaren</option>
-                <option value="Overig">Overig</option>
+                ${optionsHtml}
             </select>
         </div>
     `;
