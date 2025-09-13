@@ -126,6 +126,16 @@ class Cookbook(db.Model):
     image_path = db.Column(db.String(200), nullable=True)
     recipes = db.relationship('Recipe', back_populates='cookbook', lazy=True)
 
+class QuickAddItem(db.Model):
+    __tablename__ = 'quick_add_item'
+    id = db.Column(db.Integer, primary_key=True)
+    recipe_id = db.Column(db.Integer, db.ForeignKey('recipe.id'), nullable=False)
+    people_count = db.Column(db.Integer, default=4)
+    week_number = db.Column(db.Integer, nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    recipe = db.relationship('Recipe')
+
 # Routes
 @app.route('/')
 def index():
@@ -341,11 +351,31 @@ def update_menu():
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
+@app.route('/clear_week_menu', methods=['POST'])
+def clear_week_menu():
+    """Clear all menu items for a specific week"""
+    try:
+        data = request.get_json()
+        week = data['week']
+        year = data['year']
+        
+        MenuItem.query.filter_by(
+            week_number=week,
+            year=year
+        ).delete()
+        
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
 @app.route('/shopping-list/<int:year>/<int:week>')
 def shopping_list(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     shopping_dict = {}
     
+    # Process regular menu items
     for item in menu_items:
         if item.recipe:
             recipe_serves = item.recipe.serves or 4
@@ -353,6 +383,47 @@ def shopping_list(year, week):
             multiplier = people_count / recipe_serves
             
             for ri in item.recipe.ingredients:
+                key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
+                adjusted_amount = ri.amount * multiplier
+                
+                if key in shopping_dict:
+                    shopping_dict[key] += adjusted_amount
+                else:
+                    shopping_dict[key] = adjusted_amount
+    
+    # Process saved quick-add items from database
+    quick_items = QuickAddItem.query.filter_by(
+        week_number=week,
+        year=year
+    ).all()
+    
+    for item in quick_items:
+        if item.recipe:
+            recipe_serves = item.recipe.serves or 4
+            people_count = item.people_count or 4
+            multiplier = people_count / recipe_serves
+            
+            for ri in item.recipe.ingredients:
+                key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
+                adjusted_amount = ri.amount * multiplier
+                
+                if key in shopping_dict:
+                    shopping_dict[key] += adjusted_amount
+                else:
+                    shopping_dict[key] = adjusted_amount
+    
+    # NIEUW: Process temporary quick-add items from URL parameters
+    recipe_ids = request.args.getlist('recipe_id')
+    people_counts = request.args.getlist('people_count')
+    
+    for i, recipe_id in enumerate(recipe_ids):
+        recipe = Recipe.query.get(recipe_id)
+        if recipe:
+            people_count = int(people_counts[i]) if i < len(people_counts) else 4
+            recipe_serves = recipe.serves or 4
+            multiplier = people_count / recipe_serves
+            
+            for ri in recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
                 adjusted_amount = ri.amount * multiplier
                 
@@ -440,6 +511,77 @@ def toggle_favorite(id):
             'status': 'success', 
             'is_favorite': recipe.is_favorite
         })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+@app.route('/quick-add')
+def quick_add():
+    """Quick add page voor snel toevoegen van recepten aan boodschappenlijst"""
+    today = date.today()
+    week_number = request.args.get('week', today.isocalendar()[1], type=int)
+    year = request.args.get('year', today.year, type=int)
+    
+    recipes = Recipe.query.order_by(Recipe.name).all()
+    
+    # Get saved quick-add items for this week
+    saved_items = QuickAddItem.query.filter_by(
+        week_number=week_number,
+        year=year
+    ).all()
+    
+    return render_template('quick_add.html',
+                         recipes=recipes,
+                         week=week_number,
+                         year=year,
+                         saved_items=saved_items)
+
+@app.route('/api/quick-add/save', methods=['POST'])
+def save_quick_add():
+    """Save quick-add items to database for a specific week"""
+    try:
+        data = request.get_json()
+        week = data['week']
+        year = data['year']
+        items = data['items']
+        
+        # Clear existing items for this week first
+        QuickAddItem.query.filter_by(
+            week_number=week,
+            year=year
+        ).delete()
+        
+        # Add new items
+        for item in items:
+            quick_item = QuickAddItem(
+                recipe_id=item['recipe_id'],
+                people_count=item['people_count'],
+                week_number=week,
+                year=year
+            )
+            db.session.add(quick_item)
+        
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+@app.route('/api/quick-add/clear', methods=['POST'])
+def clear_quick_add():
+    """Clear all quick-add items for a specific week"""
+    try:
+        data = request.get_json()
+        week = data['week']
+        year = data['year']
+        
+        QuickAddItem.query.filter_by(
+            week_number=week,
+            year=year
+        ).delete()
+        
+        db.session.commit()
+        return jsonify({'status': 'success'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400

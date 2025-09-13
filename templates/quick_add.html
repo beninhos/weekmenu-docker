@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-white rounded-lg shadow p-6">
+    <!-- Header met week selector -->
+    <div class="flex justify-between items-center mb-6">
+        <div class="flex items-center space-x-4">
+            <h2 class="text-2xl font-bold">Quick Add Recepten</h2>
+            <div class="flex items-center space-x-2">
+                <a href="{{ url_for('quick_add', year=year, week=week-1) }}" 
+                   class="text-gray-500 hover:text-gray-700">←</a>
+                <span class="font-medium">Week {{ week }}</span>
+                <a href="{{ url_for('quick_add', year=year, week=week+1) }}" 
+                   class="text-gray-500 hover:text-gray-700">→</a>
+            </div>
+        </div>
+        <div class="space-x-2">
+            <button id="clearWeek" 
+                    class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">
+                Wis Week
+            </button>
+            <button id="viewShoppingList" 
+                    class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                Boodschappenlijst →
+            </button>
+        </div>
+    </div>
+    
+    <div class="mb-6">
+        <p class="text-gray-600 mb-4">
+            Voeg recepten toe voor week {{ week }}. Deze blijven bewaard tot je ze wist.
+        </p>
+        
+        <!-- Input sectie -->
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="flex space-x-4 items-end">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Recept</label>
+                    <div class="relative">
+                        <input type="text" 
+                               id="recipeSearch"
+                               class="w-full border rounded-md px-3 py-2"
+                               placeholder="Zoek recept..."
+                               autocomplete="off">
+                        <div id="searchDropdown" 
+                             class="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-b max-h-60 overflow-y-auto hidden z-10 shadow-lg">
+                        </div>
+                    </div>
+                </div>
+                <div class="w-32">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Personen</label>
+                    <input type="number" 
+                           id="peopleCount"
+                           class="w-full border rounded-md px-3 py-2"
+                           value="4"
+                           min="1"
+                           max="20">
+                </div>
+                <button id="addRecipe"
+                        class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+                        disabled>
+                    Toevoegen
+                </button>
+            </div>
+            <div class="flex items-center space-x-4 mt-3">
+                <label class="flex items-center">
+                    <input type="checkbox" id="saveMode" checked class="mr-2">
+                    <span class="text-sm text-gray-700">Direct opslaan voor week {{ week }}</span>
+                </label>
+                <span class="text-xs text-gray-500">
+                    (Uitvinken = alleen deze sessie, niet opslaan)
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Opgeslagen recepten voor deze week -->
+    {% if saved_items %}
+    <div class="mb-6 bg-blue-50 p-4 rounded-lg">
+        <h3 class="text-lg font-semibold mb-3 text-blue-900">Opgeslagen voor week {{ week }}:</h3>
+        <div class="space-y-2">
+            {% for item in saved_items %}
+            <div class="flex justify-between items-center p-2 bg-white rounded">
+                <span>
+                    <strong>{{ item.recipe.name }}</strong> - {{ item.people_count }} personen
+                    <span class="text-xs text-gray-500 ml-2">
+                        (toegevoegd {{ item.created_at.strftime('%d-%m %H:%M') }})
+                    </span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Sessie recepten (niet opgeslagen) -->
+    <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-3">Deze sessie toegevoegd:</h3>
+        <div id="sessionRecipes" class="space-y-2">
+            <p class="text-gray-500 italic" id="emptyMessage">Nog geen recepten toegevoegd deze sessie</p>
+        </div>
+    </div>
+    
+    <!-- Statistieken -->
+    <div class="grid grid-cols-2 gap-4">
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="text-sm text-gray-600">Week {{ week }} totaal:</div>
+            <div class="text-2xl font-bold" id="weekTotal">{{ saved_items|length }}</div>
+            <div class="text-xs text-gray-500">recepten opgeslagen</div>
+        </div>
+        <div class="bg-yellow-50 p-4 rounded-lg">
+            <div class="text-sm text-gray-600">Deze sessie:</div>
+            <div class="text-2xl font-bold" id="sessionTotal">0</div>
+            <div class="text-xs text-gray-500">recepten toegevoegd</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Recipe data
+const recipes = [
+    {% for recipe in recipes %}
+    {
+        id: {{ recipe.id }},
+        name: "{{ recipe.name }}",
+        serves: {{ recipe.serves or 4 }},
+        cookbook: {% if recipe.cookbook %}"{{ recipe.cookbook.name }}"{% else %}null{% endif %}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+// State
+let selectedRecipe = null;
+let sessionRecipes = [];
+let savedRecipes = [
+    {% for item in saved_items %}
+    {
+        id: {{ item.recipe.id }},
+        name: "{{ item.recipe.name }}",
+        peopleCount: {{ item.people_count }},
+        saved: true
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+// DOM elements
+const searchInput = document.getElementById('recipeSearch');
+const dropdown = document.getElementById('searchDropdown');
+const peopleInput = document.getElementById('peopleCount');
+const addButton = document.getElementById('addRecipe');
+const saveModeCheckbox = document.getElementById('saveMode');
+
+// Filter recipes
+function filterRecipes(query) {
+    if (!query) return [];
+    const lowerQuery = query.toLowerCase();
+    return recipes.filter(r => 
+        r.name.toLowerCase().includes(lowerQuery)
+    ).slice(0, 10);
+}
+
+// Show dropdown
+function showDropdown(filtered) {
+    if (filtered.length === 0) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+    
+    dropdown.innerHTML = filtered.map(recipe => `
+        <div class="recipe-option p-3 hover:bg-gray-100 cursor-pointer" 
+             data-recipe='${JSON.stringify(recipe)}'>
+            <div class="font-medium">${recipe.name}</div>
+            <div class="text-xs text-gray-600">
+                ${recipe.cookbook || ''} • ${recipe.serves} personen
+            </div>
+        </div>
+    `).join('');
+    
+    dropdown.classList.remove('hidden');
+    
+    dropdown.querySelectorAll('.recipe-option').forEach(option => {
+        option.addEventListener('click', () => {
+            selectRecipe(JSON.parse(option.dataset.recipe));
+        });
+    });
+}
+
+// Select recipe
+function selectRecipe(recipe) {
+    selectedRecipe = recipe;
+    searchInput.value = recipe.name;
+    peopleInput.value = recipe.serves;
+    addButton.disabled = false;
+    dropdown.classList.add('hidden');
+    peopleInput.focus();
+}
+
+// Add recipe
+async function addRecipe() {
+    if (!selectedRecipe) return;
+    
+    const peopleCount = parseInt(peopleInput.value) || 4;
+    const saveMode = saveModeCheckbox.checked;
+    
+    const recipeData = {
+        ...selectedRecipe,
+        peopleCount: peopleCount,
+        tempId: Date.now()
+    };
+    
+    if (saveMode) {
+        // Save to database
+        try {
+            const response = await fetch('/api/quick-add/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    week: {{ week }},
+                    year: {{ year }},
+                    items: [...savedRecipes, recipeData].map(r => ({
+                        recipe_id: r.id,
+                        people_count: r.peopleCount
+                    }))
+                })
+            });
+            
+            if (response.ok) {
+                savedRecipes.push(recipeData);
+                location.reload(); // Reload to show saved items
+            }
+        } catch (error) {
+            console.error('Error saving:', error);
+        }
+    } else {
+        // Just add to session
+        sessionRecipes.push(recipeData);
+        updateSessionDisplay();
+    }
+    
+    // Reset form
+    searchInput.value = '';
+    selectedRecipe = null;
+    addButton.disabled = true;
+    peopleInput.value = 4;
+    searchInput.focus();
+}
+
+// Update session display
+function updateSessionDisplay() {
+    const container = document.getElementById('sessionRecipes');
+    
+    if (sessionRecipes.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 italic">Nog geen recepten toegevoegd deze sessie</p>';
+    } else {
+        container.innerHTML = sessionRecipes.map(recipe => `
+            <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                <span>
+                    <strong>${recipe.name}</strong> - ${recipe.peopleCount} personen
+                    <span class="text-xs text-orange-600 ml-2">(alleen deze sessie)</span>
+                </span>
+                <button onclick="removeSessionRecipe(${recipe.tempId})"
+                        class="text-red-500 hover:text-red-700">✖</button>
+            </div>
+        `).join('');
+    }
+    
+    document.getElementById('sessionTotal').textContent = sessionRecipes.length;
+}
+
+// Remove session recipe
+function removeSessionRecipe(tempId) {
+    sessionRecipes = sessionRecipes.filter(r => r.tempId !== tempId);
+    updateSessionDisplay();
+}
+
+// Clear week
+document.getElementById('clearWeek').addEventListener('click', async () => {
+    if (!confirm('Weet je zeker dat je alle opgeslagen recepten voor week {{ week }} wilt wissen?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/quick-add/clear', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                week: {{ week }},
+                year: {{ year }}
+            })
+        });
+        
+        if (response.ok) {
+            location.reload();
+        }
+    } catch (error) {
+        console.error('Error clearing:', error);
+    }
+});
+
+// View shopping list
+document.getElementById('viewShoppingList').addEventListener('click', () => {
+    // Add session recipes to URL if any
+    const params = new URLSearchParams();
+    sessionRecipes.forEach(recipe => {
+        params.append('recipe_id', recipe.id);
+        params.append('people_count', recipe.peopleCount);
+    });
+    
+    const url = `/shopping-list/{{ year }}/{{ week }}${params.toString() ? '?' + params.toString() : ''}`;
+    window.location.href = url;
+});
+
+// Search handlers
+searchInput.addEventListener('input', (e) => {
+    const query = e.target.value;
+    if (query.length > 0) {
+        showDropdown(filterRecipes(query));
+    } else {
+        dropdown.classList.add('hidden');
+        selectedRecipe = null;
+        addButton.disabled = true;
+    }
+});
+
+// Enter key handlers
+searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && selectedRecipe) {
+        e.preventDefault();
+        addRecipe();
+    }
+});
+
+peopleInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && selectedRecipe) {
+        e.preventDefault();
+        addRecipe();
+    }
+});
+
+// Click handlers
+addButton.addEventListener('click', addRecipe);
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#recipeSearch') && !e.target.closest('#searchDropdown')) {
+        dropdown.classList.add('hidden');
+    }
+});
+
+// Focus on load
+searchInput.focus();
+</script>
+{% endblock %}
