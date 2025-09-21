@@ -431,17 +431,17 @@ def shopping_list(year, week):
                     shopping_dict[key] += adjusted_amount
                 else:
                     shopping_dict[key] = adjusted_amount
-    
     shopping_list = [
-        {
-            'name': k[0], 
-            'amount': format_amount(v),  # GEWIJZIGD: Slimme formatting
-            'unit': k[1], 
-            'category': k[2]
-        }
-        for k, v in shopping_dict.items()
-    ]
-    
+    {
+        'name': k[0], 
+        'amount': v,
+        'amount_display': format_amount(v),  # Dit is nieuw
+        'unit': k[1], 
+        'category': k[2]
+    }
+    for k, v in shopping_dict.items()
+]
+
     # Sorteer volgens supermarkt looproute
     category_order = {cat: i for i, cat in enumerate(CATEGORY_ORDER_SUPERMARKET)}
     shopping_list.sort(key=lambda x: (
