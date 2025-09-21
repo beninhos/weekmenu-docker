@@ -9,30 +9,64 @@
         </button>
     </div>
     
-    {% for category, items in shopping_list|groupby('category') %}
-        <h3 class="font-bold text-lg mt-6 mb-3">{{ category }}</h3>
-        <div class="space-y-2">
-            {% for item in items %}
-            <div class="flex items-center">
-                <input type="checkbox" class="mr-2">
-                <span>{{ item.amount }} {{ item.unit }} {{ item.name }}</span>
+    {% set current_category = None %}
+    {% for item in shopping_list %}
+        {% if item.category != current_category %}
+            {% if not loop.first %}
+                </div>
+            {% endif %}
+            
+            <h3 class="font-bold text-lg mt-6 mb-3">{{ item.category }}</h3>
+            <div class="space-y-2">
+            {% set current_category = item.category %}
+        {% endif %}
+        
+        <div class="flex items-center">
+            <input type="checkbox" class="mr-2" onchange="toggleItem(this)">
+            <span class="flex-grow">
+                {{ item.amount_display }} {{ item.unit }} {{ item.name }}
+            </span>
+            <button onclick="removeItem(this)" class="ml-2 text-red-500 hover:text-red-700">✕</button>        </div>
+        
+        {% if loop.last %}
             </div>
-            {% endfor %}
-        </div>
+        {% endif %}
     {% endfor %}
 </div>
 
 <style>
 @media print {
-    nav, button {
-        display: none !important;
-    }
-    .shadow {
-        box-shadow: none !important;
-    }
-    input[type="checkbox"] {
-        border: 1px solid black !important;
-    }
+    nav, button { display: none !important; }
+    .shadow { box-shadow: none !important; }
 }
 </style>
+
+<script>
+function toggleItem(cb) {
+    cb.parentElement.style.textDecoration = cb.checked ? 'line-through' : 'none';
+    cb.parentElement.style.opacity = cb.checked ? '0.5' : '1';
+}
+
+function removeItem(btn) {
+    const item = btn.parentElement;
+    const categoryDiv = item.parentElement;
+    
+    // Verwijder het item
+    item.style.opacity = '0';
+    setTimeout(() => {
+        item.remove();
+        
+        // Check of de categorie nu leeg is
+        const remainingItems = categoryDiv.querySelectorAll('.flex.items-center');
+        if (remainingItems.length === 0) {
+            // Verberg de lege categorie header
+            const categoryHeader = categoryDiv.previousElementSibling;
+            if (categoryHeader && categoryHeader.tagName === 'H3') {
+                categoryHeader.style.display = 'none';
+            }
+            categoryDiv.style.display = 'none';
+        }
+    }, 300);
+}
+</script>
 {% endblock %}
