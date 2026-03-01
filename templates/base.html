@@ -10,11 +10,12 @@
     <nav class="bg-blue-600 text-white p-4">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-xl font-bold">Weekmenu Planner</h1>
-            <div class="space-x-4">
+            <div class="space-x-4 flex items-center">
                 <a href="{{ url_for('index') }}" class="hover:text-gray-200">Home</a>
                 <a href="{{ url_for('quick_add') }}" class="hover:text-gray-200">Quick Add</a>
                 <a href="{{ url_for('recipes') }}" class="hover:text-gray-200">Recepten</a>
                 <a href="{{ url_for('list_cookbooks') }}" class="hover:text-gray-200">Kookboeken</a>
+                <a href="{{ url_for('settings') }}" class="hover:text-gray-200">Instellingen</a>
             </div>
         </div>
     </nav>

@@ -1,8 +1,10 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, date
 from werkzeug.utils import secure_filename
 import os
+import io
+import json
 from pathlib import Path
 
 def format_amount(amount):
@@ -660,6 +662,121 @@ def copy_previous_week():
 
         db.session.commit()
         return jsonify({'status': 'success', 'count': len(prev_items)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+@app.route('/settings')
+def settings():
+    stats = {
+        'recipes': Recipe.query.count(),
+        'cookbooks': Cookbook.query.count(),
+        'ingredients': Ingredient.query.count(),
+    }
+    return render_template('settings.html', stats=stats)
+
+
+@app.route('/export')
+def export_data():
+    cookbooks = Cookbook.query.order_by(Cookbook.name).all()
+    recipes = Recipe.query.order_by(Recipe.name).all()
+
+    data = {
+        'version': 1,
+        'exported_at': datetime.now().isoformat(),
+        'cookbooks': [
+            {'name': c.name, 'abbreviation': c.abbreviation}
+            for c in cookbooks
+        ],
+        'recipes': [
+            {
+                'name': r.name,
+                'serves': r.serves,
+                'cookbook': r.cookbook.name if r.cookbook else None,
+                'page': r.page,
+                'is_favorite': r.is_favorite,
+                'ingredients': [
+                    {
+                        'name': ri.ingredient.name,
+                        'category': ri.ingredient.category,
+                        'amount': ri.amount,
+                        'unit': ri.unit
+                    }
+                    for ri in r.ingredients
+                ]
+            }
+            for r in recipes
+        ]
+    }
+
+    buf = io.BytesIO(json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'))
+    buf.seek(0)
+    filename = f"weekmenu_export_{date.today().strftime('%Y%m%d')}.json"
+    return send_file(buf, mimetype='application/json', as_attachment=True, download_name=filename)
+
+
+@app.route('/import', methods=['POST'])
+def import_data():
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'status': 'error', 'message': 'Geen bestand geselecteerd'}), 400
+
+        data = json.loads(file.read().decode('utf-8'))
+        counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0}
+
+        # Importeer kookboeken
+        for cb_data in data.get('cookbooks', []):
+            if not Cookbook.query.filter_by(name=cb_data['name']).first():
+                db.session.add(Cookbook(
+                    name=cb_data['name'],
+                    abbreviation=cb_data.get('abbreviation')
+                ))
+                counts['cookbooks'] += 1
+        db.session.commit()
+
+        # Importeer recepten
+        for r_data in data.get('recipes', []):
+            if Recipe.query.filter_by(name=r_data['name']).first():
+                continue
+
+            cookbook = Cookbook.query.filter_by(name=r_data['cookbook']).first() if r_data.get('cookbook') else None
+            recipe = Recipe(
+                name=r_data['name'],
+                serves=r_data.get('serves', 4),
+                cookbook_id=cookbook.id if cookbook else None,
+                page=r_data.get('page'),
+                is_favorite=r_data.get('is_favorite', False)
+            )
+            db.session.add(recipe)
+            db.session.flush()
+
+            for ing_data in r_data.get('ingredients', []):
+                ingredient = Ingredient.query.filter_by(name=ing_data['name']).first()
+                if not ingredient:
+                    ingredient = Ingredient(
+                        name=ing_data['name'],
+                        category=ing_data.get('category', 'Overig')
+                    )
+                    db.session.add(ingredient)
+                    db.session.flush()
+                    counts['ingredients'] += 1
+
+                db.session.add(RecipeIngredient(
+                    recipe_id=recipe.id,
+                    ingredient_id=ingredient.id,
+                    amount=ing_data.get('amount', 0),
+                    unit=ing_data.get('unit', '')
+                ))
+
+            counts['recipes'] += 1
+
+        db.session.commit()
+        return jsonify({
+            'status': 'success',
+            'message': f"{counts['cookbooks']} kookboeken, {counts['recipes']} recepten en {counts['ingredients']} ingrediënten geïmporteerd."
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
