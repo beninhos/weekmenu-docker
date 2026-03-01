@@ -36,7 +36,19 @@
             <input type="number" name="page" value="{{ recipe.page or '' }}"
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
         </div>
-        
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700">URL (online recept)</label>
+            <input type="url" name="url" value="{{ recipe.url or '' }}" placeholder="https://..."
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Bereidingswijze</label>
+            <textarea name="instructions" rows="6" placeholder="Beschrijf de bereidingsstappen..."
+                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">{{ recipe.instructions or '' }}</textarea>
+        </div>
+
         <div>
             <label class="block text-sm font-medium text-gray-700">Receptafbeelding</label>
             {% if recipe.image_path %}

@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from datetime import datetime, date
 from werkzeug.utils import secure_filename
 import os
@@ -91,6 +92,8 @@ class Recipe(db.Model):
     is_favorite = db.Column(db.Boolean, default=False)
     last_used = db.Column(db.DateTime, nullable=True)
     usage_count = db.Column(db.Integer, default=0)
+    url = db.Column(db.Text, nullable=True)
+    instructions = db.Column(db.Text, nullable=True)
     ingredients = db.relationship('RecipeIngredient', backref='recipe', lazy=True, cascade='all, delete-orphan')
     cookbook = db.relationship('Cookbook', back_populates='recipes')
 
@@ -187,7 +190,9 @@ def new_recipe():
             serves=int(request.form.get('serves', 4)),
             cookbook_id=request.form.get('cookbook') if request.form.get('cookbook') else None,
             page=request.form['page'] if request.form['page'] else None,
-            image_path=image_path
+            image_path=image_path,
+            url=request.form.get('url') or None,
+            instructions=request.form.get('instructions') or None
         )
         db.session.add(recipe)
         db.session.commit()
@@ -475,6 +480,8 @@ def edit_recipe(id):
         recipe.serves = int(request.form.get('serves', 4))
         recipe.cookbook_id = request.form.get('cookbook') if request.form.get('cookbook') else None
         recipe.page = request.form['page'] if request.form['page'] else None
+        recipe.url = request.form.get('url') or None
+        recipe.instructions = request.form.get('instructions') or None
         
         image = request.files.get('image')
         if image and image.filename:
@@ -696,6 +703,8 @@ def export_data():
                 'cookbook': r.cookbook.name if r.cookbook else None,
                 'page': r.page,
                 'is_favorite': r.is_favorite,
+                'url': r.url,
+                'instructions': r.instructions,
                 'ingredients': [
                     {
                         'name': ri.ingredient.name,
@@ -747,7 +756,9 @@ def import_data():
                 serves=r_data.get('serves', 4),
                 cookbook_id=cookbook.id if cookbook else None,
                 page=r_data.get('page'),
-                is_favorite=r_data.get('is_favorite', False)
+                is_favorite=r_data.get('is_favorite', False),
+                url=r_data.get('url'),
+                instructions=r_data.get('instructions')
             )
             db.session.add(recipe)
             db.session.flush()
@@ -782,8 +793,19 @@ def import_data():
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 
+def migrate_db():
+    with db.engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
+        if 'url' not in cols:
+            conn.execute(text('ALTER TABLE recipe ADD COLUMN url TEXT'))
+        if 'instructions' not in cols:
+            conn.execute(text('ALTER TABLE recipe ADD COLUMN instructions TEXT'))
+        conn.commit()
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    os.makedirs(os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')), exist_ok=True)    
+        migrate_db()
+    os.makedirs(os.path.dirname(app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')), exist_ok=True)
     app.run(host='0.0.0.0', port=5001, debug=True)
