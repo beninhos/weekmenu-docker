@@ -392,58 +392,52 @@ def shopping_list(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     shopping_dict = {}
     
+    def calc_multiplier(recipe_serves, people_count):
+        if recipe_serves and people_count:
+            try:
+                return people_count / recipe_serves
+            except ZeroDivisionError:
+                return 1
+        return 1
+
     # Process regular menu items
     for item in menu_items:
         if item.recipe:
-            recipe_serves = item.recipe.serves or 4
-            people_count = item.people_count or 4
-            multiplier = people_count / recipe_serves
-            
+            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
                 adjusted_amount = ri.amount * multiplier
-                
                 if key in shopping_dict:
                     shopping_dict[key] += adjusted_amount
                 else:
                     shopping_dict[key] = adjusted_amount
-    
+
     # Process saved quick-add items from database
-    quick_items = QuickAddItem.query.filter_by(
-        week_number=week,
-        year=year
-    ).all()
-    
+    quick_items = QuickAddItem.query.filter_by(week_number=week, year=year).all()
+
     for item in quick_items:
         if item.recipe:
-            recipe_serves = item.recipe.serves or 4
-            people_count = item.people_count or 4
-            multiplier = people_count / recipe_serves
-            
+            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
                 adjusted_amount = ri.amount * multiplier
-                
                 if key in shopping_dict:
                     shopping_dict[key] += adjusted_amount
                 else:
                     shopping_dict[key] = adjusted_amount
-    
-    # NIEUW: Process temporary quick-add items from URL parameters
+
+    # Process temporary quick-add items from URL parameters
     recipe_ids = request.args.getlist('recipe_id')
     people_counts = request.args.getlist('people_count')
-    
+
     for i, recipe_id in enumerate(recipe_ids):
         recipe = Recipe.query.get(recipe_id)
         if recipe:
-            people_count = int(people_counts[i]) if i < len(people_counts) else 4
-            recipe_serves = recipe.serves or 4
-            multiplier = people_count / recipe_serves
-            
+            people_count = int(people_counts[i]) if i < len(people_counts) else None
+            multiplier = calc_multiplier(recipe.serves, people_count)
             for ri in recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
                 adjusted_amount = ri.amount * multiplier
-                
                 if key in shopping_dict:
                     shopping_dict[key] += adjusted_amount
                 else:
