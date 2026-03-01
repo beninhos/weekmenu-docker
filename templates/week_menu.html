@@ -184,6 +184,8 @@ const recipesData = {{ recipes_json | safe }};
 const recipesById = {};
 recipesData.forEach(r => { recipesById[r.id] = r; });
 
+const defaultServes = {{ default_serves or 'null' }};
+
 let selectedRecipeForModal = null;
 
 const debounce = (func, wait) => {
@@ -281,7 +283,13 @@ function setPeopleCount(searchInput, recipeId) {
     const input = searchInput.parentNode.querySelector('.people-count-input');
     if (!input) return;
     const recipeData = recipesById[parseInt(recipeId)];
-    input.value = (recipeData && recipeData.serves) ? recipeData.serves : '';
+    if (defaultServes) {
+        input.value = defaultServes;
+    } else if (recipeData && recipeData.serves) {
+        input.value = recipeData.serves;
+    } else {
+        input.value = '';
+    }
 }
 
 function clearPeopleCount(searchInput) {

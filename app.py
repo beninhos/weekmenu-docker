@@ -142,6 +142,12 @@ class QuickAddItem(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
     recipe = db.relationship('Recipe')
 
+class Settings(db.Model):
+    __tablename__ = 'settings'
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), nullable=False, unique=True)
+    value = db.Column(db.String(200), nullable=True)
+
 # Routes
 @app.route('/')
 def index():
@@ -155,6 +161,8 @@ def week_menu(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     recipes = Recipe.query.order_by(Recipe.name).all()
     recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves} for r in recipes])
+    default_serves_setting = Settings.query.filter_by(key='default_serves').first()
+    default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
     return render_template('week_menu.html',
                          menu_items=menu_items,
                          recipes=recipes,
@@ -162,7 +170,8 @@ def week_menu(year, week):
                          week=week,
                          year=year,
                          days=DAYS,
-                         meal_types=MEAL_TYPES)
+                         meal_types=MEAL_TYPES,
+                         default_serves=default_serves)
 
 @app.route('/cookbook/<int:id>/recipes')
 def list_cookbook_recipes(id):
@@ -677,14 +686,31 @@ def copy_previous_week():
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 
-@app.route('/settings')
+@app.route('/settings', methods=['GET', 'POST'])
 def settings():
+    if request.method == 'POST':
+        default_serves_raw = request.form.get('default_serves', '').strip()
+        setting = Settings.query.filter_by(key='default_serves').first()
+        if default_serves_raw:
+            if setting:
+                setting.value = default_serves_raw
+            else:
+                db.session.add(Settings(key='default_serves', value=default_serves_raw))
+        else:
+            if setting:
+                db.session.delete(setting)
+        db.session.commit()
+        flash('Instellingen opgeslagen')
+        return redirect(url_for('settings'))
+
     stats = {
         'recipes': Recipe.query.count(),
         'cookbooks': Cookbook.query.count(),
         'ingredients': Ingredient.query.count(),
     }
-    return render_template('settings.html', stats=stats)
+    default_serves_setting = Settings.query.filter_by(key='default_serves').first()
+    default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
+    return render_template('settings.html', stats=stats, default_serves=default_serves)
 
 
 @app.route('/export')
@@ -812,6 +838,14 @@ def migrate_db():
                 conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
             except OperationalError:
                 pass
+
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY,
+                key VARCHAR(50) NOT NULL UNIQUE,
+                value VARCHAR(200)
+            )
+        '''))
 
         conn.commit()
 

@@ -3,6 +3,37 @@
 <div class="max-w-2xl mx-auto space-y-6">
     <h2 class="text-2xl font-bold">Instellingen</h2>
 
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="bg-green-50 border border-green-200 text-green-800 rounded-lg px-4 py-3 text-sm">
+        {{ messages[0] }}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Portie-instellingen -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4 text-gray-700">Weekmenu</h3>
+        <form method="POST" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">
+                    Standaard aantal personen (als recept geen portie heeft)
+                </label>
+                <input type="number" name="default_serves"
+                       value="{{ default_serves or '' }}"
+                       min="1" max="12"
+                       class="mt-1 block w-32 rounded-md border-gray-300 shadow-sm">
+                <p class="text-gray-500 text-xs mt-1">Laat leeg om geen standaard in te stellen.</p>
+            </div>
+            <div>
+                <button type="submit"
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">
+                    Opslaan
+                </button>
+            </div>
+        </form>
+    </div>
+
     <!-- Statistieken -->
     <div class="bg-white rounded-lg shadow p-6">
         <h3 class="text-lg font-semibold mb-4 text-gray-700">Database</h3>
