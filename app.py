@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 import os
 import io
 import json
+import re
 from pathlib import Path
 
 def format_amount(amount):
@@ -684,6 +685,193 @@ def copy_previous_week():
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+# Dutch unit normalization: map common Dutch abbreviations/words to canonical form
+DUTCH_UNITS = {
+    'el': 'el', 'eetlepel': 'el', 'eetlepels': 'el',
+    'tl': 'tl', 'theelepel': 'tl', 'theelepels': 'tl',
+    'kl': 'kl', 'koffielepel': 'kl', 'koffielepels': 'kl',
+    'dl': 'dl', 'deciliter': 'dl',
+    'ml': 'ml', 'milliliter': 'ml',
+    'l': 'l', 'liter': 'l', 'liters': 'l',
+    'g': 'g', 'gr': 'g', 'gram': 'g', 'grams': 'g',
+    'kg': 'kg', 'kilogram': 'kg',
+    'stuks': 'stuks', 'stuk': 'stuks',
+    'snuf': 'snufje', 'snufje': 'snufje', 'snufjes': 'snufje',
+    'scheutje': 'scheutje', 'scheut': 'scheutje',
+    'teen': 'teen', 'tenen': 'teen',
+    'blik': 'blik', 'blikje': 'blik',
+    'pakje': 'pakje', 'pak': 'pakje', 'zakje': 'zakje',
+    'bosje': 'bosje', 'bos': 'bosje',
+    'plak': 'plak', 'plakken': 'plak',
+    'bol': 'bol', 'bollen': 'bol',
+    'takje': 'takje', 'takjes': 'takje',
+    'blaadje': 'blaadje', 'blaadjes': 'blaadje',
+    'cup': 'cup', 'cups': 'cup',
+    'tablespoon': 'el', 'tablespoons': 'el', 'tbsp': 'el', 'tbs': 'el',
+    'teaspoon': 'tl', 'teaspoons': 'tl', 'tsp': 'tl',
+    'pound': 'pond', 'pounds': 'pond', 'lb': 'pond', 'lbs': 'pond',
+    'ounce': 'oz', 'ounces': 'oz',
+    'clove': 'teen', 'cloves': 'teen',
+    'bunch': 'bosje', 'handful': 'handvol', 'pinch': 'snufje', 'dash': 'scheutje',
+    'can': 'blik', 'slice': 'plak', 'slices': 'plak',
+    'piece': 'stuks', 'pieces': 'stuks',
+}
+
+def _parse_amount(amount_str):
+    """Convert fraction strings like '1/2', '¼' to float."""
+    if not amount_str:
+        return None
+    unicode_fractions = {'½': 0.5, '⅓': 1/3, '⅔': 2/3, '¼': 0.25, '¾': 0.75,
+                         '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 1/6,
+                         '⅚': 5/6, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875}
+    s = str(amount_str).strip()
+    for char, val in unicode_fractions.items():
+        s = s.replace(char, str(val))
+    # Handle "1 1/2" or "1½"
+    mixed = re.match(r'^(\d+)[,. ](\d+/\d+)$', s)
+    if mixed:
+        whole = float(mixed.group(1))
+        num, den = mixed.group(2).split('/')
+        return whole + float(num) / float(den)
+    if '/' in s:
+        parts = s.split('/')
+        try:
+            return float(parts[0]) / float(parts[1])
+        except (ValueError, ZeroDivisionError):
+            return None
+    s = s.replace(',', '.')
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+_UNIT_KEYS = '|'.join(re.escape(k) for k in sorted(DUTCH_UNITS.keys(), key=len, reverse=True))
+_AMOUNT_RE = r'(?:[\d]+(?:[,.][\d]+)?(?:\s*[-–]\s*[\d]+(?:[,.][\d]+)?)?|[½¼¾⅓⅔⅛⅜⅝⅞]|\d+\s*/\s*\d+|\d+\s+\d+\s*/\s*\d+)'
+_INGREDIENT_RE = re.compile(
+    r'^(' + _AMOUNT_RE + r')\s+(' + _UNIT_KEYS + r')\b\.?\s+(.+)$',
+    re.IGNORECASE
+)
+_AMOUNT_ONLY_RE = re.compile(
+    r'^(' + _AMOUNT_RE + r')\s+(.+)$'
+)
+
+def _parse_dutch_ingredient(raw):
+    """Dutch-first regex ingredient parser: amount + unit + name."""
+    s = raw.strip()
+    m = _INGREDIENT_RE.match(s)
+    if m:
+        return {
+            'amount': _parse_amount(m.group(1)),
+            'unit': DUTCH_UNITS.get(m.group(2).lower(), m.group(2).lower()),
+            'name': m.group(3).strip(),
+            'raw': raw,
+        }
+    m2 = _AMOUNT_ONLY_RE.match(s)
+    if m2:
+        return {
+            'amount': _parse_amount(m2.group(1)),
+            'unit': '',
+            'name': m2.group(2).strip(),
+            'raw': raw,
+        }
+    # Fallback: try ingredient-parser-nlp for English-format lines
+    try:
+        from ingredient_parser import parse_ingredient
+        parsed = parse_ingredient(raw)
+        amount = None
+        unit = ''
+        if parsed.amount:
+            first = parsed.amount[0]
+            amount = _parse_amount(str(first.quantity)) if first.quantity else None
+            raw_unit = str(first.unit).lower().strip() if first.unit else ''
+            unit = DUTCH_UNITS.get(raw_unit, raw_unit)
+        name = parsed.name.text if parsed.name else s
+        if name and name != s:
+            return {'amount': amount, 'unit': unit, 'name': name.strip(), 'raw': raw}
+    except Exception:
+        pass
+    return {'amount': None, 'unit': '', 'name': s, 'raw': raw}
+
+def parse_ingredients_from_list(ingredient_strings):
+    return [_parse_dutch_ingredient(raw) for raw in ingredient_strings if raw and raw.strip()]
+
+
+_BROWSER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'nl-NL,nl;q=0.9,en-US;q=0.8,en;q=0.7',
+    'DNT': '1',
+}
+
+@app.route('/recipe/scrape', methods=['POST'])
+def scrape_recipe():
+    import requests as _requests
+    from recipe_scrapers import scrape_html
+    data = request.get_json()
+    url = (data or {}).get('url', '').strip()
+    if not url:
+        return jsonify({'status': 'error', 'message': 'Geen URL opgegeven'}), 400
+
+    try:
+        resp = _requests.get(url, headers=_BROWSER_HEADERS, timeout=15, allow_redirects=True)
+        resp.raise_for_status()
+        html = resp.text
+    except _requests.exceptions.Timeout:
+        return jsonify({'status': 'error', 'message': 'De pagina reageerde niet op tijd. Probeer het opnieuw.'}), 400
+    except _requests.exceptions.HTTPError as e:
+        code = e.response.status_code if e.response is not None else '?'
+        if code == 403:
+            return jsonify({'status': 'error', 'message': 'Deze website blokkeert automatisch ophalen (403). Probeer een andere site.'}), 400
+        if code == 404:
+            return jsonify({'status': 'error', 'message': 'Pagina niet gevonden (404). Controleer de URL.'}), 400
+        return jsonify({'status': 'error', 'message': f'De pagina kon niet worden opgehaald (HTTP {code}).'}), 400
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'De URL kon niet worden bereikt. Controleer de URL.'}), 400
+
+    try:
+        scraper = scrape_html(html, org_url=url)
+        scraper.title()
+    except Exception:
+        try:
+            scraper = scrape_html(html, org_url=url, wild_mode=True)
+        except Exception:
+            return jsonify({'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina. De site ondersteunt geen gestructureerde receptdata.'}), 400
+
+    try:
+        title = scraper.title() or ''
+    except Exception:
+        title = ''
+
+    try:
+        yields_str = scraper.yields() or ''
+        # Extract first number from "4 servings", "4 persons", "4 porties" etc.
+        serves_match = re.search(r'\d+', yields_str)
+        serves = int(serves_match.group()) if serves_match else None
+    except Exception:
+        serves = None
+
+    try:
+        instructions = scraper.instructions() or ''
+    except Exception:
+        instructions = ''
+
+    try:
+        raw_ingredients = scraper.ingredients() or []
+    except Exception:
+        raw_ingredients = []
+
+    parsed_ingredients = parse_ingredients_from_list(raw_ingredients)
+
+    return jsonify({
+        'status': 'success',
+        'name': title,
+        'serves': serves,
+        'url': url,
+        'instructions': instructions,
+        'ingredients': parsed_ingredients,
+    })
 
 
 @app.route('/settings', methods=['GET', 'POST'])
