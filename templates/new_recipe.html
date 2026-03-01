@@ -47,6 +47,9 @@
             <label class="block text-sm font-medium text-gray-700">Receptafbeelding</label>
             <input type="file" name="image" accept="image/*"
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <input type="hidden" name="image_path_imported" id="fieldImagePath">
+            <img id="importedImagePreview" src="" alt="Geïmporteerde afbeelding"
+                 class="hidden mt-2 rounded max-h-40 object-cover">
         </div>
 
         <div>
@@ -188,6 +191,17 @@ async function importFromUrl() {
         if (data.serves)       document.getElementById('fieldServes').value = data.serves;
         if (data.url)          document.getElementById('fieldUrl').value = data.url;
         if (data.instructions) document.getElementById('fieldInstructions').value = data.instructions;
+
+        const preview = document.getElementById('importedImagePreview');
+        const pathField = document.getElementById('fieldImagePath');
+        if (data.image_path) {
+            pathField.value = data.image_path;
+            preview.src = '/' + data.image_path;
+            preview.classList.remove('hidden');
+        } else {
+            pathField.value = '';
+            preview.classList.add('hidden');
+        }
 
         if (data.ingredients && data.ingredients.length > 0) {
             document.getElementById('ingredients').innerHTML = '';

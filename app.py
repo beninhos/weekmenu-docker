@@ -190,13 +190,15 @@ def new_recipe():
     cookbooks = Cookbook.query.order_by(Cookbook.name).all()
     
     if request.method == 'POST':
-        # Afbeelding uploaden
+        # Afbeelding uploaden (upload heeft voorrang boven geïmporteerd pad)
         image = request.files.get('image')
         image_path = None
         if image and image.filename:
             filename = secure_filename(image.filename)
             image_path = os.path.join('static/uploads', filename)
             image.save(os.path.join(app.root_path, image_path))
+        elif request.form.get('image_path_imported'):
+            image_path = request.form.get('image_path_imported')
 
         serves_val = request.form.get('serves', '').strip()
         recipe = Recipe(
@@ -864,6 +866,30 @@ def scrape_recipe():
 
     parsed_ingredients = parse_ingredients_from_list(raw_ingredients)
 
+    # Afbeelding downloaden en opslaan
+    image_path = None
+    try:
+        image_url = scraper.image()
+        if image_url:
+            img_resp = _requests.get(image_url, headers=_BROWSER_HEADERS, timeout=10)
+            img_resp.raise_for_status()
+            content_type = img_resp.headers.get('Content-Type', '')
+            ext = '.jpg'
+            if 'png' in content_type:
+                ext = '.png'
+            elif 'webp' in content_type:
+                ext = '.webp'
+            elif 'gif' in content_type:
+                ext = '.gif'
+            import hashlib
+            fname = hashlib.md5(image_url.encode()).hexdigest() + ext
+            save_path = os.path.join(app.root_path, 'static/uploads', fname)
+            with open(save_path, 'wb') as f:
+                f.write(img_resp.content)
+            image_path = os.path.join('static/uploads', fname)
+    except Exception:
+        pass
+
     return jsonify({
         'status': 'success',
         'name': title,
@@ -871,6 +897,7 @@ def scrape_recipe():
         'url': url,
         'instructions': instructions,
         'ingredients': parsed_ingredients,
+        'image_path': image_path,
     })
 
 
