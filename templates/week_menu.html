@@ -281,7 +281,7 @@ function setPeopleCount(searchInput, recipeId) {
     const input = searchInput.parentNode.querySelector('.people-count-input');
     if (!input) return;
     const recipeData = recipesById[parseInt(recipeId)];
-    input.value = (recipeData && recipeData.serves) ? recipeData.serves : 3;
+    input.value = (recipeData && recipeData.serves) ? recipeData.serves : '';
 }
 
 function clearPeopleCount(searchInput) {
