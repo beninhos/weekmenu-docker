@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from datetime import datetime, date
 from werkzeug.utils import secure_filename
 import os
@@ -85,7 +86,7 @@ class Recipe(db.Model):
     __tablename__ = 'recipe'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    serves = db.Column(db.Integer, default=4)
+    serves = db.Column(db.Integer, nullable=True)
     cookbook_id = db.Column(db.Integer, db.ForeignKey('cookbook.id'), nullable=True)
     page = db.Column(db.Integer)
     image_path = db.Column(db.String(200), nullable=True)
@@ -118,7 +119,7 @@ class MenuItem(db.Model):
     day_of_week = db.Column(db.Integer, nullable=False)
     meal_type = db.Column(db.String(20), nullable=False)
     recipe_id = db.Column(db.Integer, db.ForeignKey('recipe.id'))
-    people_count = db.Column(db.Integer, default=4)
+    people_count = db.Column(db.Integer, nullable=True)
     week_number = db.Column(db.Integer, nullable=False)
     year = db.Column(db.Integer, nullable=False)
     recipe = db.relationship('Recipe')
@@ -141,6 +142,12 @@ class QuickAddItem(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
     recipe = db.relationship('Recipe')
 
+class Settings(db.Model):
+    __tablename__ = 'settings'
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(50), nullable=False, unique=True)
+    value = db.Column(db.String(200), nullable=True)
+
 # Routes
 @app.route('/')
 def index():
@@ -153,13 +160,18 @@ def index():
 def week_menu(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     recipes = Recipe.query.order_by(Recipe.name).all()
+    recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves} for r in recipes])
+    default_serves_setting = Settings.query.filter_by(key='default_serves').first()
+    default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
     return render_template('week_menu.html',
                          menu_items=menu_items,
                          recipes=recipes,
+                         recipes_json=recipes_json,
                          week=week,
                          year=year,
                          days=DAYS,
-                         meal_types=MEAL_TYPES)
+                         meal_types=MEAL_TYPES,
+                         default_serves=default_serves)
 
 @app.route('/cookbook/<int:id>/recipes')
 def list_cookbook_recipes(id):
@@ -184,10 +196,11 @@ def new_recipe():
             filename = secure_filename(image.filename)
             image_path = os.path.join('static/uploads', filename)
             image.save(os.path.join(app.root_path, image_path))
-        
+
+        serves_val = request.form.get('serves', '').strip()
         recipe = Recipe(
             name=request.form['name'],
-            serves=int(request.form.get('serves', 4)),
+            serves=int(serves_val) if serves_val else None,
             cookbook_id=request.form.get('cookbook') if request.form.get('cookbook') else None,
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path,
@@ -319,10 +332,14 @@ def update_menu():
             for meal_type, meal_data in day['meals'].items():
                 if isinstance(meal_data, dict):
                     recipe_id = meal_data.get('recipe_id')
-                    people_count = meal_data.get('people_count', 4)
+                    people_count_raw = meal_data.get('people_count')
+                    try:
+                        people_count = int(people_count_raw) if people_count_raw is not None else None
+                    except (ValueError, TypeError):
+                        people_count = None
                 else:
                     recipe_id = meal_data
-                    people_count = 4
+                    people_count = None
                 
                 if recipe_id:
                     recipe_id = int(recipe_id)
@@ -384,58 +401,52 @@ def shopping_list(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     shopping_dict = {}
     
+    def calc_multiplier(recipe_serves, people_count):
+        if recipe_serves and people_count:
+            try:
+                return people_count / recipe_serves
+            except ZeroDivisionError:
+                return 1
+        return 1
+
     # Process regular menu items
     for item in menu_items:
         if item.recipe:
-            recipe_serves = item.recipe.serves or 4
-            people_count = item.people_count or 4
-            multiplier = people_count / recipe_serves
-            
+            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
                 adjusted_amount = ri.amount * multiplier
-                
                 if key in shopping_dict:
                     shopping_dict[key] += adjusted_amount
                 else:
                     shopping_dict[key] = adjusted_amount
-    
+
     # Process saved quick-add items from database
-    quick_items = QuickAddItem.query.filter_by(
-        week_number=week,
-        year=year
-    ).all()
-    
+    quick_items = QuickAddItem.query.filter_by(week_number=week, year=year).all()
+
     for item in quick_items:
         if item.recipe:
-            recipe_serves = item.recipe.serves or 4
-            people_count = item.people_count or 4
-            multiplier = people_count / recipe_serves
-            
+            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
                 adjusted_amount = ri.amount * multiplier
-                
                 if key in shopping_dict:
                     shopping_dict[key] += adjusted_amount
                 else:
                     shopping_dict[key] = adjusted_amount
-    
-    # NIEUW: Process temporary quick-add items from URL parameters
+
+    # Process temporary quick-add items from URL parameters
     recipe_ids = request.args.getlist('recipe_id')
     people_counts = request.args.getlist('people_count')
-    
+
     for i, recipe_id in enumerate(recipe_ids):
         recipe = Recipe.query.get(recipe_id)
         if recipe:
-            people_count = int(people_counts[i]) if i < len(people_counts) else 4
-            recipe_serves = recipe.serves or 4
-            multiplier = people_count / recipe_serves
-            
+            people_count = int(people_counts[i]) if i < len(people_counts) else None
+            multiplier = calc_multiplier(recipe.serves, people_count)
             for ri in recipe.ingredients:
                 key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
                 adjusted_amount = ri.amount * multiplier
-                
                 if key in shopping_dict:
                     shopping_dict[key] += adjusted_amount
                 else:
@@ -477,7 +488,8 @@ def edit_recipe(id):
     
     if request.method == 'POST':
         recipe.name = request.form['name']
-        recipe.serves = int(request.form.get('serves', 4))
+        serves_val = request.form.get('serves', '').strip()
+        recipe.serves = int(serves_val) if serves_val else None
         recipe.cookbook_id = request.form.get('cookbook') if request.form.get('cookbook') else None
         recipe.page = request.form['page'] if request.form['page'] else None
         recipe.url = request.form.get('url') or None
@@ -674,14 +686,31 @@ def copy_previous_week():
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 
-@app.route('/settings')
+@app.route('/settings', methods=['GET', 'POST'])
 def settings():
+    if request.method == 'POST':
+        default_serves_raw = request.form.get('default_serves', '').strip()
+        setting = Settings.query.filter_by(key='default_serves').first()
+        if default_serves_raw:
+            if setting:
+                setting.value = default_serves_raw
+            else:
+                db.session.add(Settings(key='default_serves', value=default_serves_raw))
+        else:
+            if setting:
+                db.session.delete(setting)
+        db.session.commit()
+        flash('Instellingen opgeslagen')
+        return redirect(url_for('settings'))
+
     stats = {
         'recipes': Recipe.query.count(),
         'cookbooks': Cookbook.query.count(),
         'ingredients': Ingredient.query.count(),
     }
-    return render_template('settings.html', stats=stats)
+    default_serves_setting = Settings.query.filter_by(key='default_serves').first()
+    default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
+    return render_template('settings.html', stats=stats, default_serves=default_serves)
 
 
 @app.route('/export')
@@ -795,11 +824,29 @@ def import_data():
 
 def migrate_db():
     with db.engine.connect() as conn:
-        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
-        if 'url' not in cols:
-            conn.execute(text('ALTER TABLE recipe ADD COLUMN url TEXT'))
-        if 'instructions' not in cols:
-            conn.execute(text('ALTER TABLE recipe ADD COLUMN instructions TEXT'))
+        recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
+        for col, col_def in [('url', 'TEXT'), ('instructions', 'TEXT'), ('serves', 'INTEGER')]:
+            if col not in recipe_cols:
+                try:
+                    conn.execute(text(f'ALTER TABLE recipe ADD COLUMN {col} {col_def}'))
+                except OperationalError:
+                    pass
+
+        menu_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(menu_item)')).fetchall()]
+        if 'people_count' not in menu_cols:
+            try:
+                conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
+            except OperationalError:
+                pass
+
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY,
+                key VARCHAR(50) NOT NULL UNIQUE,
+                value VARCHAR(200)
+            )
+        '''))
+
         conn.commit()
 
 

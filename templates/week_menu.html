@@ -35,55 +35,43 @@
                 {% for meal_code, meal_name in meal_types %}
                 <div class="relative">
                     <label class="block text-sm text-gray-600">{{ meal_name }}</label>
-                    
-                    <!-- Hidden input to store selected recipe ID -->
-                    <input type="hidden" 
-                           class="meal-input" 
-                           data-day="{{ day_index }}" 
+
+                    <!-- Hidden: recipe ID -->
+                    <input type="hidden"
+                           class="meal-input"
+                           data-day="{{ day_index }}"
                            data-meal="{{ meal_code }}"
                            value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.recipe_id }}{% endif %}{% endfor %}">
-                    
-                    <!-- NIEUW: Hidden input to store people count -->
-                    <input type="hidden" 
-                           class="people-input" 
-                           data-day="{{ day_index }}" 
+
+                    <!-- Hidden: people count (bron voor initialisatie) -->
+                    <input type="hidden"
+                           class="people-input"
+                           data-day="{{ day_index }}"
                            data-meal="{{ meal_code }}"
-                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.people_count or 4 }}{% endif %}{% endfor %}">
-                    
-                    <!-- Search input -->
-                    <input type="text" 
-                           class="recipe-search w-full border rounded p-1 text-sm" 
-                           data-day="{{ day_index }}" 
+                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.people_count or '' }}{% endif %}{% endfor %}">
+
+                    <!-- Regel 1: recept-zoekbalk -->
+                    <input type="text"
+                           class="recipe-search w-full border rounded p-1 text-sm"
+                           data-day="{{ day_index }}"
                            data-meal="{{ meal_code }}"
                            placeholder="Zoek recept..."
                            value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
                            autocomplete="off">
-                    
-                    <!-- NIEUW: People count input (only shown when recipe is selected) -->
-                    {% set current_menu_item = None %}
-                    {% for item in menu_items %}
-                        {% if item.day_of_week == day_index and item.meal_type == meal_code %}
-                            {% set current_menu_item = item %}
-                        {% endif %}
-                    {% endfor %}
-                    
-                    {% if current_menu_item %}
-                    <div class="people-count-container flex items-center space-x-2 text-xs mt-1">
-                        <label class="text-gray-600">Personen:</label>
-                        <input type="number" 
-                               class="people-count-input w-12 border rounded px-1 py-0.5 text-center text-xs" 
-                               data-day="{{ day_index }}" 
+
+                    <!-- Regel 2: portie — altijd zichtbaar -->
+                    <div class="people-count-container flex items-center space-x-1 text-xs mt-1">
+                        &#128100;
+                        <input type="number"
+                               class="people-count-input border rounded px-1 py-0.5 text-center text-xs"
+                               style="width:60px"
+                               data-day="{{ day_index }}"
                                data-meal="{{ meal_code }}"
-                               min="1" 
-                               max="20" 
-                               value="{{ current_menu_item.people_count or 4 }}">
-                        <span class="text-gray-500">
-                            (recept: {% for recipe in recipes %}{% if recipe.id == current_menu_item.recipe_id %}{{ recipe.serves or 4 }}{% endif %}{% endfor %} pers.)
-                        </span>
+                               min="1" max="20">
+                        <span class="text-gray-500">pers.</span>
                     </div>
-                    {% endif %}
-                    
-                    <!-- Recipe info display (only when selected) -->
+
+                    <!-- Kookboek-info -->
                     {% for item in menu_items %}
                         {% if item.day_of_week == day_index and item.meal_type == meal_code %}
                             {% for recipe in recipes %}
@@ -97,10 +85,9 @@
                             {% endfor %}
                         {% endif %}
                     {% endfor %}
-                    
-                    <!-- Dropdown results -->
+
+                    <!-- Dropdown resultaten -->
                     <div class="recipe-dropdown absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-b max-h-60 overflow-y-auto hidden z-10 shadow-lg">
-                        <!-- Will be populated by JavaScript -->
                     </div>
                 </div>
                 {% endfor %}
@@ -193,6 +180,12 @@ const recipes = [
     {% endfor %}
 ];
 
+const recipesData = {{ recipes_json | safe }};
+const recipesById = {};
+recipesData.forEach(r => { recipesById[r.id] = r; });
+
+const defaultServes = {{ default_serves or 'null' }};
+
 let selectedRecipeForModal = null;
 
 const debounce = (func, wait) => {
@@ -221,15 +214,11 @@ const updateMenu = async () => {
         const meals = {};
         ['ontbijt', 'lunch', 'diner'].forEach(mealType => {
             const recipeInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].meal-input`);
-            const peopleInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].people-input`);
             const peopleCountInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].people-count-input`);
-            
+
             if (recipeInput.value) {
-                // NIEUW: Use visible input if available, otherwise use hidden input
-                const peopleCount = peopleCountInput ? 
-                    parseInt(peopleCountInput.value) || 4 : 
-                    parseInt(peopleInput.value) || 4;
-                
+                const pcVal = peopleCountInput ? peopleCountInput.value.trim() : '';
+                const peopleCount = pcVal ? (parseInt(pcVal) || null) : null;
                 meals[mealType] = {
                     recipe_id: recipeInput.value,
                     people_count: peopleCount
@@ -290,52 +279,22 @@ function filterRecipes(query) {
     });
 }
 
-// NIEUW: Show people count input when recipe is selected
-function showPeopleCountInput(searchInput, recipe) {
-    // Show people count input
-    let container = searchInput.parentNode.querySelector('.people-count-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.className = 'people-count-container flex items-center space-x-2 text-xs mt-1';
-        container.innerHTML = `
-            <label class="text-gray-600">Personen:</label>
-            <input type="number" 
-                   class="people-count-input w-12 border rounded px-1 py-0.5 text-center text-xs" 
-                   data-day="${searchInput.dataset.day}" 
-                   data-meal="${searchInput.dataset.meal}"
-                   min="1" 
-                   max="20" 
-                   value="${recipe.serves}">
-            <span class="text-gray-500 recipe-serves-info">
-                (recept: ${recipe.serves} pers.)
-            </span>
-        `;
-        searchInput.parentNode.insertBefore(container, searchInput.nextSibling);
-        
-        // Add event listener to people count input
-        const peopleCountInput = container.querySelector('.people-count-input');
-        peopleCountInput.addEventListener('change', debouncedUpdate);
-        peopleCountInput.addEventListener('input', debouncedUpdate);
+function setPeopleCount(searchInput, recipeId) {
+    const input = searchInput.parentNode.querySelector('.people-count-input');
+    if (!input) return;
+    const recipeData = recipesById[parseInt(recipeId)];
+    if (defaultServes) {
+        input.value = defaultServes;
+    } else if (recipeData && recipeData.serves) {
+        input.value = recipeData.serves;
     } else {
-        // Update serves info
-        const servesInfo = container.querySelector('.recipe-serves-info');
-        if (servesInfo) {
-            servesInfo.textContent = `(recept: ${recipe.serves} pers.)`;
-        }
-        // Update input value to recipe serves as default
-        const peopleCountInput = container.querySelector('.people-count-input');
-        if (peopleCountInput && peopleCountInput.value == 4) { // Only if still default
-            peopleCountInput.value = recipe.serves;
-        }
+        input.value = '';
     }
 }
 
-// NIEUW: Hide people count input
-function hidePeopleCountInput(searchInput) {
-    const container = searchInput.parentNode.querySelector('.people-count-container');
-    if (container) {
-        container.remove();
-    }
+function clearPeopleCount(searchInput) {
+    const input = searchInput.parentNode.querySelector('.people-count-input');
+    if (input) input.value = '';
 }
 
 function showDropdown(searchInput, filteredRecipes) {
@@ -362,24 +321,14 @@ function showDropdown(searchInput, filteredRecipes) {
             const recipeName = option.dataset.recipeName;
             const cookbookAbbr = option.dataset.cookbookAbbr;
             const page = option.dataset.page;
-            const serves = parseInt(option.dataset.serves) || 4;
-            
+
             searchInput.value = recipeName;
             const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-            const peopleHiddenInput = searchInput.parentNode.querySelector('.people-input');
-            
             hiddenInput.value = recipeId;
-            peopleHiddenInput.value = serves; // NIEUW: Default to recipe serves
-            
-            // NIEUW: Show people count input with recipe info
-            const recipe = recipes.find(r => r.id == recipeId);
-            if (recipe) {
-                showPeopleCountInput(searchInput, recipe);
-            }
-            
-            // Update recipe info display
+
+            setPeopleCount(searchInput, recipeId);
             updateRecipeInfo(searchInput, cookbookAbbr, page);
-            
+
             dropdown.classList.add('hidden');
             debouncedUpdate();
         });
@@ -425,21 +374,14 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
             const filteredRecipes = filterRecipes(query);
             showDropdown(searchInput, filteredRecipes);
         } else {
-            // Clear selection when input is empty
             const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-            const peopleHiddenInput = searchInput.parentNode.querySelector('.people-input');
             hiddenInput.value = '';
-            peopleHiddenInput.value = '';
-            
-            // NIEUW: Hide people count input
-            hidePeopleCountInput(searchInput);
-            
-            // Remove recipe info
+
+            clearPeopleCount(searchInput);
+
             const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
-            if (existingInfo) {
-                existingInfo.remove();
-            }
-            
+            if (existingInfo) existingInfo.remove();
+
             hideDropdown(searchInput);
             debouncedUpdate();
         }
@@ -455,19 +397,13 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
             setTimeout(() => {
                 if (searchInput.value === '') {
                     const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-                    const peopleHiddenInput = searchInput.parentNode.querySelector('.people-input');
                     hiddenInput.value = '';
-                    peopleHiddenInput.value = '';
-                    
-                    // NIEUW: Hide people count input
-                    hidePeopleCountInput(searchInput);
-                    
-                    // Remove recipe info
+
+                    clearPeopleCount(searchInput);
+
                     const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
-                    if (existingInfo) {
-                        existingInfo.remove();
-                    }
-                    
+                    if (existingInfo) existingInfo.remove();
+
                     debouncedUpdate();
                 }
             }, 10);
@@ -475,7 +411,7 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
     });
 });
 
-// NIEUW: Add event listeners to existing people count inputs
+// Event listeners voor portie-inputs
 document.querySelectorAll('.people-count-input').forEach(input => {
     input.addEventListener('change', debouncedUpdate);
     input.addEventListener('input', debouncedUpdate);
@@ -561,18 +497,12 @@ document.querySelectorAll('.meal-select-btn').forEach(btn => {
         const peopleHiddenInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
         
         if (searchInput && hiddenInput) {
-            // Set the values
             searchInput.value = selectedRecipeForModal.name;
             hiddenInput.value = selectedRecipeForModal.id;
-            peopleHiddenInput.value = selectedRecipeForModal.serves; // NIEUW: Set people count to recipe default
-            
-            // NIEUW: Show people count input
-            showPeopleCountInput(searchInput, selectedRecipeForModal);
-            
-            // Update recipe info
+
+            setPeopleCount(searchInput, selectedRecipeForModal.id);
             updateRecipeInfo(searchInput, selectedRecipeForModal.cookbook_abbr, selectedRecipeForModal.page);
-            
-            // Save changes
+
             debouncedUpdate();
         }
         
@@ -582,9 +512,21 @@ document.querySelectorAll('.meal-select-btn').forEach(btn => {
     });
 });
 
-// Load quick access recipes on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadQuickAccessRecipes();
+
+    // Vul portie-inputs vanuit opgeslagen waarden
+    document.querySelectorAll('.meal-input').forEach(mealInput => {
+        if (mealInput.value) {
+            const day = mealInput.dataset.day;
+            const meal = mealInput.dataset.meal;
+            const peopleHidden = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
+            const peopleVisible = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-count-input`);
+            if (peopleHidden && peopleVisible && peopleHidden.value) {
+                peopleVisible.value = peopleHidden.value;
+            }
+        }
+    });
 });
 
 async function copyPreviousWeek() {
