@@ -26,20 +26,17 @@
                         <h3 class="font-bold">{{ recipe.name }}</h3>
                         <div class="flex items-center space-x-4 text-sm text-gray-600">
                             {% if recipe.cookbook %}
-                            <span>
-                                {{ recipe.cookbook.name }}
-                                {% if recipe.page %}
-                                - pagina {{ recipe.page }}
-                                {% endif %}
-                            </span>
+                            <span>{{ recipe.cookbook.name }}</span>
+                            {% endif %}
+                            {% if recipe.page %}
+                            <span>p. {{ recipe.page }}</span>
+                            {% elif recipe.url %}
+                            <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer"
+                               class="text-blue-500 hover:text-blue-700 underline">Online recept ↗</a>
                             {% endif %}
                             <span class="text-blue-600">{{ recipe.serves or 4 }} personen</span>
                             {% if recipe.usage_count and recipe.usage_count > 0 %}
                             <span class="text-green-600">{{ recipe.usage_count }}× gebruikt</span>
-                            {% endif %}
-                            {% if recipe.url %}
-                            <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer"
-                               class="text-blue-500 hover:text-blue-700 underline">Online recept ↗</a>
                             {% endif %}
                         </div>
                     </div>

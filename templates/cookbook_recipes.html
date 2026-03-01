@@ -43,12 +43,15 @@
                     {% endif %}
                     
                     <div>
-                        <h3 class="font-semibold text-lg">{{ recipe.name }}</h3>
+                        <h3 class="font-semibold text-lg">
+                            <a href="{{ url_for('edit_recipe', id=recipe.id) }}" class="hover:text-blue-600">{{ recipe.name }}</a>
+                        </h3>
                         <div class="flex items-center space-x-3 text-sm text-gray-600">
                             {% if recipe.page %}
-                            <span>p.{{ recipe.page }}</span>
-                            {% else %}
-                            <span class="italic">Geen paginanummer</span>
+                            <span>p. {{ recipe.page }}</span>
+                            {% elif recipe.url %}
+                            <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer"
+                               class="text-blue-500 hover:text-blue-700 underline">Online recept ↗</a>
                             {% endif %}
                             <span class="text-blue-600">• {{ recipe.serves or 4 }} pers.</span>
                         </div>

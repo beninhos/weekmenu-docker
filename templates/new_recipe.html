@@ -34,7 +34,7 @@
 
         <div>
             <label class="block text-sm font-medium text-gray-700">Kookboek</label>
-            <select name="cookbook"
+            <select name="cookbook" id="fieldCookbook"
                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                 <option value="">Selecteer een kookboek</option>
                 {% for cookbook in cookbooks %}
@@ -202,6 +202,17 @@ async function importFromUrl() {
         if (data.serves)       document.getElementById('fieldServes').value = data.serves;
         if (data.url)          document.getElementById('fieldUrl').value = data.url;
         if (data.instructions) document.getElementById('fieldInstructions').value = data.instructions;
+
+        if (data.cookbook_id) {
+            const sel = document.getElementById('fieldCookbook');
+            if (!sel.querySelector(`option[value="${data.cookbook_id}"]`)) {
+                const opt = document.createElement('option');
+                opt.value = data.cookbook_id;
+                opt.textContent = data.cookbook_name || '';
+                sel.appendChild(opt);
+            }
+            sel.value = data.cookbook_id;
+        }
 
         const preview = document.getElementById('importedImagePreview');
         const pathField = document.getElementById('fieldImagePath');

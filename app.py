@@ -837,6 +837,105 @@ _BROWSER_HEADERS = {
     'DNT': '1',
 }
 
+# Known recipe websites: domain (without www.) → display name
+_KNOWN_SITES = {
+    'jumbo.com': 'Jumbo',
+    'ah.nl': 'Albert Heijn',
+    'allerhande.nl': 'Albert Heijn',
+    'leukerecepten.nl': 'Leuke Recepten',
+    '15gram.nl': '15GRAM',
+    'culy.nl': 'Culy',
+    'smulweb.nl': 'Smulweb',
+    'njam.tv': 'Njam!',
+    'recepten.nl': 'Recepten.nl',
+    'kookmutsjes.nl': 'Kookmutsjes',
+    'lekkerensimpel.nl': 'Lekker en Simpel',
+    'margriet.nl': 'Margriet',
+    'libelle.nl': 'Libelle',
+    'jamieoliver.com': 'Jamie Oliver',
+    'bbcgoodfood.com': 'BBC Good Food',
+    'allrecipes.com': 'Allrecipes',
+    'epicurious.com': 'Epicurious',
+    'foodnetwork.com': 'Food Network',
+}
+
+def _get_or_create_site_cookbook(domain, html_text, scraper, requests_module):
+    """Find or create a Cookbook entry for a website. Returns Cookbook or None."""
+    import hashlib
+    clean_domain = re.sub(r'^www\.', '', domain)
+
+    # Determine display name
+    name = _KNOWN_SITES.get(clean_domain)
+    if not name:
+        try:
+            name = scraper.site_name() or clean_domain
+        except Exception:
+            name = clean_domain
+
+    # Find existing cookbook with this name
+    cookbook = Cookbook.query.filter_by(name=name).first()
+    if cookbook:
+        return cookbook
+
+    base_fname = 'site_' + hashlib.md5(clean_domain.encode()).hexdigest()[:10]
+    image_path = None
+
+    def _save_image(content, content_type):
+        ext = '.png'
+        if 'jpeg' in content_type or 'jpg' in content_type: ext = '.jpg'
+        elif 'svg' in content_type: ext = '.svg'
+        elif 'webp' in content_type: ext = '.webp'
+        elif 'ico' in content_type: ext = '.ico'
+        fname = base_fname + ext
+        save_path = os.path.join(app.root_path, 'static/uploads', fname)
+        with open(save_path, 'wb') as f:
+            f.write(content)
+        return os.path.join('static/uploads', fname)
+
+    # Attempt 1: Clearbit Logo API – returns clean brand logo (PNG, ~128×128)
+    try:
+        r = requests_module.get(f'https://logo.clearbit.com/{clean_domain}', timeout=5)
+        if r.status_code == 200 and 'image' in r.headers.get('Content-Type', ''):
+            image_path = _save_image(r.content, r.headers.get('Content-Type', 'image/png'))
+    except Exception:
+        pass
+
+    # Attempt 2: apple-touch-icon from HTML (typically 180×180 PNG)
+    if not image_path:
+        try:
+            icon_url = None
+            for pattern in [
+                r'<link[^>]+rel=["\'][^"\']*apple-touch-icon[^"\']*["\'][^>]+href=["\']([^"\']+)["\']',
+                r'<link[^>]+href=["\']([^"\']+)["\'][^>]+rel=["\'][^"\']*apple-touch-icon[^"\']*["\']',
+            ]:
+                m = re.search(pattern, html_text, re.IGNORECASE)
+                if m:
+                    icon_url = m.group(1)
+                    break
+            if icon_url:
+                if icon_url.startswith('//'): icon_url = 'https:' + icon_url
+                elif icon_url.startswith('/'): icon_url = f'https://{domain}' + icon_url
+                elif not icon_url.startswith('http'): icon_url = f'https://{domain}/' + icon_url
+                r = requests_module.get(icon_url, headers=_BROWSER_HEADERS, timeout=5)
+                r.raise_for_status()
+                image_path = _save_image(r.content, r.headers.get('Content-Type', ''))
+        except Exception:
+            pass
+
+    # Attempt 3: /favicon.ico (last resort)
+    if not image_path:
+        try:
+            r = requests_module.get(f'https://{domain}/favicon.ico', headers=_BROWSER_HEADERS, timeout=5)
+            r.raise_for_status()
+            image_path = _save_image(r.content, r.headers.get('Content-Type', 'image/x-icon'))
+        except Exception:
+            pass
+
+    cookbook = Cookbook(name=name, image_path=image_path)
+    db.session.add(cookbook)
+    db.session.commit()
+    return cookbook
+
 @app.route('/recipe/scrape', methods=['POST'])
 def scrape_recipe():
     import requests as _requests
@@ -920,6 +1019,19 @@ def scrape_recipe():
     except Exception:
         pass
 
+    # Kookboek automatisch aanmaken/opzoeken op basis van het domein
+    cookbook_id = None
+    cookbook_name = None
+    try:
+        from urllib.parse import urlparse as _urlparse
+        domain = _urlparse(url).netloc
+        cookbook = _get_or_create_site_cookbook(domain, html, scraper, _requests)
+        if cookbook:
+            cookbook_id = cookbook.id
+            cookbook_name = cookbook.name
+    except Exception:
+        pass
+
     return jsonify({
         'status': 'success',
         'name': title,
@@ -928,6 +1040,8 @@ def scrape_recipe():
         'instructions': instructions,
         'ingredients': parsed_ingredients,
         'image_path': image_path,
+        'cookbook_id': cookbook_id,
+        'cookbook_name': cookbook_name,
     })
 
 
