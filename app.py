@@ -202,7 +202,9 @@ def new_recipe():
                     ingredient = Ingredient(name=ingredients[i], category=categories[i])
                     db.session.add(ingredient)
                     db.session.commit()
-                
+                else:
+                    ingredient.category = categories[i]
+
                 recipe_ingredient = RecipeIngredient(
                     recipe_id=recipe.id,
                     ingredient_id=ingredient.id,
@@ -210,10 +212,10 @@ def new_recipe():
                     unit=units[i]
                 )
                 db.session.add(recipe_ingredient)
-        
+
         db.session.commit()
         return redirect(url_for('recipes'))
-    
+
     return render_template('new_recipe.html', cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
 
 @app.route('/recipe/<int:id>', methods=['DELETE'])
@@ -448,9 +450,16 @@ def shopping_list(year, week):
         category_order.get(x['category'], 999),  # 999 voor onbekende categorieën
         x['name']
     ))
-    
+
+    # Groepeer per categorie
+    grouped = []
+    for item in shopping_list:
+        if not grouped or grouped[-1]['category'] != item['category']:
+            grouped.append({'category': item['category'], 'producten': []})
+        grouped[-1]['producten'].append(item)
+
     return render_template('shopping_list.html',
-                         shopping_list=shopping_list,
+                         grouped_shopping_list=grouped,
                          week=week,
                          year=year)
 
@@ -486,7 +495,9 @@ def edit_recipe(id):
                     ingredient = Ingredient(name=ingredients[i], category=categories[i])
                     db.session.add(ingredient)
                     db.session.commit()
-                
+                else:
+                    ingredient.category = categories[i]
+
                 recipe_ingredient = RecipeIngredient(
                     recipe_id=recipe.id,
                     ingredient_id=ingredient.id,
@@ -494,10 +505,10 @@ def edit_recipe(id):
                     unit=units[i]
                 )
                 db.session.add(recipe_ingredient)
-        
+
         db.session.commit()
         return redirect(url_for('recipes'))
-    
+
     return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
 
 @app.route('/recipe/<int:id>/toggle_favorite', methods=['POST'])
@@ -613,6 +624,46 @@ def get_quick_access_recipes():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
+
+@app.route('/copy_previous_week', methods=['POST'])
+def copy_previous_week():
+    try:
+        data = request.get_json()
+        week = data['week']
+        year = data['year']
+
+        if week > 1:
+            prev_week = week - 1
+            prev_year = year
+        else:
+            prev_year = year - 1
+            last_day_prev_year = date(prev_year, 12, 28)
+            prev_week = last_day_prev_year.isocalendar()[1]
+
+        prev_items = MenuItem.query.filter_by(week_number=prev_week, year=prev_year).all()
+
+        if not prev_items:
+            return jsonify({'status': 'error', 'message': 'Geen menu gevonden voor de vorige week'}), 404
+
+        MenuItem.query.filter_by(week_number=week, year=year).delete()
+
+        for item in prev_items:
+            new_item = MenuItem(
+                day_of_week=item.day_of_week,
+                meal_type=item.meal_type,
+                recipe_id=item.recipe_id,
+                people_count=item.people_count,
+                week_number=week,
+                year=year
+            )
+            db.session.add(new_item)
+
+        db.session.commit()
+        return jsonify({'status': 'success', 'count': len(prev_items)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
 
 if __name__ == '__main__':
     with app.app_context():
