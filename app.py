@@ -8,6 +8,7 @@ import os
 import io
 import json
 import re
+import zipfile
 from pathlib import Path
 
 def format_amount(amount):
@@ -131,6 +132,7 @@ class Cookbook(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     abbreviation = db.Column(db.String(10), nullable=True)
     image_path = db.Column(db.String(200), nullable=True)
+    is_archived = db.Column(db.Boolean, default=False, nullable=False)
     recipes = db.relationship('Recipe', back_populates='cookbook', lazy=True)
 
 class QuickAddItem(db.Model):
@@ -250,8 +252,11 @@ def delete_recipe(id):
 
 @app.route('/cookbooks')
 def list_cookbooks():
-    cookbooks = Cookbook.query.order_by(Cookbook.name).all()
-    return render_template('cookbooks.html', cookbooks=cookbooks)
+    all_cookbooks = Cookbook.query.order_by(Cookbook.name).all()
+    active = [c for c in all_cookbooks if not c.is_archived]
+    archived = [c for c in all_cookbooks if c.is_archived]
+    cookbooks_json = json.dumps([{'id': c.id, 'name': c.name} for c in all_cookbooks])
+    return render_template('cookbooks.html', cookbooks=active, archived_cookbooks=archived, cookbooks_json=cookbooks_json)
 
 @app.route('/cookbook/new', methods=['GET', 'POST'])
 def new_cookbook():
@@ -305,8 +310,58 @@ def edit_cookbook(id):
         
         db.session.commit()
         return redirect(url_for('list_cookbooks'))
-    
+
     return render_template('edit_cookbook.html', cookbook=cookbook)
+
+
+@app.route('/cookbook/<int:id>/rename', methods=['POST'])
+def rename_cookbook(id):
+    cookbook = Cookbook.query.get_or_404(id)
+    new_name = request.form.get('name', '').strip()
+    if not new_name:
+        return jsonify({'status': 'error', 'message': 'Naam mag niet leeg zijn'}), 400
+    if Cookbook.query.filter(Cookbook.name == new_name, Cookbook.id != id).first():
+        return jsonify({'status': 'error', 'message': 'Een kookboek met deze naam bestaat al'}), 400
+    cookbook.name = new_name
+    db.session.commit()
+    return jsonify({'status': 'success', 'name': cookbook.name})
+
+
+@app.route('/cookbook/<int:id>/migrate', methods=['POST'])
+def migrate_cookbook(id):
+    cookbook = Cookbook.query.get_or_404(id)
+    data = request.get_json()
+    target_id = data.get('target_cookbook_id')
+    if not target_id:
+        return jsonify({'status': 'error', 'message': 'Geen doelkookboek opgegeven'}), 400
+    target = Cookbook.query.get_or_404(int(target_id))
+    Recipe.query.filter_by(cookbook_id=id).update({'cookbook_id': target.id})
+    db.session.commit()
+    return jsonify({'status': 'success', 'message': f'Recepten verplaatst naar {target.name}'})
+
+
+@app.route('/cookbook/<int:id>/archive', methods=['POST'])
+def archive_cookbook(id):
+    cookbook = Cookbook.query.get_or_404(id)
+    cookbook.is_archived = not cookbook.is_archived
+    db.session.commit()
+    return jsonify({'status': 'success', 'is_archived': cookbook.is_archived})
+
+
+@app.route('/cookbook/<int:id>/delete', methods=['POST'])
+def delete_cookbook(id):
+    cookbook = Cookbook.query.get_or_404(id)
+    if cookbook.recipes:
+        return jsonify({'status': 'error', 'message': 'Kookboek heeft nog recepten. Verwijder of verplaats ze eerst.'}), 400
+    if cookbook.image_path:
+        try:
+            os.remove(os.path.join(app.root_path, cookbook.image_path))
+        except OSError:
+            pass
+    db.session.delete(cookbook)
+    db.session.commit()
+    return jsonify({'status': 'success'})
+
 
 @app.route('/update_menu', methods=['POST'])
 def update_menu():
@@ -1181,6 +1236,174 @@ def import_data():
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 
+@app.route('/export/zip')
+def export_zip():
+    cookbooks = Cookbook.query.order_by(Cookbook.name).all()
+    recipes = Recipe.query.order_by(Recipe.name).all()
+
+    data = {
+        'version': 2,
+        'exported_at': datetime.now().isoformat(),
+        'cookbooks': [
+            {
+                'name': c.name,
+                'abbreviation': c.abbreviation,
+                'image_filename': os.path.basename(c.image_path) if c.image_path else None,
+                'is_archived': c.is_archived,
+            }
+            for c in cookbooks
+        ],
+        'recipes': [
+            {
+                'name': r.name,
+                'serves': r.serves,
+                'cookbook': r.cookbook.name if r.cookbook else None,
+                'page': r.page,
+                'is_favorite': r.is_favorite,
+                'url': r.url,
+                'instructions': r.instructions,
+                'image_filename': os.path.basename(r.image_path) if r.image_path else None,
+                'ingredients': [
+                    {
+                        'name': ri.ingredient.name,
+                        'category': ri.ingredient.category,
+                        'amount': ri.amount,
+                        'unit': ri.unit,
+                    }
+                    for ri in r.ingredients
+                ],
+            }
+            for r in recipes
+        ],
+    }
+
+    buf = io.BytesIO()
+    uploads_dir = os.path.join(app.root_path, 'static', 'uploads')
+    image_filenames = set()
+    for c in cookbooks:
+        if c.image_path:
+            image_filenames.add(os.path.basename(c.image_path))
+    for r in recipes:
+        if r.image_path:
+            image_filenames.add(os.path.basename(r.image_path))
+
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr('weekmenu_export.json', json.dumps(data, ensure_ascii=False, indent=2))
+        for fname in image_filenames:
+            full_path = os.path.join(uploads_dir, fname)
+            if os.path.isfile(full_path):
+                zf.write(full_path, arcname=os.path.join('images', fname))
+
+    buf.seek(0)
+    filename = f"weekmenu_export_{date.today().strftime('%Y%m%d')}.zip"
+    return send_file(buf, mimetype='application/zip', as_attachment=True, download_name=filename)
+
+
+@app.route('/import/zip', methods=['POST'])
+def import_zip():
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'status': 'error', 'message': 'Geen bestand geselecteerd'}), 400
+
+        buf = io.BytesIO(file.read())
+        if not zipfile.is_zipfile(buf):
+            return jsonify({'status': 'error', 'message': 'Ongeldig ZIP-bestand'}), 400
+
+        buf.seek(0)
+        counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0, 'images': 0}
+        uploads_dir = os.path.join(app.root_path, 'static', 'uploads')
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        with zipfile.ZipFile(buf, 'r') as zf:
+            if 'weekmenu_export.json' not in zf.namelist():
+                return jsonify({'status': 'error', 'message': 'weekmenu_export.json niet gevonden in ZIP'}), 400
+
+            data = json.loads(zf.read('weekmenu_export.json').decode('utf-8'))
+
+            # Extract images (write directly to uploads, skip existing)
+            for entry in zf.namelist():
+                if entry.startswith('images/') and not entry.endswith('/'):
+                    fname = os.path.basename(entry)
+                    dest = os.path.join(uploads_dir, fname)
+                    if not os.path.exists(dest):
+                        with open(dest, 'wb') as f:
+                            f.write(zf.read(entry))
+                        counts['images'] += 1
+
+            # Import cookbooks
+            for cb_data in data.get('cookbooks', []):
+                if not Cookbook.query.filter_by(name=cb_data['name']).first():
+                    image_path = None
+                    if cb_data.get('image_filename'):
+                        candidate = os.path.join('static', 'uploads', cb_data['image_filename'])
+                        if os.path.isfile(os.path.join(app.root_path, candidate)):
+                            image_path = candidate
+                    db.session.add(Cookbook(
+                        name=cb_data['name'],
+                        abbreviation=cb_data.get('abbreviation'),
+                        image_path=image_path,
+                        is_archived=cb_data.get('is_archived', False),
+                    ))
+                    counts['cookbooks'] += 1
+            db.session.commit()
+
+            # Import recipes
+            for r_data in data.get('recipes', []):
+                if Recipe.query.filter_by(name=r_data['name']).first():
+                    continue
+
+                cookbook = (Cookbook.query.filter_by(name=r_data['cookbook']).first()
+                            if r_data.get('cookbook') else None)
+
+                image_path = None
+                if r_data.get('image_filename'):
+                    candidate = os.path.join('static', 'uploads', r_data['image_filename'])
+                    if os.path.isfile(os.path.join(app.root_path, candidate)):
+                        image_path = candidate
+
+                recipe = Recipe(
+                    name=r_data['name'],
+                    serves=r_data.get('serves'),
+                    cookbook_id=cookbook.id if cookbook else None,
+                    page=r_data.get('page'),
+                    is_favorite=r_data.get('is_favorite', False),
+                    url=r_data.get('url'),
+                    instructions=r_data.get('instructions'),
+                    image_path=image_path,
+                )
+                db.session.add(recipe)
+                db.session.flush()
+
+                for ing_data in r_data.get('ingredients', []):
+                    ingredient = Ingredient.query.filter_by(name=ing_data['name']).first()
+                    if not ingredient:
+                        ingredient = Ingredient(
+                            name=ing_data['name'],
+                            category=ing_data.get('category', 'Overig'),
+                        )
+                        db.session.add(ingredient)
+                        db.session.flush()
+                        counts['ingredients'] += 1
+                    db.session.add(RecipeIngredient(
+                        recipe_id=recipe.id,
+                        ingredient_id=ingredient.id,
+                        amount=ing_data.get('amount') or 0,
+                        unit=ing_data.get('unit', ''),
+                    ))
+                counts['recipes'] += 1
+
+        db.session.commit()
+        return jsonify({
+            'status': 'success',
+            'message': (f"{counts['cookbooks']} kookboeken, {counts['recipes']} recepten, "
+                        f"{counts['ingredients']} ingrediënten en {counts['images']} afbeeldingen geïmporteerd.")
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
@@ -1195,6 +1418,13 @@ def migrate_db():
         if 'people_count' not in menu_cols:
             try:
                 conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
+            except OperationalError:
+                pass
+
+        cookbook_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(cookbook)')).fetchall()]
+        if 'is_archived' not in cookbook_cols:
+            try:
+                conn.execute(text('ALTER TABLE cookbook ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0'))
             except OperationalError:
                 pass
 

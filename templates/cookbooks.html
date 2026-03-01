@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<style>
+dialog::backdrop { background: rgba(0,0,0,0.35); }
+</style>
+
 <div class="mb-6">
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold">Kookboeken</h1>
@@ -9,42 +13,86 @@
         </a>
     </div>
 
+    {% macro cookbook_card(cookbook) %}
+    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200{% if cookbook.is_archived %} opacity-60{% endif %}">
+        <a href="{{ url_for('list_cookbook_recipes', id=cookbook.id) }}" class="block">
+            <div class="aspect-w-3 aspect-h-4">
+                {% if cookbook.image_path %}
+                <img src="{{ url_for('static', filename=cookbook.image_path.replace('static/', '')) }}"
+                     alt="{{ cookbook.name }}"
+                     class="w-full h-64 object-cover">
+                {% else %}
+                <div class="w-full h-64 bg-gray-200 flex items-center justify-center">
+                    <div class="text-center">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.754 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-500">Geen afbeelding</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            <div class="p-4">
+                <h3 class="text-lg font-semibold text-gray-900 mb-1">{{ cookbook.name }}</h3>
+                {% if cookbook.is_archived %}
+                <span class="inline-block text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded mb-1">Gearchiveerd</span>
+                {% endif %}
+                <p class="text-sm text-gray-600">
+                    {% set recipe_count = cookbook.recipes|length %}
+                    {{ recipe_count }} {% if recipe_count == 1 %}recept{% else %}recepten{% endif %}
+                </p>
+            </div>
+        </a>
+        <div class="px-4 pb-4 relative">
+            <button onclick="toggleDropdown(event, 'dropdown-{{ cookbook.id }}')"
+                    class="bg-gray-500 hover:bg-gray-600 text-white text-sm py-1 px-3 rounded inline-flex items-center gap-1">
+                Opties
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div id="dropdown-{{ cookbook.id }}"
+                 class="hidden absolute left-4 bottom-10 bg-white border border-gray-200 rounded shadow-lg z-10 w-52 text-sm">
+
+                <button onclick="startRename({{ cookbook.id }}, '{{ cookbook.name|e }}')"
+                        class="block w-full text-left px-4 py-2 hover:bg-gray-50">
+                    Hernoemen
+                </button>
+
+                <button onclick="startMigrate({{ cookbook.id }}, '{{ cookbook.name|e }}')"
+                        class="block w-full text-left px-4 py-2 hover:bg-gray-50">
+                    Recepten verplaatsen
+                </button>
+
+                <button onclick="toggleArchive({{ cookbook.id }}, {{ cookbook.is_archived|lower }})"
+                        class="block w-full text-left px-4 py-2 hover:bg-gray-50">
+                    {% if cookbook.is_archived %}Herstellen{% else %}Archiveren{% endif %}
+                </button>
+
+                <hr class="border-gray-100">
+
+                {% set recipe_count = cookbook.recipes|length %}
+                {% if recipe_count == 0 %}
+                <button onclick="deleteCookbook({{ cookbook.id }}, '{{ cookbook.name|e }}')"
+                        class="block w-full text-left px-4 py-2 hover:bg-red-50 text-red-600">
+                    Verwijderen
+                </button>
+                {% else %}
+                <span class="block w-full text-left px-4 py-2 text-gray-400 cursor-not-allowed"
+                      title="{{ recipe_count }} recepten moeten eerst worden verwijderd of verplaatst">
+                    Verwijderen ({{ recipe_count }} recepten)
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endmacro %}
+
     {% if cookbooks %}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {% for cookbook in cookbooks %}
-        <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200">
-            <a href="{{ url_for('list_cookbook_recipes', id=cookbook.id) }}" class="block">
-                <div class="aspect-w-3 aspect-h-4">
-                    {% if cookbook.image_path %}
-                    <img src="{{ url_for('static', filename=cookbook.image_path.replace('static/', '')) }}" 
-                         alt="{{ cookbook.name }}" 
-                         class="w-full h-64 object-cover">
-                    {% else %}
-                    <div class="w-full h-64 bg-gray-200 flex items-center justify-center">
-                        <div class="text-center">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.754 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                            </svg>
-                            <p class="mt-2 text-sm text-gray-500">Geen afbeelding</p>
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-                <div class="p-4">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ cookbook.name }}</h3>
-                    <p class="text-sm text-gray-600">
-                        {% set recipe_count = cookbook.recipes|length %}
-                        {{ recipe_count }} {% if recipe_count == 1 %}recept{% else %}recepten{% endif %}
-                    </p>
-                </div>
-            </a>
-            <div class="px-4 pb-4">
-                <a href="{{ url_for('edit_cookbook', id=cookbook.id) }}" 
-                   class="inline-block bg-gray-500 hover:bg-gray-600 text-white text-sm py-1 px-3 rounded">
-                    Bewerken
-                </a>
-            </div>
-        </div>
+        {{ cookbook_card(cookbook) }}
         {% endfor %}
     </div>
     {% else %}
@@ -52,5 +100,129 @@
         <p>Nog geen kookboeken toegevoegd. Klik op "Nieuw Kookboek" om te beginnen.</p>
     </div>
     {% endif %}
+
+    {% if archived_cookbooks %}
+    <div class="mt-10">
+        <h2 class="text-lg font-semibold text-gray-500 mb-4">Gearchiveerde kookboeken</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {% for cookbook in archived_cookbooks %}
+            {{ cookbook_card(cookbook) }}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
+
+<!-- Modal: recepten verplaatsen -->
+<dialog id="migrateModal" class="rounded-lg shadow-xl p-0 w-96">
+    <div class="p-6">
+        <h3 class="font-bold text-lg mb-2">Recepten verplaatsen</h3>
+        <p class="text-sm text-gray-600 mb-4" id="migrateDescription"></p>
+        <select id="migrateTarget"
+                class="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-5">
+        </select>
+        <div class="flex justify-end gap-3">
+            <button onclick="document.getElementById('migrateModal').close()"
+                    class="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50">
+                Annuleren
+            </button>
+            <button onclick="confirmMigrate()"
+                    class="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">
+                Verplaatsen
+            </button>
+        </div>
+    </div>
+</dialog>
+
+<script>
+const ALL_COOKBOOKS = {{ cookbooks_json|safe }};
+let _migrateSourceId = null;
+
+function toggleDropdown(event, id) {
+    event.stopPropagation();
+    document.querySelectorAll('[id^="dropdown-"]').forEach(el => {
+        if (el.id !== id) el.classList.add('hidden');
+    });
+    document.getElementById(id).classList.toggle('hidden');
+}
+
+document.addEventListener('click', () => {
+    document.querySelectorAll('[id^="dropdown-"]').forEach(el => el.classList.add('hidden'));
+});
+
+function closeDropdowns() {
+    document.querySelectorAll('[id^="dropdown-"]').forEach(el => el.classList.add('hidden'));
+}
+
+function startRename(id, currentName) {
+    closeDropdowns();
+    const newName = prompt('Nieuwe naam voor het kookboek:', currentName);
+    if (!newName || newName.trim() === currentName) return;
+
+    const formData = new FormData();
+    formData.append('name', newName.trim());
+
+    fetch(`/cookbook/${id}/rename`, { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') location.reload();
+            else alert('Fout: ' + data.message);
+        });
+}
+
+function startMigrate(id, name) {
+    closeDropdowns();
+    const others = ALL_COOKBOOKS.filter(c => c.id !== id);
+    if (others.length === 0) {
+        alert('Er zijn geen andere kookboeken om recepten naar te verplaatsen.');
+        return;
+    }
+    _migrateSourceId = id;
+    document.getElementById('migrateDescription').textContent =
+        `Verplaats alle recepten van "${name}" naar:`;
+    const sel = document.getElementById('migrateTarget');
+    sel.innerHTML = others.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    document.getElementById('migrateModal').showModal();
+}
+
+function confirmMigrate() {
+    const targetId = parseInt(document.getElementById('migrateTarget').value);
+    document.getElementById('migrateModal').close();
+    fetch(`/cookbook/${_migrateSourceId}/migrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_cookbook_id: targetId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') location.reload();
+        else alert('Fout: ' + data.message);
+    });
+}
+
+function toggleArchive(id, isArchived) {
+    closeDropdowns();
+    const action = isArchived ? 'herstellen' : 'archiveren';
+    if (!confirm(`Wil je dit kookboek ${action}?`)) return;
+
+    fetch(`/cookbook/${id}/archive`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') location.reload();
+            else alert('Fout: ' + data.message);
+        });
+}
+
+function deleteCookbook(id, name) {
+    closeDropdowns();
+    if (!confirm(`Weet je zeker dat je "${name}" wilt verwijderen?`)) return;
+
+    fetch(`/cookbook/${id}/delete`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') location.reload();
+            else alert('Fout: ' + data.message);
+        });
+}
+</script>
 {% endblock %}
