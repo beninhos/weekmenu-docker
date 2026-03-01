@@ -86,7 +86,7 @@
                         <input type="text" name="unit[]" placeholder="Eenheid"
                                class="block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
-                    <div class="col-span-4">
+                    <div class="col-span-3">
                         <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
                             <option value="AGF (Groenten & Fruit)">AGF (Groenten & Fruit)</option>
                             <option value="Vlees & Vis">Vlees & Vis</option>
@@ -104,6 +104,10 @@
                             <option value="Noten & Gedroogd fruit">Noten & Gedroogd fruit</option>
                             <option value="Overig">Overig</option>
                         </select>
+                    </div>
+                    <div class="col-span-1 flex items-center justify-center">
+                        <button type="button" onclick="this.closest('.grid').remove()"
+                                class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
                     </div>
                 </div>
             </div>
@@ -134,7 +138,7 @@ function esc(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function addIngredientRow(name, amount, unit) {
+function addIngredientRow(name, amount, unit, category) {
     const container = document.getElementById('ingredients');
     const row = document.createElement('div');
     row.className = 'grid grid-cols-12 gap-2';
@@ -152,12 +156,19 @@ function addIngredientRow(name, amount, unit) {
             <input type="text" name="unit[]" placeholder="Eenheid" value="${esc(unit)}"
                    class="block w-full rounded-md border-gray-300 shadow-sm">
         </div>
-        <div class="col-span-4">
+        <div class="col-span-3">
             <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
                 ${optionsHtml}
             </select>
         </div>
+        <div class="col-span-1 flex items-center justify-center">
+            <button type="button" onclick="this.closest('.grid').remove()"
+                    class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
+        </div>
     `;
+    if (category) {
+        row.querySelector('select[name="category[]"]').value = category;
+    }
     container.appendChild(row);
 }
 
@@ -205,7 +216,7 @@ async function importFromUrl() {
 
         if (data.ingredients && data.ingredients.length > 0) {
             document.getElementById('ingredients').innerHTML = '';
-            data.ingredients.forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit));
+            data.ingredients.forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit, ing.category));
         }
 
         statusDiv.className = 'mt-2 text-sm text-green-700';

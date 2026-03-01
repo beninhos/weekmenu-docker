@@ -759,23 +759,52 @@ _AMOUNT_ONLY_RE = re.compile(
     r'^(' + _AMOUNT_RE + r')\s+(.+)$'
 )
 
+# Category guessing: ordered list checked in sequence (most specific first)
+_CATEGORY_KEYWORDS = [
+    ('Vlees & Vis', ['kip', 'gehakt', 'varken', 'rundvlees', 'lam', 'zalm', 'tonijn', 'vis', 'garnaal', 'mossel', 'inktvis', 'spek', 'bacon', 'worst', 'biefstuk', 'tartaar', 'ossenhaas', 'forel', 'haring', 'makreel', 'ansjovis', 'kabeljauw', 'tilapia', 'kreeft', 'krab', 'salami', 'pancetta', 'chorizo', 'kalkoen', 'eend', 'konijn']),
+    ('Kaas & Vleeswaren', ['kaas', 'parmezaan', 'mozzarella', 'feta', 'ricotta', 'mascarpone', 'grana', 'pecorino', 'emmentaler', 'rookvlees']),
+    ('Zuivel & Eieren', ['slagroom', 'karnemelk', 'melk', 'yoghurt', 'kwark', 'boter', 'margarine', 'crème fraîche', 'ei']),
+    ('Pasta, Rijst & Wereldkeuken', ['spaghetti', 'penne', 'rigatoni', 'fusilli', 'lasagne', 'tagliatelle', 'fettuccine', 'noodle', 'couscous', 'bulgur', 'quinoa', 'polenta', 'gnocchi', 'tortellini', 'ravioli', 'macaroni', 'pasta', 'rijst', 'risotto', 'mie']),
+    ('Conserven & Soepen', ['tomatenblokje', 'tomatenpuree', 'passata', 'kikkererwt', 'linzen', 'bonen', 'bouillon', 'soep']),
+    ('Sauzen & Kruiden', ['olijfolie', 'zonnebloemolie', 'ketchup', 'mosterd', 'mayonaise', 'sojasaus', 'worcester', 'tabasco', 'pesto', 'sambal', 'harissa', 'paprikapoeder', 'komijn', 'kaneel', 'kurkuma', 'oregano', 'laurier', 'honing', 'stroop', 'vanille', 'azijn', 'olie', 'zout', 'suiker', 'peper']),
+    ('Bakproducten', ['bloem', 'bakpoeder', 'maizena', 'gist', 'chocolade', 'cacao']),
+    ('Ontbijt & Broodbeleg', ['jam', 'pindakaas', 'hagelslag', 'muesli', 'havermout', 'granola']),
+    ('Dranken', ['wijn', 'bier', 'cognac', 'rum', 'wodka', 'gin', 'likeur']),
+    ('Noten & Gedroogd fruit', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'rozijn', 'cranberry', 'pinda']),
+    ('Brood & Banket', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'tortilla', 'cracker', 'brood']),
+    ('AGF (Groenten & Fruit)', ['ui', 'sjalot', 'knoflook', 'tomat', 'appel', 'peer', 'citroen', 'limoen', 'wortel', 'aardappel', 'prei', 'courgette', 'paprika', 'champignon', 'paddenstoel', 'broccoli', 'bloemkool', 'spinazie', 'komkommer', 'avocado', 'banaan', 'aardbei', 'sinaasappel', 'kiwi', 'mango', 'ananas', 'peterselie', 'basilicum', 'rozemarijn', 'tijm', 'bieslook', 'selderij', 'venkel', 'asperge', 'sperziebonen', 'doperwt', 'mais', 'biet', 'radijs', 'spruitjes', 'kool', 'witlof', 'paksoi', 'aubergine', 'chilipeper', 'gember', 'andijvie', 'sla', 'dragon', 'koriander']),
+]
+
+def _guess_ingredient_category(name):
+    """Guess supermarket category by keyword-matching ingredient name."""
+    lower = name.lower()
+    for category, keywords in _CATEGORY_KEYWORDS:
+        for kw in keywords:
+            if re.search(r'(?<![a-z])' + re.escape(kw), lower):
+                return category
+    return 'Overig'
+
 def _parse_dutch_ingredient(raw):
     """Dutch-first regex ingredient parser: amount + unit + name."""
     s = raw.strip()
     m = _INGREDIENT_RE.match(s)
     if m:
+        name = m.group(3).strip()
         return {
             'amount': _parse_amount(m.group(1)),
             'unit': DUTCH_UNITS.get(m.group(2).lower(), m.group(2).lower()),
-            'name': m.group(3).strip(),
+            'name': name,
+            'category': _guess_ingredient_category(name),
             'raw': raw,
         }
     m2 = _AMOUNT_ONLY_RE.match(s)
     if m2:
+        name = m2.group(2).strip()
         return {
             'amount': _parse_amount(m2.group(1)),
-            'unit': '',
-            'name': m2.group(2).strip(),
+            'unit': 'stuks',
+            'name': name,
+            'category': _guess_ingredient_category(name),
             'raw': raw,
         }
     # Fallback: try ingredient-parser-nlp for English-format lines
@@ -791,10 +820,11 @@ def _parse_dutch_ingredient(raw):
             unit = DUTCH_UNITS.get(raw_unit, raw_unit)
         name = parsed.name.text if parsed.name else s
         if name and name != s:
-            return {'amount': amount, 'unit': unit, 'name': name.strip(), 'raw': raw}
+            name = name.strip()
+            return {'amount': amount, 'unit': unit or ('stuks' if amount is not None else ''), 'name': name, 'category': _guess_ingredient_category(name), 'raw': raw}
     except Exception:
         pass
-    return {'amount': None, 'unit': '', 'name': s, 'raw': raw}
+    return {'amount': None, 'unit': '', 'name': s, 'category': _guess_ingredient_category(s), 'raw': raw}
 
 def parse_ingredients_from_list(ingredient_strings):
     return [_parse_dutch_ingredient(raw) for raw in ingredient_strings if raw and raw.strip()]
