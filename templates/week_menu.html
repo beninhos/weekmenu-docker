@@ -8,7 +8,11 @@
                class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-sm md:text-base">
                 Boodschappenlijst
             </a>
-            <a href="{{ url_for('week_menu', year=year, week=week-1) }}" 
+            <button onclick="copyPreviousWeek()"
+                    class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 text-sm md:text-base">
+                Kopieer vorige week
+            </button>
+            <a href="{{ url_for('week_menu', year=year, week=week-1) }}"
                class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm md:text-base">
                 Vorige Week
             </a>
@@ -582,5 +586,29 @@ document.querySelectorAll('.meal-select-btn').forEach(btn => {
 document.addEventListener('DOMContentLoaded', () => {
     loadQuickAccessRecipes();
 });
+
+async function copyPreviousWeek() {
+    if (!confirm('Weet je zeker dat je het menu van de vorige week wilt kopiëren? Het huidige menu wordt overschreven.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/copy_previous_week', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ week: {{ week }}, year: {{ year }} })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert('Fout: ' + (data.message || 'Onbekende fout'));
+        }
+    } catch (error) {
+        alert('Fout bij kopiëren: ' + error.message);
+    }
+}
 </script>
 {% endblock %}

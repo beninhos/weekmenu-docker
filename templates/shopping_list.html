@@ -9,28 +9,19 @@
         </button>
     </div>
     
-    {% set current_category = None %}
-    {% for item in shopping_list %}
-        {% if item.category != current_category %}
-            {% if not loop.first %}
-                </div>
-            {% endif %}
-            
-            <h3 class="font-bold text-lg mt-6 mb-3">{{ item.category }}</h3>
-            <div class="space-y-2">
-            {% set current_category = item.category %}
-        {% endif %}
-        
-        <div class="flex items-center">
-            <input type="checkbox" class="mr-2" onchange="toggleItem(this)">
-            <span class="flex-grow">
-                {{ item.amount_display }} {{ item.unit }} {{ item.name }}
-            </span>
-            <button onclick="removeItem(this)" class="ml-2 text-red-500 hover:text-red-700">✕</button>        </div>
-        
-        {% if loop.last %}
+    {% for group in grouped_shopping_list %}
+        <h3 class="font-bold text-lg mt-6 mb-3">{{ group.category }}</h3>
+        <div class="space-y-2">
+            {% for item in group.producten %}
+            <div class="flex items-center">
+                <input type="checkbox" class="mr-2" onchange="toggleItem(this)">
+                <span class="flex-grow">
+                    {{ item.amount_display }} {{ item.unit }} {{ item.name }}
+                </span>
+                <button onclick="removeItem(this)" class="ml-2 text-red-500 hover:text-red-700">✕</button>
             </div>
-        {% endif %}
+            {% endfor %}
+        </div>
     {% endfor %}
 </div>
 
