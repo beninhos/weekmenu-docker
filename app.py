@@ -154,9 +154,11 @@ def index():
 def week_menu(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     recipes = Recipe.query.order_by(Recipe.name).all()
+    recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves} for r in recipes])
     return render_template('week_menu.html',
                          menu_items=menu_items,
                          recipes=recipes,
+                         recipes_json=recipes_json,
                          week=week,
                          year=year,
                          days=DAYS,
