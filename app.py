@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from datetime import datetime, date
 from werkzeug.utils import secure_filename
 import os
@@ -85,7 +86,7 @@ class Recipe(db.Model):
     __tablename__ = 'recipe'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    serves = db.Column(db.Integer, default=4)
+    serves = db.Column(db.Integer, nullable=True)
     cookbook_id = db.Column(db.Integer, db.ForeignKey('cookbook.id'), nullable=True)
     page = db.Column(db.Integer)
     image_path = db.Column(db.String(200), nullable=True)
@@ -118,7 +119,7 @@ class MenuItem(db.Model):
     day_of_week = db.Column(db.Integer, nullable=False)
     meal_type = db.Column(db.String(20), nullable=False)
     recipe_id = db.Column(db.Integer, db.ForeignKey('recipe.id'))
-    people_count = db.Column(db.Integer, default=4)
+    people_count = db.Column(db.Integer, nullable=True)
     week_number = db.Column(db.Integer, nullable=False)
     year = db.Column(db.Integer, nullable=False)
     recipe = db.relationship('Recipe')
@@ -184,10 +185,11 @@ def new_recipe():
             filename = secure_filename(image.filename)
             image_path = os.path.join('static/uploads', filename)
             image.save(os.path.join(app.root_path, image_path))
-        
+
+        serves_val = request.form.get('serves', '').strip()
         recipe = Recipe(
             name=request.form['name'],
-            serves=int(request.form.get('serves', 4)),
+            serves=int(serves_val) if serves_val else None,
             cookbook_id=request.form.get('cookbook') if request.form.get('cookbook') else None,
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path,
@@ -319,10 +321,14 @@ def update_menu():
             for meal_type, meal_data in day['meals'].items():
                 if isinstance(meal_data, dict):
                     recipe_id = meal_data.get('recipe_id')
-                    people_count = meal_data.get('people_count', 4)
+                    people_count_raw = meal_data.get('people_count')
+                    try:
+                        people_count = int(people_count_raw) if people_count_raw is not None else None
+                    except (ValueError, TypeError):
+                        people_count = None
                 else:
                     recipe_id = meal_data
-                    people_count = 4
+                    people_count = None
                 
                 if recipe_id:
                     recipe_id = int(recipe_id)
@@ -477,7 +483,8 @@ def edit_recipe(id):
     
     if request.method == 'POST':
         recipe.name = request.form['name']
-        recipe.serves = int(request.form.get('serves', 4))
+        serves_val = request.form.get('serves', '').strip()
+        recipe.serves = int(serves_val) if serves_val else None
         recipe.cookbook_id = request.form.get('cookbook') if request.form.get('cookbook') else None
         recipe.page = request.form['page'] if request.form['page'] else None
         recipe.url = request.form.get('url') or None
@@ -795,11 +802,21 @@ def import_data():
 
 def migrate_db():
     with db.engine.connect() as conn:
-        cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
-        if 'url' not in cols:
-            conn.execute(text('ALTER TABLE recipe ADD COLUMN url TEXT'))
-        if 'instructions' not in cols:
-            conn.execute(text('ALTER TABLE recipe ADD COLUMN instructions TEXT'))
+        recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
+        for col, col_def in [('url', 'TEXT'), ('instructions', 'TEXT'), ('serves', 'INTEGER')]:
+            if col not in recipe_cols:
+                try:
+                    conn.execute(text(f'ALTER TABLE recipe ADD COLUMN {col} {col_def}'))
+                except OperationalError:
+                    pass
+
+        menu_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(menu_item)')).fetchall()]
+        if 'people_count' not in menu_cols:
+            try:
+                conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
+            except OperationalError:
+                pass
+
         conn.commit()
 
 
