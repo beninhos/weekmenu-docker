@@ -180,12 +180,17 @@
   </div>
 </div>
 
-<!-- ── Search bar ──────────────────────────────────────────── -->
-<div class="mb-5">
+<!-- ── Search bar + kookboekfilter ────────────────────────── -->
+<div class="filter-row flex flex-wrap gap-2 mb-5">
   <input type="text" id="recipe-search"
          placeholder="Zoek op naam of kookboek..."
-         oninput="filterRecipes(this.value)"
-         class="w-full md:w-96 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+         oninput="applyFilters()"
+         class="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+         style="min-width:220px; flex:1 1 220px; max-width:380px;">
+  <select id="cookbook-filter" onchange="filterByCookbook(this.value)"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+    <option value="">Alle kookboeken</option>
+  </select>
 </div>
 
 <!-- ── VIEW: GRID ─────────────────────────────────────────── -->
@@ -345,6 +350,7 @@ const DEFAULT_SERVES  = {{ default_serves }};
 
 // ── State ─────────────────────────────────────────────────
 let currentView      = 'grid';
+let currentCookbook  = null;
 let filteredRecipes  = [...RECIPES];
 let cfIndex          = 0;   // coverflow center index
 let activeRecipe     = null;
@@ -401,22 +407,37 @@ function switchView(view) {
 }
 
 // ── Search / filter ────────────────────────────────────────
-function filterRecipes(query) {
-  const q = (query || '').trim().toLowerCase();
-  if (!q) {
-    filteredRecipes = [...RECIPES];
-  } else {
-    const words = q.split(/\s+/);
-    filteredRecipes = RECIPES.filter(r => {
-      const haystack = [r.name, r.cookbook || '', r.cookbook_abbr || ''].join(' ').toLowerCase();
-      return words.every(w => haystack.includes(w));
-    });
-  }
+function applyFilters() {
+  const q     = (document.getElementById('recipe-search').value || '').trim().toLowerCase();
+  const words = q ? q.split(/\s+/) : [];
+  filteredRecipes = RECIPES.filter(r => {
+    const textMatch = !words.length || words.every(w =>
+      [r.name, r.cookbook || '', r.cookbook_abbr || ''].join(' ').toLowerCase().includes(w)
+    );
+    const bookMatch = !currentCookbook || r.cookbook === currentCookbook;
+    return textMatch && bookMatch;
+  });
   cfIndex = 0;
+  if (currentView === 'grid')            renderGrid();
+  else if (currentView === 'coverflow')  renderCoverflow();
+  else                                   renderList();
+}
 
-  if (currentView === 'grid')       renderGrid();
-  else if (currentView === 'coverflow') renderCoverflow();
-  else                               renderList();
+function filterByCookbook(val) {
+  currentCookbook = val || null;
+  applyFilters();
+}
+
+function initCookbookFilter() {
+  const books = [...new Set(RECIPES.map(r => r.cookbook).filter(Boolean))].sort();
+  const sel   = document.getElementById('cookbook-filter');
+  books.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b; opt.textContent = b;
+    sel.appendChild(opt);
+  });
+  // Verberg de dropdown als er maar 0 of 1 kookboek is
+  if (books.length <= 1) sel.style.display = 'none';
 }
 
 // ── Grid render ────────────────────────────────────────────
@@ -689,6 +710,7 @@ async function confirmPlanning() {
     if (data.status === 'success') {
       closePlanPopup();
       showToast('Ingepland voor week ' + payload.week + '!');
+      setTimeout(closeDetail, 350);
     } else {
       const errEl = document.getElementById('popup-error');
       errEl.textContent     = data.message || 'Er ging iets mis.';
@@ -726,6 +748,7 @@ document.addEventListener('keydown', e => {
 
 // ── Init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initCookbookFilter();
   let saved = 'grid';
   try { saved = localStorage.getItem('plannerView') || 'grid'; } catch(e) {}
   switchView(saved);
