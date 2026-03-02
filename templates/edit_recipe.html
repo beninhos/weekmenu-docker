@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="bg-white rounded-lg shadow p-6">
-    <h2 class="text-2xl font-bold mb-6">Recept Bewerken</h2>
+    <h2 class="text-2xl font-extrabold tracking-tight text-gray-900 mb-6">Recept Bewerken</h2>
     
     <form method="POST" enctype="multipart/form-data" class="space-y-6">
         <div>
-            <label class="block text-sm font-medium text-gray-700">Naam</label>
+            <label class="block text-sm font-semibold text-gray-700">Naam</label>
             <input type="text" name="name" required value="{{ recipe.name }}"
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
         </div>
         
         <div>
-            <label class="block text-sm font-medium text-gray-700">Standaard aantal personen</label>
+            <label class="block text-sm font-semibold text-gray-700">Standaard aantal personen</label>
             <input type="number" name="serves" value="{{ recipe.serves or '' }}" min="1" max="12"
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-            <p class="text-gray-600 text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
+            <p class="text-gray-400 text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
         </div>
         
         <div>
-            <label class="block text-sm font-medium text-gray-700">Kookboek</label>
+            <label class="block text-sm font-semibold text-gray-700">Kookboek</label>
             <select name="cookbook" 
                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                 <option value="">Selecteer een kookboek</option>
@@ -32,25 +32,25 @@
         </div>
         
         <div>
-            <label class="block text-sm font-medium text-gray-700">Pagina</label>
+            <label class="block text-sm font-semibold text-gray-700">Pagina</label>
             <input type="number" name="page" value="{{ recipe.page or '' }}"
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-medium text-gray-700">URL (online recept)</label>
+            <label class="block text-sm font-semibold text-gray-700">URL (online recept)</label>
             <input type="url" name="url" value="{{ recipe.url or '' }}" placeholder="https://..."
                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-medium text-gray-700">Bereidingswijze</label>
+            <label class="block text-sm font-semibold text-gray-700">Bereidingswijze</label>
             <textarea name="instructions" rows="6" placeholder="Beschrijf de bereidingsstappen..."
                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">{{ recipe.instructions or '' }}</textarea>
         </div>
 
         <div>
-            <label class="block text-sm font-medium text-gray-700">Receptafbeelding</label>
+            <label class="block text-sm font-semibold text-gray-700">Receptafbeelding</label>
             {% if recipe.image_path %}
             <div class="mb-2">
                 <img src="{{ url_for('static', filename=recipe.image_path.replace('static/', '')) }}" 
@@ -63,7 +63,7 @@
         </div>
         
         <div>
-            <h3 class="text-lg font-medium text-gray-700 mb-2">Ingrediënten</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-2">Ingrediënten</h3>
             <div id="ingredients" class="space-y-4">
                 {% for ri in recipe.ingredients %}
                 <div class="grid grid-cols-12 gap-2">
@@ -79,7 +79,7 @@
                         <input type="text" name="unit[]" value="{{ ri.unit }}"
                                class="block w-full rounded-md border-gray-300 shadow-sm">
                     </div>
-                    <div class="col-span-4">
+                    <div class="col-span-3">
                         <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
                             {% for cat in categories %}
                             <option value="{{ cat }}" {{ 'selected' if ri.ingredient.category == cat }}>
@@ -87,6 +87,10 @@
                             </option>
                             {% endfor %}
                         </select>
+                    </div>
+                    <div class="col-span-1 flex items-center justify-center">
+                        <button type="button" onclick="this.closest('.grid').remove()"
+                                class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -134,10 +138,14 @@ function addIngredient() {
             <input type="text" name="unit[]" placeholder="Eenheid"
                    class="block w-full rounded-md border-gray-300 shadow-sm">
         </div>
-        <div class="col-span-4">
+        <div class="col-span-3">
             <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
                 ${optionsHtml}
             </select>
+        </div>
+        <div class="col-span-1 flex items-center justify-center">
+            <button type="button" onclick="this.closest('.grid').remove()"
+                    class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
         </div>
     `;
     container.appendChild(newRow);

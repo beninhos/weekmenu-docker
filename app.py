@@ -124,6 +124,7 @@ class MenuItem(db.Model):
     people_count = db.Column(db.Integer, nullable=True)
     week_number = db.Column(db.Integer, nullable=False)
     year = db.Column(db.Integer, nullable=False)
+    skip_shopping_list = db.Column(db.Boolean, default=False, nullable=False)
     recipe = db.relationship('Recipe')
 
 class Cookbook(db.Model):
@@ -144,6 +145,16 @@ class QuickAddItem(db.Model):
     year = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     recipe = db.relationship('Recipe')
+
+class CustomShoppingIngredient(db.Model):
+    __tablename__ = 'custom_shopping_ingredient'
+    id = db.Column(db.Integer, primary_key=True)
+    week_number = db.Column(db.Integer, nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False, default=0.0)
+    unit = db.Column(db.String(20), nullable=False, default='')
+    ingredient = db.relationship('Ingredient')
 
 class Settings(db.Model):
     __tablename__ = 'settings'
@@ -186,6 +197,109 @@ def list_cookbook_recipes(id):
 def recipes():
     recipes = Recipe.query.all()
     return render_template('recipes.html', recipes=recipes, categories=PRODUCT_CATEGORIES)
+
+@app.route('/receptenplanner')
+def receptenplanner():
+    recipes = Recipe.query.order_by(Recipe.name).all()
+    today = date.today()
+    current_week = today.isocalendar()[1]
+    current_year = today.year
+
+    default_serves_setting = Settings.query.filter_by(key='default_serves').first()
+    default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else 4
+
+    recipes_json = json.dumps([
+        {
+            'id': r.id,
+            'name': r.name,
+            'serves': r.serves or default_serves,
+            'image_path': r.image_path or '',
+            'cookbook': r.cookbook.name if r.cookbook else None,
+            'cookbook_abbr': r.cookbook.abbreviation if r.cookbook else None,
+            'page': r.page,
+            'url': r.url or '',
+            'instructions': r.instructions or '',
+            'is_favorite': r.is_favorite,
+            'ingredients': [
+                {
+                    'id': ri.id,
+                    'name': ri.ingredient.name,
+                    'amount': ri.amount,
+                    'unit': ri.unit,
+                    'category': ri.ingredient.category
+                }
+                for ri in r.ingredients
+            ]
+        }
+        for r in recipes
+    ], ensure_ascii=False)
+
+    return render_template('receptenplanner.html',
+                           recipes_json=recipes_json,
+                           current_week=current_week,
+                           current_year=current_year,
+                           default_serves=default_serves)
+
+@app.route('/api/planner/plan', methods=['POST'])
+def planner_plan():
+    try:
+        data = request.get_json()
+        recipe_id    = int(data['recipe_id'])
+        day          = int(data['day'])
+        meal_type    = data['meal_type']
+        week         = int(data['week'])
+        year         = int(data['year'])
+        people_count = int(data.get('people_count') or 4)
+        ingredient_ids = [int(i) for i in data.get('ingredient_ids', [])]
+
+        recipe = Recipe.query.get_or_404(recipe_id)
+
+        # Upsert the MenuItem with skip_shopping_list=True
+        existing = MenuItem.query.filter_by(
+            week_number=week, year=year, day_of_week=day, meal_type=meal_type
+        ).first()
+        if existing:
+            existing.recipe_id = recipe_id
+            existing.people_count = people_count
+            existing.skip_shopping_list = True
+        else:
+            db.session.add(MenuItem(
+                day_of_week=day, meal_type=meal_type,
+                recipe_id=recipe_id, people_count=people_count,
+                week_number=week, year=year,
+                skip_shopping_list=True
+            ))
+
+        # Update usage stats
+        recipe.usage_count = (recipe.usage_count or 0) + 1
+        recipe.last_used = datetime.now()
+
+        # Replace CustomShoppingIngredients for this recipe's ingredients in this week
+        own_ingredient_ids = [ri.ingredient_id for ri in recipe.ingredients]
+        if own_ingredient_ids:
+            CustomShoppingIngredient.query.filter(
+                CustomShoppingIngredient.week_number == week,
+                CustomShoppingIngredient.year == year,
+                CustomShoppingIngredient.ingredient_id.in_(own_ingredient_ids)
+            ).delete(synchronize_session='fetch')
+
+        # Add checked ingredients as CustomShoppingIngredients
+        multiplier = (people_count / recipe.serves) if recipe.serves else 1.0
+        for ri in recipe.ingredients:
+            if ri.id in ingredient_ids:
+                db.session.add(CustomShoppingIngredient(
+                    week_number=week, year=year,
+                    ingredient_id=ri.ingredient_id,
+                    amount=round(ri.amount * multiplier, 4),
+                    unit=ri.unit
+                ))
+
+        db.session.commit()
+        return jsonify({'status': 'success'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
 
 @app.route('/recipe/new', methods=['GET', 'POST'])
 def new_recipe():
@@ -467,8 +581,10 @@ def shopping_list(year, week):
                 return 1
         return 1
 
-    # Process regular menu items
+    # Process regular menu items (skip planner-sourced items)
     for item in menu_items:
+        if item.skip_shopping_list:
+            continue
         if item.recipe:
             multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
@@ -509,12 +625,21 @@ def shopping_list(year, week):
                     shopping_dict[key] += adjusted_amount
                 else:
                     shopping_dict[key] = adjusted_amount
+    # Process custom shopping ingredients (from Receptenplanner)
+    custom_items = CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all()
+    for ci in custom_items:
+        key = (ci.ingredient.name, ci.unit, ci.ingredient.category)
+        if key in shopping_dict:
+            shopping_dict[key] += ci.amount
+        else:
+            shopping_dict[key] = ci.amount
+
     shopping_list = [
     {
-        'name': k[0], 
+        'name': k[0],
         'amount': v,
         'amount_display': format_amount(v),  # Dit is nieuw
-        'unit': k[1], 
+        'unit': k[1],
         'category': k[2]
     }
     for k, v in shopping_dict.items()
@@ -1418,6 +1543,11 @@ def migrate_db():
         if 'people_count' not in menu_cols:
             try:
                 conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
+            except OperationalError:
+                pass
+        if 'skip_shopping_list' not in menu_cols:
+            try:
+                conn.execute(text('ALTER TABLE menu_item ADD COLUMN skip_shopping_list BOOLEAN NOT NULL DEFAULT 0'))
             except OperationalError:
                 pass
 

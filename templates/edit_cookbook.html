@@ -2,11 +2,11 @@
 
 {% block content %}
 <div class="mb-6">
-    <h1 class="text-2xl font-bold mb-4">Kookboek Bewerken</h1>
+    <h1 class="text-2xl font-extrabold tracking-tight text-gray-900 mb-4">Kookboek Bewerken</h1>
     
     <form method="POST" action="{{ url_for('edit_cookbook', id=cookbook.id) }}" enctype="multipart/form-data" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
         <div class="mb-4">
-            <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
+            <label class="block text-sm font-semibold text-gray-700 mb-1" for="name">
                 Naam
             </label>
             <input type="text" id="name" name="name" value="{{ cookbook.name }}" required
@@ -14,16 +14,16 @@
         </div>
         
         <div class="mb-4">
-            <label class="block text-gray-700 text-sm font-bold mb-2" for="abbreviation">
+            <label class="block text-sm font-semibold text-gray-700 mb-1" for="abbreviation">
                 Afkorting (voor weekmenu)
             </label>
             <input type="text" id="abbreviation" name="abbreviation" value="{{ cookbook.abbreviation or '' }}" maxlength="10" placeholder="bijv. SWJ"
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            <p class="text-gray-600 text-xs mt-1">Kort (max 10 tekens) voor in weekmenu.</p>
+            <p class="text-gray-400 text-xs mt-1">Kort (max 10 tekens) voor in weekmenu.</p>
         </div>
         
         <div class="mb-6">
-            <label class="block text-gray-700 text-sm font-bold mb-2" for="image">
+            <label class="block text-sm font-semibold text-gray-700 mb-1" for="image">
                 Kookboek Afbeelding
             </label>
             
@@ -38,7 +38,7 @@
             
             <input type="file" id="image" name="image" accept="image/*"
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            <p class="text-gray-600 text-xs mt-1">
+            <p class="text-gray-400 text-xs mt-1">
                 {% if cookbook.image_path %}
                 Kies een nieuwe afbeelding om de huidige te vervangen (optioneel)
                 {% else %}

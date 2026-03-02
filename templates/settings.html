@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="max-w-2xl mx-auto space-y-6">
-    <h2 class="text-2xl font-bold">Instellingen</h2>
+    <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Instellingen</h2>
 
     {% with messages = get_flashed_messages() %}
     {% if messages %}
@@ -13,7 +13,7 @@
 
     <!-- Portie-instellingen -->
     <div class="bg-white rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold mb-4 text-gray-700">Weekmenu</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Weekmenu</h3>
         <form method="POST" class="space-y-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700">
@@ -36,7 +36,7 @@
 
     <!-- Statistieken -->
     <div class="bg-white rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold mb-4 text-gray-700">Database</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Database</h3>
         <div class="grid grid-cols-3 gap-4 text-center">
             <div class="bg-blue-50 rounded-lg p-4">
                 <div class="text-3xl font-bold text-blue-600">{{ stats.recipes }}</div>
@@ -55,7 +55,7 @@
 
     <!-- Data beheer -->
     <div class="bg-white rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold mb-4 text-gray-700">Data beheer</h3>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Data beheer</h3>
         <div class="space-y-6">
 
             <!-- Export JSON -->

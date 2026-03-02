@@ -1,0 +1,735 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  /* View containers – only one visible at a time */
+  #view-grid      { display: none; }
+  #view-coverflow { display: none; }
+  #view-list      { display: none; }
+
+  /* ── Grid cards ───────────────────────────────────────── */
+  .recipe-card-grid {
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: #e5e7eb;
+    aspect-ratio: 3 / 4;
+  }
+  .recipe-card-grid img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+    display: block;
+  }
+  .recipe-card-grid:hover img { transform: scale(1.06); }
+  .recipe-card-grid .card-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.10) 55%, transparent 100%);
+    display: flex; flex-direction: column;
+    justify-content: flex-end;
+    padding: 0.65rem;
+  }
+  .recipe-card-grid .card-placeholder {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── Coverflow ────────────────────────────────────────── */
+  #coverflow-outer {
+    position: relative;
+    padding: 0 3rem;
+  }
+  #coverflow-track {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 340px;
+    position: relative;
+    perspective: 1000px;
+    overflow: hidden;
+  }
+  .coverflow-card {
+    position: absolute;
+    width: 210px;
+    height: 290px;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    cursor: pointer;
+    background: #d1d5db;
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                opacity 0.4s ease,
+                box-shadow 0.4s ease;
+    will-change: transform, opacity;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  .coverflow-card img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .coverflow-card .cf-placeholder {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .coverflow-card .cf-label {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.75), transparent);
+    color: white;
+    padding: 0.5rem 0.6rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    display: none;
+  }
+  /* Positions */
+  .cf-pos-0  { transform: translateX(0)      rotateY(0deg)    scale(1);    opacity: 1;    z-index: 10; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .cf-pos-1  { transform: translateX(260px)  rotateY(-40deg)  scale(0.82); opacity: 0.80; z-index: 8;  }
+  .cf-pos-m1 { transform: translateX(-260px) rotateY(40deg)   scale(0.82); opacity: 0.80; z-index: 8;  }
+  .cf-pos-2  { transform: translateX(440px)  rotateY(-55deg)  scale(0.65); opacity: 0.50; z-index: 6;  }
+  .cf-pos-m2 { transform: translateX(-440px) rotateY(55deg)   scale(0.65); opacity: 0.50; z-index: 6;  }
+  .cf-pos-hidden      { transform: translateX(650px)  rotateY(-70deg) scale(0.5); opacity: 0; z-index: 1; pointer-events: none; }
+  .cf-pos-hidden-left { transform: translateX(-650px) rotateY(70deg)  scale(0.5); opacity: 0; z-index: 1; pointer-events: none; }
+
+  /* ── Detail panel ─────────────────────────────────────── */
+  #detail-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 100;
+    display: none;
+  }
+  #detail-panel {
+    position: fixed;
+    top: 0; right: 0;
+    width: 420px;
+    height: 100vh;
+    background: white;
+    box-shadow: -4px 0 28px rgba(0,0,0,0.18);
+    z-index: 110;
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #detail-panel.open { transform: translateX(0); }
+  @media (max-width: 440px) {
+    #detail-panel { width: 100%; }
+  }
+
+  /* Ingredient checklist: unchecked = already have it = strikethrough */
+  .ing-item label {
+    text-decoration: line-through;
+    color: #9ca3af;
+  }
+  .ing-item input[type=checkbox]:checked + label {
+    text-decoration: none;
+    color: #374151;
+  }
+
+  /* ── Plan popup ────────────────────────────────────────── */
+  #plan-popup {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #plan-popup.open { display: flex; }
+
+  /* ── Toast ─────────────────────────────────────────────── */
+  #toast {
+    position: fixed;
+    bottom: 1.5rem; right: 1.5rem;
+    background: #10b981;
+    color: white;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    z-index: 300;
+    opacity: 0;
+    transform: translateY(0.75rem);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* View toggle button active state */
+  .view-btn { transition: background-color 0.15s, color 0.15s; }
+  .view-btn.active { background-color: #2563eb; color: white; }
+</style>
+
+<!-- ── Page header ─────────────────────────────────────────── -->
+<div class="flex flex-wrap justify-between items-center mb-5 gap-3">
+  <h1 class="text-2xl font-extrabold tracking-tight text-gray-900">Receptenplanner</h1>
+  <div class="flex gap-1 bg-gray-100 p-1 rounded-lg">
+    <button id="btn-grid" class="view-btn px-3 py-1.5 text-sm font-medium rounded-md text-gray-600" onclick="switchView('grid')" title="Kaartjes">
+      <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+      Grid
+    </button>
+    <button id="btn-coverflow" class="view-btn px-3 py-1.5 text-sm font-medium rounded-md text-gray-600" onclick="switchView('coverflow')" title="Cover flow">
+      <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4"/></svg>
+      Cover
+    </button>
+    <button id="btn-list" class="view-btn px-3 py-1.5 text-sm font-medium rounded-md text-gray-600" onclick="switchView('list')" title="Lijst">
+      <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+      Lijst
+    </button>
+  </div>
+</div>
+
+<!-- ── Search bar ──────────────────────────────────────────── -->
+<div class="mb-5">
+  <input type="text" id="recipe-search"
+         placeholder="Zoek op naam of kookboek..."
+         oninput="filterRecipes(this.value)"
+         class="w-full md:w-96 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+</div>
+
+<!-- ── VIEW: GRID ─────────────────────────────────────────── -->
+<div id="view-grid"
+     style="display:none; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem;">
+</div>
+
+<!-- ── VIEW: COVERFLOW ───────────────────────────────────── -->
+<div id="view-coverflow" style="display:none;">
+  <div id="coverflow-outer">
+    <button onclick="coverflowPrev()"
+            class="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-white rounded-full shadow-md w-10 h-10 flex items-center justify-center text-gray-600 hover:text-gray-900 hover:shadow-lg transition-shadow"
+            style="transform: translateY(-50%);">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    </button>
+    <button onclick="coverflowNext()"
+            class="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-white rounded-full shadow-md w-10 h-10 flex items-center justify-center text-gray-600 hover:text-gray-900 hover:shadow-lg transition-shadow"
+            style="transform: translateY(-50%);">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <div id="coverflow-track"></div>
+  </div>
+  <div class="text-center mt-5">
+    <p id="cf-title" class="text-lg font-bold text-gray-900"></p>
+    <p id="cf-sub"   class="text-sm text-gray-500 mt-0.5"></p>
+    <button onclick="openDetail(cfIndex >= 0 && filteredRecipes[cfIndex] ? filteredRecipes[cfIndex].id : null)"
+            class="mt-3 text-sm text-blue-600 hover:underline font-medium">
+      Details &amp; plannen →
+    </button>
+  </div>
+  <p class="text-center text-xs text-gray-400 mt-2">Gebruik pijltjestoetsen of klik de pijlen</p>
+</div>
+
+<!-- ── VIEW: LIJST ───────────────────────────────────────── -->
+<div id="view-list" style="display:none;" class="space-y-2">
+</div>
+
+<!-- ── DETAIL PANEL ──────────────────────────────────────── -->
+<div id="detail-overlay" onclick="closeDetail()"></div>
+<div id="detail-panel">
+  <button onclick="closeDetail()"
+          class="absolute top-3 right-3 bg-white bg-opacity-90 rounded-full w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-800 shadow text-lg font-bold z-10"
+          style="line-height:1;">&times;</button>
+
+  <!-- Hero image -->
+  <div id="dp-img-wrap" class="relative w-full flex-shrink-0" style="height:220px; background:#e5e7eb;">
+    <img id="dp-img" src="" alt="" class="w-full h-full object-cover" style="display:none;">
+    <div id="dp-placeholder" class="w-full h-full flex items-center justify-center">
+      <span id="dp-initial" class="text-7xl font-extrabold text-gray-300"></span>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="p-5 flex flex-col flex-1">
+    <h2 id="dp-name" class="text-xl font-extrabold text-gray-900 mb-2 leading-tight"></h2>
+
+    <div class="flex flex-wrap gap-x-3 gap-y-1 items-center mb-4 text-sm text-gray-500">
+      <span id="dp-cookbook"></span>
+      <span id="dp-page"></span>
+      <a id="dp-url" href="#" target="_blank" rel="noopener noreferrer"
+         class="text-blue-600 hover:underline" style="display:none;">Online recept ↗</a>
+      <span id="dp-serves" class="bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 text-xs font-medium"></span>
+    </div>
+
+    <!-- Instructions -->
+    <div id="dp-instr-wrap" class="mb-4" style="display:none;">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Bereidingswijze</h3>
+      <div id="dp-instr" class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap overflow-y-auto pr-1" style="max-height:9rem;"></div>
+    </div>
+
+    <!-- Ingredients checklist -->
+    <div class="mb-5 flex-1">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Ingrediënten</h3>
+        <div class="flex gap-3 text-xs">
+          <button onclick="toggleAll(true)"  class="text-blue-600 hover:underline">Alles aan</button>
+          <button onclick="toggleAll(false)" class="text-gray-400 hover:underline">Alles uit</button>
+        </div>
+      </div>
+      <div id="dp-ingredients" class="space-y-0.5 overflow-y-auto pr-1" style="max-height:14rem;"></div>
+    </div>
+
+    <button onclick="openPlanPopup()"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mt-auto">
+      Plan dit recept
+    </button>
+  </div>
+</div>
+
+<!-- ── PLAN POPUP ─────────────────────────────────────────── -->
+<div id="plan-popup">
+  <div class="bg-white rounded-xl shadow-2xl p-6 w-full mx-4" style="max-width:380px;">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-bold text-gray-900">Recept plannen</h3>
+      <button onclick="closePlanPopup()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+
+    <p class="text-sm text-gray-500 mb-4">
+      <span id="popup-recipe-name" class="font-semibold text-gray-900"></span>
+    </p>
+
+    <div class="space-y-3 mb-5">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Week</label>
+        <input type="number" id="popup-week" min="1" max="53"
+               oninput="updateWeekRange()"
+               class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p id="popup-week-range" class="text-xs text-gray-400 mt-1"></p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Dag</label>
+        <select id="popup-day" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="0">Maandag</option>
+          <option value="1">Dinsdag</option>
+          <option value="2">Woensdag</option>
+          <option value="3">Donderdag</option>
+          <option value="4">Vrijdag</option>
+          <option value="5">Zaterdag</option>
+          <option value="6">Zondag</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Maaltijd</label>
+        <select id="popup-meal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="ontbijt">Ontbijt</option>
+          <option value="lunch">Lunch</option>
+          <option value="diner" selected>Diner</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Personen</label>
+        <input type="number" id="popup-persons" min="1" max="20" value="4"
+               class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+    </div>
+
+    <button id="popup-confirm-btn" onclick="confirmPlanning()"
+            class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors">
+      Bevestigen
+    </button>
+    <p id="popup-error" class="text-red-500 text-sm mt-2" style="display:none;"></p>
+  </div>
+</div>
+
+<!-- ── TOAST ──────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────
+const RECIPES         = {{ recipes_json | safe }};
+const CURRENT_WEEK    = {{ current_week }};
+const CURRENT_YEAR    = {{ current_year }};
+const DEFAULT_SERVES  = {{ default_serves }};
+
+// ── State ─────────────────────────────────────────────────
+let currentView      = 'grid';
+let filteredRecipes  = [...RECIPES];
+let cfIndex          = 0;   // coverflow center index
+let activeRecipe     = null;
+
+// ── Utilities ─────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatAmt(amount) {
+  if (amount === null || amount === undefined || amount === 0) return '';
+  const r = Math.round(amount * 100) / 100;
+  return Number.isInteger(r) ? String(r) : String(parseFloat(r.toFixed(2)));
+}
+
+function cardImage(r, w, h) {
+  if (r.image_path) {
+    return `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy"
+                 style="width:${w};height:${h};object-fit:cover;display:block;">`;
+  }
+  return `<div style="width:${w};height:${h};display:flex;align-items:center;justify-content:center;">
+    <span style="font-size:2.5rem;font-weight:800;color:#d1d5db;">${escHtml(r.name[0].toUpperCase())}</span>
+  </div>`;
+}
+
+// ── View switching ─────────────────────────────────────────
+function switchView(view) {
+  ['grid','coverflow','list'].forEach(v => {
+    const el = document.getElementById('view-' + v);
+    el.style.display = 'none';
+    document.getElementById('btn-' + v).classList.remove('active');
+  });
+
+  currentView = view;
+  const container = document.getElementById('view-' + view);
+  document.getElementById('btn-' + view).classList.add('active');
+
+  if (view === 'grid') {
+    container.style.display = 'grid';
+    renderGrid();
+  } else if (view === 'coverflow') {
+    container.style.display = 'block';
+    renderCoverflow();
+  } else {
+    container.style.display = 'block';
+    renderList();
+  }
+
+  try { localStorage.setItem('plannerView', view); } catch(e) {}
+}
+
+// ── Search / filter ────────────────────────────────────────
+function filterRecipes(query) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) {
+    filteredRecipes = [...RECIPES];
+  } else {
+    const words = q.split(/\s+/);
+    filteredRecipes = RECIPES.filter(r => {
+      const haystack = [r.name, r.cookbook || '', r.cookbook_abbr || ''].join(' ').toLowerCase();
+      return words.every(w => haystack.includes(w));
+    });
+  }
+  cfIndex = 0;
+
+  if (currentView === 'grid')       renderGrid();
+  else if (currentView === 'coverflow') renderCoverflow();
+  else                               renderList();
+}
+
+// ── Grid render ────────────────────────────────────────────
+function renderGrid() {
+  const container = document.getElementById('view-grid');
+  if (!filteredRecipes.length) {
+    container.innerHTML = '<p class="text-gray-400 text-sm col-span-full">Geen recepten gevonden.</p>';
+    return;
+  }
+  container.innerHTML = filteredRecipes.map(r => `
+    <div class="recipe-card-grid" onclick="openDetail(${r.id})">
+      ${r.image_path
+        ? `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy">`
+        : `<div class="card-placeholder"><span style="font-size:3rem;font-weight:800;color:#d1d5db;">${escHtml(r.name[0].toUpperCase())}</span></div>`
+      }
+      <div class="card-overlay">
+        <span style="color:white;font-weight:600;font-size:0.8rem;line-height:1.25;
+                     overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+          ${escHtml(r.name)}
+        </span>
+        <span style="display:inline-block;margin-top:0.3rem;font-size:0.7rem;color:white;
+                     background:rgba(37,99,235,0.85);border-radius:9999px;padding:0.1rem 0.5rem;width:max-content;">
+          ${r.serves} pers.
+        </span>
+      </div>
+      ${r.is_favorite ? '<span style="position:absolute;top:0.4rem;right:0.5rem;font-size:1.1rem;">⭐</span>' : ''}
+    </div>
+  `).join('');
+}
+
+// ── Coverflow ──────────────────────────────────────────────
+const CF_POS = ['cf-pos-m2','cf-pos-m1','cf-pos-0','cf-pos-1','cf-pos-2'];
+
+function renderCoverflow() {
+  const track = document.getElementById('coverflow-track');
+  track.innerHTML = '';
+  filteredRecipes.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'coverflow-card';
+    div.dataset.idx = i;
+    div.innerHTML = r.image_path
+      ? `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy">`
+      : `<div class="cf-placeholder" style="background:#e5e7eb;">
+           <span style="font-size:4rem;font-weight:800;color:#d1d5db;">${escHtml(r.name[0].toUpperCase())}</span>
+         </div>`;
+    div.innerHTML += `<div class="cf-label">${escHtml(r.name)}</div>`;
+    div.addEventListener('click', () => {
+      const offset = i - cfIndex;
+      if (offset === 0) openDetail(r.id);
+      else coverflowGoTo(i);
+    });
+    track.appendChild(div);
+  });
+  updateCoverflowPositions();
+  updateCoverflowCaption();
+}
+
+function updateCoverflowPositions() {
+  const cards = document.querySelectorAll('.coverflow-card');
+  cards.forEach(card => {
+    const i      = parseInt(card.dataset.idx);
+    const offset = i - cfIndex;
+    // Remove all pos classes
+    card.classList.remove('cf-pos-0','cf-pos-1','cf-pos-m1','cf-pos-2','cf-pos-m2',
+                          'cf-pos-hidden','cf-pos-hidden-left');
+    if      (offset ===  0) card.classList.add('cf-pos-0');
+    else if (offset ===  1) card.classList.add('cf-pos-1');
+    else if (offset === -1) card.classList.add('cf-pos-m1');
+    else if (offset ===  2) card.classList.add('cf-pos-2');
+    else if (offset === -2) card.classList.add('cf-pos-m2');
+    else if (offset  >   2) card.classList.add('cf-pos-hidden');
+    else                    card.classList.add('cf-pos-hidden-left');
+  });
+}
+
+function updateCoverflowCaption() {
+  const r = filteredRecipes[cfIndex];
+  if (!r) {
+    document.getElementById('cf-title').textContent = '';
+    document.getElementById('cf-sub').textContent = '';
+    return;
+  }
+  document.getElementById('cf-title').textContent = r.name;
+  let sub = '';
+  if (r.cookbook) sub += r.cookbook;
+  if (r.page)     sub += (sub ? ' · ' : '') + 'p. ' + r.page;
+  sub += (sub ? ' · ' : '') + r.serves + ' pers.';
+  document.getElementById('cf-sub').textContent = sub;
+}
+
+function coverflowGoTo(index) {
+  cfIndex = Math.max(0, Math.min(index, filteredRecipes.length - 1));
+  updateCoverflowPositions();
+  updateCoverflowCaption();
+}
+function coverflowNext() { coverflowGoTo(cfIndex + 1); }
+function coverflowPrev() { coverflowGoTo(cfIndex - 1); }
+
+// ── List render ────────────────────────────────────────────
+function renderList() {
+  const container = document.getElementById('view-list');
+  if (!filteredRecipes.length) {
+    container.innerHTML = '<p class="text-gray-400 text-sm">Geen recepten gevonden.</p>';
+    return;
+  }
+  container.innerHTML = filteredRecipes.map(r => `
+    <div class="flex items-center gap-3 p-3 bg-white rounded-lg shadow-sm hover:shadow-md cursor-pointer transition-shadow"
+         onclick="openDetail(${r.id})">
+      <div class="flex-shrink-0 rounded-lg overflow-hidden" style="width:56px;height:56px;background:#e5e7eb;">
+        ${r.image_path
+          ? `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;">`
+          : `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;">
+               <span style="font-size:1.4rem;font-weight:800;color:#d1d5db;">${escHtml(r.name[0].toUpperCase())}</span>
+             </div>`
+        }
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-gray-900 truncate text-sm">${escHtml(r.name)}</p>
+        <p class="text-xs text-gray-500 truncate">
+          ${r.cookbook ? escHtml(r.cookbook) : ''}${r.page ? ' p. ' + r.page : ''}${(r.cookbook || r.page) ? ' · ' : ''}${r.serves} pers.
+        </p>
+      </div>
+      ${r.is_favorite ? '<span class="text-yellow-400 text-base ml-1 flex-shrink-0">⭐</span>' : ''}
+    </div>
+  `).join('');
+}
+
+// ── Detail panel ───────────────────────────────────────────
+function openDetail(recipeId) {
+  if (!recipeId) return;
+  const r = RECIPES.find(x => x.id === recipeId);
+  if (!r) return;
+  activeRecipe = r;
+
+  // Image
+  const img  = document.getElementById('dp-img');
+  const ph   = document.getElementById('dp-placeholder');
+  if (r.image_path) {
+    img.src = '/' + r.image_path;
+    img.style.display = 'block';
+    ph.style.display  = 'none';
+  } else {
+    img.style.display = 'none';
+    ph.style.display  = 'flex';
+    document.getElementById('dp-initial').textContent = r.name[0].toUpperCase();
+  }
+
+  document.getElementById('dp-name').textContent = r.name;
+  document.getElementById('dp-cookbook').textContent = r.cookbook || '';
+  document.getElementById('dp-page').textContent     = r.page ? 'p. ' + r.page : '';
+  document.getElementById('dp-serves').textContent   = r.serves + ' personen';
+
+  const urlEl = document.getElementById('dp-url');
+  if (r.url) {
+    urlEl.href           = r.url;
+    urlEl.style.display  = 'inline';
+  } else {
+    urlEl.style.display  = 'none';
+  }
+
+  const instrWrap = document.getElementById('dp-instr-wrap');
+  if (r.instructions) {
+    document.getElementById('dp-instr').textContent = r.instructions;
+    instrWrap.style.display = 'block';
+  } else {
+    instrWrap.style.display = 'none';
+  }
+
+  // Ingredients checklist (all pre-checked)
+  document.getElementById('dp-ingredients').innerHTML = r.ingredients.map(ing => `
+    <div class="ing-item flex items-center gap-2 py-0.5">
+      <input type="checkbox" id="ing-${ing.id}" value="${ing.id}" checked
+             style="width:1rem;height:1rem;border-radius:0.25rem;accent-color:#2563eb;flex-shrink:0;cursor:pointer;">
+      <label for="ing-${ing.id}" class="text-sm text-gray-700 cursor-pointer select-none">
+        ${formatAmt(ing.amount) ? formatAmt(ing.amount) + ' ' : ''}${escHtml(ing.unit)} ${escHtml(ing.name)}
+      </label>
+    </div>
+  `).join('') || '<p class="text-sm text-gray-400">Geen ingrediënten.</p>';
+
+  // Pre-fill popup persons: recipe serves, or fall back to household default
+  document.getElementById('popup-persons').value = r.serves || DEFAULT_SERVES;
+
+  // Open
+  document.getElementById('detail-overlay').style.display = 'block';
+  document.getElementById('detail-panel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+  document.getElementById('detail-overlay').style.display = 'none';
+  activeRecipe = null;
+}
+
+function toggleAll(checked) {
+  document.querySelectorAll('#dp-ingredients input[type=checkbox]')
+    .forEach(cb => { cb.checked = checked; });
+}
+
+// ── Week date helpers ──────────────────────────────────────
+const NL_MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+function getISOWeekMonday(week, year) {
+  const jan4 = new Date(year, 0, 4);
+  const day  = jan4.getDay() || 7;
+  const mon  = new Date(jan4);
+  mon.setDate(jan4.getDate() - (day - 1) + (week - 1) * 7);
+  return mon;
+}
+
+function weekDateRange(week, year) {
+  const mon = getISOWeekMonday(week, year);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const fmt = d => d.getDate() + ' ' + NL_MONTHS[d.getMonth()];
+  return fmt(mon) + ' – ' + fmt(sun);
+}
+
+function updateWeekRange() {
+  const week = parseInt(document.getElementById('popup-week').value);
+  const el   = document.getElementById('popup-week-range');
+  if (week >= 1 && week <= 53) {
+    el.textContent = weekDateRange(week, CURRENT_YEAR);
+  } else {
+    el.textContent = '';
+  }
+}
+
+// ── Plan popup ─────────────────────────────────────────────
+function openPlanPopup() {
+  if (!activeRecipe) return;
+  document.getElementById('popup-recipe-name').textContent = activeRecipe.name;
+  document.getElementById('popup-week').value = CURRENT_WEEK;
+  document.getElementById('popup-error').style.display = 'none';
+  updateWeekRange();
+  document.getElementById('plan-popup').classList.add('open');
+}
+
+function closePlanPopup() {
+  document.getElementById('plan-popup').classList.remove('open');
+}
+
+async function confirmPlanning() {
+  if (!activeRecipe) return;
+
+  const btn = document.getElementById('popup-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Bezig...';
+
+  const checkedIds = Array.from(
+    document.querySelectorAll('#dp-ingredients input[type=checkbox]:checked')
+  ).map(cb => parseInt(cb.value));
+
+  const payload = {
+    recipe_id:      activeRecipe.id,
+    day:            parseInt(document.getElementById('popup-day').value),
+    meal_type:      document.getElementById('popup-meal').value,
+    week:           parseInt(document.getElementById('popup-week').value),
+    year:           CURRENT_YEAR,
+    people_count:   parseInt(document.getElementById('popup-persons').value) || 4,
+    ingredient_ids: checkedIds
+  };
+
+  try {
+    const resp = await fetch('/api/planner/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+
+    if (data.status === 'success') {
+      closePlanPopup();
+      showToast('Ingepland voor week ' + payload.week + '!');
+    } else {
+      const errEl = document.getElementById('popup-error');
+      errEl.textContent     = data.message || 'Er ging iets mis.';
+      errEl.style.display   = 'block';
+    }
+  } catch(e) {
+    const errEl = document.getElementById('popup-error');
+    errEl.textContent   = 'Netwerkfout, probeer opnieuw.';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Bevestigen';
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Keyboard navigation ────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('plan-popup').classList.contains('open')) { closePlanPopup(); return; }
+    if (activeRecipe) { closeDetail(); return; }
+  }
+  if (currentView !== 'coverflow' || activeRecipe) return;
+  if (e.key === 'ArrowRight') coverflowNext();
+  if (e.key === 'ArrowLeft')  coverflowPrev();
+  if (e.key === 'Enter' && filteredRecipes[cfIndex]) openDetail(filteredRecipes[cfIndex].id);
+});
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  let saved = 'grid';
+  try { saved = localStorage.getItem('plannerView') || 'grid'; } catch(e) {}
+  switchView(saved);
+});
+</script>
+
+{% endblock %}

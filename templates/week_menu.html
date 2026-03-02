@@ -2,7 +2,7 @@
 {% block content %}
 <div class="bg-white rounded-lg shadow p-6">
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
-        <h2 class="text-2xl font-bold">Weekmenu - Week {{ week }}</h2>
+        <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Weekmenu — Week {{ week }}</h2>
         <div class="flex space-x-4">
             <a href="{{ url_for('shopping_list', year=year, week=week) }}" 
                class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-sm md:text-base">
@@ -30,7 +30,7 @@
     <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
         {% for day_index, day_name in days %}
         <div class="border p-4 rounded hover:shadow-md transition-shadow duration-200">
-            <h3 class="font-bold mb-2">{{ day_name }}</h3>
+            <h3 class="font-semibold text-gray-800 mb-2">{{ day_name }}</h3>
             <div class="space-y-2">
                 {% for meal_code, meal_name in meal_types %}
                 <div class="relative">

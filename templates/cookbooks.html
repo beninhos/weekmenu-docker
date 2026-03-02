@@ -7,7 +7,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
 
 <div class="mb-6">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold">Kookboeken</h1>
+        <h1 class="text-2xl font-extrabold tracking-tight text-gray-900">Kookboeken</h1>
         <a href="{{ url_for('new_cookbook') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
             Nieuw Kookboek
         </a>
@@ -33,7 +33,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
                 {% endif %}
             </div>
             <div class="p-4">
-                <h3 class="text-lg font-semibold text-gray-900 mb-1">{{ cookbook.name }}</h3>
+                <h3 class="font-semibold text-gray-900 mb-1">{{ cookbook.name }}</h3>
                 {% if cookbook.is_archived %}
                 <span class="inline-block text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded mb-1">Gearchiveerd</span>
                 {% endif %}
@@ -103,7 +103,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
 
     {% if archived_cookbooks %}
     <div class="mt-10">
-        <h2 class="text-lg font-semibold text-gray-500 mb-4">Gearchiveerde kookboeken</h2>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">Gearchiveerde kookboeken</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {% for cookbook in archived_cookbooks %}
             {{ cookbook_card(cookbook) }}

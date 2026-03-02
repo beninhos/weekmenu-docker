@@ -2,7 +2,7 @@
 {% block content %}
 <div class="bg-white rounded-lg shadow p-6">
     <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold">Boodschappenlijst - Week {{ week }}</h2>
+        <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Boodschappenlijst — Week {{ week }}</h2>
         <button onclick="window.print()" 
                 class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
             Printen
@@ -10,7 +10,7 @@
     </div>
     
     {% for group in grouped_shopping_list %}
-        <h3 class="font-bold text-lg mt-6 mb-3">{{ group.category }}</h3>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-6 mb-3">{{ group.category }}</h3>
         <div class="space-y-2">
             {% for item in group.producten %}
             <div class="flex items-center">
