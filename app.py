@@ -182,6 +182,12 @@ def index():
     year = today.year
     return redirect(url_for('week_menu', year=year, week=week_number))
 
+@app.route('/boodschappenlijst')
+def boodschappenlijst_redirect():
+    today = date.today()
+    iso = today.isocalendar()
+    return redirect(url_for('shopping_list', year=iso[0], week=iso[1]))
+
 @app.route('/week/<int:year>/<int:week>')
 def week_menu(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
@@ -540,6 +546,20 @@ def update_menu():
                     )
                     db.session.add(menu_item)
         
+        # Verwijder CustomShoppingIngredients voor recepten die uit het menu zijn gehaald
+        new_recipe_ids = {pos[2] for pos in new_positions}
+        removed_recipe_ids = {pos[2] for pos in old_positions} - new_recipe_ids
+        for rid in removed_recipe_ids:
+            recipe = Recipe.query.get(rid)
+            if recipe:
+                ing_ids = [ri.ingredient_id for ri in recipe.ingredients]
+                if ing_ids:
+                    CustomShoppingIngredient.query.filter(
+                        CustomShoppingIngredient.week_number == data['week'],
+                        CustomShoppingIngredient.year == data['year'],
+                        CustomShoppingIngredient.ingredient_id.in_(ing_ids)
+                    ).delete(synchronize_session='fetch')
+
         truly_new_positions = new_positions - old_positions
         
         for position in truly_new_positions:
@@ -561,6 +581,20 @@ def update_menu():
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
+@app.route('/api/shopping-list/<int:year>/<int:week>/clear', methods=['POST'])
+def clear_shopping_list(year, week):
+    """Wis de boodschappenlijst: verberg alle huidige items zonder recepten uit weekmenu te verwijderen."""
+    try:
+        MenuItem.query.filter_by(
+            week_number=week, year=year, skip_shopping_list=False
+        ).update({'skip_shopping_list': True})
+        CustomShoppingIngredient.query.filter_by(week_number=week, year=year).delete()
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
 @app.route('/clear_week_menu', methods=['POST'])
 def clear_week_menu():
     """Clear all menu items for a specific week"""
@@ -573,7 +607,8 @@ def clear_week_menu():
             week_number=week,
             year=year
         ).delete()
-        
+        CustomShoppingIngredient.query.filter_by(week_number=week, year=year).delete()
+
         db.session.commit()
         return jsonify({'status': 'success'})
     except Exception as e:
@@ -862,6 +897,7 @@ def copy_previous_week():
             return jsonify({'status': 'error', 'message': 'Geen menu gevonden voor de vorige week'}), 404
 
         MenuItem.query.filter_by(week_number=week, year=year).delete()
+        CustomShoppingIngredient.query.filter_by(week_number=week, year=year).delete()
 
         for item in prev_items:
             new_item = MenuItem(

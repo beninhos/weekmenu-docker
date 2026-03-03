@@ -4,7 +4,7 @@
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Boodschappenlijst — Week {{ week }}</h2>
         <div class="flex gap-2">
-            <button id="clear-btn" onclick="clearAll()"
+            <button onclick="clearAll()"
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
                 ✕ Wissen
             </button>
@@ -39,73 +39,24 @@
 </style>
 
 <script>
-const STORAGE_KEY = 'shopping_hidden_{{ year }}_{{ week }}';
-
-function getHidden() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-    catch { return []; }
-}
-
-function saveHidden(list) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-}
-
-function applyHidden() {
-    const hidden = getHidden();
-    if (hidden.length === 0) return;
-    document.querySelectorAll('.shopping-item').forEach(el => {
-        if (hidden.includes(el.dataset.key)) {
-            el.remove();
-        }
-    });
-    // Verberg lege categoriecontainers
-    document.querySelectorAll('.space-y-2').forEach(div => {
-        if (div.querySelectorAll('.shopping-item').length === 0) {
-            div.previousElementSibling?.style && (div.previousElementSibling.style.display = 'none');
-            div.style.display = 'none';
-        }
-    });
-}
-
 function toggleItem(cb) {
     cb.parentElement.style.textDecoration = cb.checked ? 'line-through' : 'none';
     cb.parentElement.style.opacity = cb.checked ? '0.5' : '1';
 }
 
-let clearPending = false;
 function clearAll() {
-    const btn = document.getElementById('clear-btn');
-    if (!clearPending) {
-        clearPending = true;
-        btn.textContent = 'Zeker weten?';
-        btn.classList.add('bg-red-500', 'text-white');
-        btn.classList.remove('border', 'border-red-300', 'text-red-600');
-        setTimeout(() => {
-            if (!clearPending) return;
-            clearPending = false;
-            btn.textContent = '✕ Wissen';
-            btn.classList.remove('bg-red-500', 'text-white');
-            btn.classList.add('border', 'border-red-300', 'text-red-600');
-        }, 3000);
-        return;
-    }
-    clearPending = false;
-    // Sla alle huidige items op als verborgen
-    const allKeys = Array.from(document.querySelectorAll('.shopping-item')).map(el => el.dataset.key);
-    saveHidden(allKeys);
-    document.querySelectorAll('.shopping-item').forEach(el => el.remove());
-    document.querySelectorAll('.space-y-2').forEach(el => el.remove());
-    document.querySelectorAll('.shopping-category').forEach(el => el.remove());
+    fetch('/api/shopping-list/{{ year }}/{{ week }}/clear', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                document.querySelectorAll('.shopping-item, .shopping-category, .space-y-2').forEach(el => el.remove());
+            }
+        });
 }
 
 function removeItem(btn) {
     const item = btn.parentElement;
     const categoryDiv = item.parentElement;
-    // Sla op in localStorage
-    const hidden = getHidden();
-    if (!hidden.includes(item.dataset.key)) hidden.push(item.dataset.key);
-    saveHidden(hidden);
-    // Verwijder uit DOM
     item.remove();
     if (categoryDiv.querySelectorAll('.shopping-item').length === 0) {
         const h = categoryDiv.previousElementSibling;
@@ -113,8 +64,5 @@ function removeItem(btn) {
         categoryDiv.style.display = 'none';
     }
 }
-
-// Pas verborgen items toe zodra de pagina laadt
-applyHidden();
 </script>
 {% endblock %}
