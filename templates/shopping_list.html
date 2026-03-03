@@ -3,22 +3,28 @@
 <div class="bg-white rounded-lg shadow p-6">
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Boodschappenlijst — Week {{ week }}</h2>
-        <button onclick="window.print()" 
-                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            Printen
-        </button>
+        <div class="flex gap-2">
+            <button id="clear-btn" onclick="clearAll()"
+                    class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
+                ✕ Wissen
+            </button>
+            <button onclick="window.print()"
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">
+                Printen
+            </button>
+        </div>
     </div>
-    
+
     {% for group in grouped_shopping_list %}
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-6 mb-3">{{ group.category }}</h3>
+        <h3 class="shopping-category text-xs font-semibold uppercase tracking-wide text-gray-400 mt-6 mb-3">{{ group.category }}</h3>
         <div class="space-y-2">
             {% for item in group.producten %}
-            <div class="flex items-center">
+            <div class="shopping-item flex items-center" data-key="{{ item.name }}|{{ item.unit }}">
                 <input type="checkbox" class="mr-2" onchange="toggleItem(this)">
                 <span class="flex-grow">
                     {{ item.amount_display }} {{ item.unit }} {{ item.name }}
                 </span>
-                <button onclick="removeItem(this)" class="ml-2 text-red-500 hover:text-red-700">✕</button>
+                <button onclick="removeItem(this)" class="ml-2 text-red-400 hover:text-red-600 text-xs">✕</button>
             </div>
             {% endfor %}
         </div>
@@ -33,31 +39,82 @@
 </style>
 
 <script>
+const STORAGE_KEY = 'shopping_hidden_{{ year }}_{{ week }}';
+
+function getHidden() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+    catch { return []; }
+}
+
+function saveHidden(list) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+function applyHidden() {
+    const hidden = getHidden();
+    if (hidden.length === 0) return;
+    document.querySelectorAll('.shopping-item').forEach(el => {
+        if (hidden.includes(el.dataset.key)) {
+            el.remove();
+        }
+    });
+    // Verberg lege categoriecontainers
+    document.querySelectorAll('.space-y-2').forEach(div => {
+        if (div.querySelectorAll('.shopping-item').length === 0) {
+            div.previousElementSibling?.style && (div.previousElementSibling.style.display = 'none');
+            div.style.display = 'none';
+        }
+    });
+}
+
 function toggleItem(cb) {
     cb.parentElement.style.textDecoration = cb.checked ? 'line-through' : 'none';
     cb.parentElement.style.opacity = cb.checked ? '0.5' : '1';
 }
 
+let clearPending = false;
+function clearAll() {
+    const btn = document.getElementById('clear-btn');
+    if (!clearPending) {
+        clearPending = true;
+        btn.textContent = 'Zeker weten?';
+        btn.classList.add('bg-red-500', 'text-white');
+        btn.classList.remove('border', 'border-red-300', 'text-red-600');
+        setTimeout(() => {
+            if (!clearPending) return;
+            clearPending = false;
+            btn.textContent = '✕ Wissen';
+            btn.classList.remove('bg-red-500', 'text-white');
+            btn.classList.add('border', 'border-red-300', 'text-red-600');
+        }, 3000);
+        return;
+    }
+    clearPending = false;
+    // Sla alle huidige items op als verborgen
+    const allKeys = Array.from(document.querySelectorAll('.shopping-item')).map(el => el.dataset.key);
+    saveHidden(allKeys);
+    document.querySelectorAll('.shopping-item').forEach(el => el.remove());
+    document.querySelectorAll('.space-y-2').forEach(el => el.remove());
+    document.querySelectorAll('.shopping-category').forEach(el => el.remove());
+}
+
 function removeItem(btn) {
     const item = btn.parentElement;
     const categoryDiv = item.parentElement;
-    
-    // Verwijder het item
-    item.style.opacity = '0';
-    setTimeout(() => {
-        item.remove();
-        
-        // Check of de categorie nu leeg is
-        const remainingItems = categoryDiv.querySelectorAll('.flex.items-center');
-        if (remainingItems.length === 0) {
-            // Verberg de lege categorie header
-            const categoryHeader = categoryDiv.previousElementSibling;
-            if (categoryHeader && categoryHeader.tagName === 'H3') {
-                categoryHeader.style.display = 'none';
-            }
-            categoryDiv.style.display = 'none';
-        }
-    }, 300);
+    // Sla op in localStorage
+    const hidden = getHidden();
+    if (!hidden.includes(item.dataset.key)) hidden.push(item.dataset.key);
+    saveHidden(hidden);
+    // Verwijder uit DOM
+    item.remove();
+    if (categoryDiv.querySelectorAll('.shopping-item').length === 0) {
+        const h = categoryDiv.previousElementSibling;
+        if (h && h.tagName === 'H3') h.style.display = 'none';
+        categoryDiv.style.display = 'none';
+    }
 }
+
+// Pas verborgen items toe zodra de pagina laadt
+applyHidden();
 </script>
 {% endblock %}

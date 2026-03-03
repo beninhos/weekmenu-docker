@@ -1,151 +1,176 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <div class="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
-        <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Weekmenu — Week {{ week }}</h2>
-        <div class="flex space-x-4">
-            <a href="{{ url_for('shopping_list', year=year, week=week) }}" 
-               class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-sm md:text-base">
-                Boodschappenlijst
+<style>
+/* Dag-kaart kleuren via border-top */
+.has-recipe { background-color: #eff6ff !important; border-color: #bfdbfe !important; }
+.recipe-search:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(147,197,253,0.3); }
+.recipe-option:first-child { margin-top: 4px; }
+.recipe-option:last-child  { margin-bottom: 4px; }
+</style>
+
+<!-- Page header -->
+<div class="mb-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h1 class="text-2xl font-extrabold tracking-tight text-gray-900">Weekmenu</h1>
+            <p class="text-sm text-gray-500 mt-0.5">
+                Week {{ week }} &bull; <span id="week-date-range" class="text-gray-400"></span>
+            </p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <!-- Week navigatie -->
+            <div class="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                <a href="{{ url_for('week_menu', year=year, week=week-1) }}"
+                   class="px-3 py-2 text-gray-500 hover:bg-gray-50 hover:text-gray-800 text-sm transition-colors">&#8592;</a>
+                <span class="px-3 py-2 text-sm font-medium text-gray-700 border-l border-r border-gray-200">Week {{ week }}</span>
+                <a href="{{ url_for('week_menu', year=year, week=week+1) }}"
+                   class="px-3 py-2 text-gray-500 hover:bg-gray-50 hover:text-gray-800 text-sm transition-colors">&#8594;</a>
+            </div>
+            <!-- Actie-knoppen -->
+            <a href="{{ url_for('shopping_list', year=year, week=week) }}"
+               class="inline-flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm">
+                🛒 Boodschappenlijst
             </a>
             <button onclick="copyPreviousWeek()"
-                    class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 text-sm md:text-base">
-                Kopieer vorige week
+                    class="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm">
+                &#8635; Kopieer week
             </button>
-            <a href="{{ url_for('week_menu', year=year, week=week-1) }}"
-               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm md:text-base">
-                Vorige Week
-            </a>
-            <a href="{{ url_for('week_menu', year=year, week=week+1) }}" 
-               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm md:text-base">
-                Volgende Week
-            </a>
-        </div>
-    </div>
-    
-    <div id="saveStatus" class="hidden fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg">
-        Wijzigingen opgeslagen
-    </div>
-    
-    <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
-        {% for day_index, day_name in days %}
-        <div class="border p-4 rounded hover:shadow-md transition-shadow duration-200">
-            <h3 class="font-semibold text-gray-800 mb-2">{{ day_name }}</h3>
-            <div class="space-y-2">
-                {% for meal_code, meal_name in meal_types %}
-                <div class="relative">
-                    <label class="block text-sm text-gray-600">{{ meal_name }}</label>
-
-                    <!-- Hidden: recipe ID -->
-                    <input type="hidden"
-                           class="meal-input"
-                           data-day="{{ day_index }}"
-                           data-meal="{{ meal_code }}"
-                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.recipe_id }}{% endif %}{% endfor %}">
-
-                    <!-- Hidden: people count (bron voor initialisatie) -->
-                    <input type="hidden"
-                           class="people-input"
-                           data-day="{{ day_index }}"
-                           data-meal="{{ meal_code }}"
-                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.people_count or '' }}{% endif %}{% endfor %}">
-
-                    <!-- Regel 1: recept-zoekbalk -->
-                    <input type="text"
-                           class="recipe-search w-full border rounded p-1 text-sm"
-                           data-day="{{ day_index }}"
-                           data-meal="{{ meal_code }}"
-                           placeholder="Zoek recept..."
-                           value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
-                           autocomplete="off">
-
-                    <!-- Regel 2: portie — altijd zichtbaar -->
-                    <div class="people-count-container flex items-center space-x-1 text-xs mt-1">
-                        &#128100;
-                        <input type="number"
-                               class="people-count-input border rounded px-1 py-0.5 text-center text-xs"
-                               style="width:60px"
-                               data-day="{{ day_index }}"
-                               data-meal="{{ meal_code }}"
-                               min="1" max="20">
-                        <span class="text-gray-500">pers.</span>
-                    </div>
-
-                    <!-- Kookboek-info -->
-                    {% for item in menu_items %}
-                        {% if item.day_of_week == day_index and item.meal_type == meal_code %}
-                            {% for recipe in recipes %}
-                                {% if recipe.id == item.recipe_id %}
-                                <div class="recipe-info text-xs text-gray-600 mt-1">
-                                    {% if recipe.cookbook %}
-                                        {{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}{% if recipe.page %} p.{{ recipe.page }}{% endif %}
-                                    {% endif %}
-                                </div>
-                                {% endif %}
-                            {% endfor %}
-                        {% endif %}
-                    {% endfor %}
-
-                    <!-- Dropdown resultaten -->
-                    <div class="recipe-dropdown absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-b max-h-60 overflow-y-auto hidden z-10 shadow-lg">
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    
-    <!-- BEHOUDEN: Quick Access sectie voor favorieten, recent, populair -->
-    <div class="mt-8">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Favorieten -->
-            <div class="bg-gray-50 rounded-lg p-4">
-                <h3 class="text-lg font-bold mb-3 flex items-center">
-                    <span class="text-yellow-500 mr-2">⭐</span> Favorieten
-                </h3>
-                <div id="favorites-list" class="space-y-2">
-                    <!-- Will be populated by JavaScript -->
-                </div>
-            </div>
-            
-            <!-- Recent gebruikt -->
-            <div class="bg-gray-50 rounded-lg p-4">
-                <h3 class="text-lg font-bold mb-3 flex items-center">
-                    <span class="text-blue-500 mr-2">🕒</span> Recent gebruikt
-                </h3>
-                <div id="recent-list" class="space-y-2">
-                    <!-- Will be populated by JavaScript -->
-                </div>
-            </div>
-            
-            <!-- Populair -->
-            <div class="bg-gray-50 rounded-lg p-4">
-                <h3 class="text-lg font-bold mb-3 flex items-center">
-                    <span class="text-green-500 mr-2">📊</span> Populair
-                </h3>
-                <div id="popular-list" class="space-y-2">
-                    <!-- Will be populated by JavaScript -->
-                </div>
-            </div>
         </div>
     </div>
 </div>
 
-<!-- Recipe selection modal -->
+<!-- Save-status toast -->
+<div id="saveStatus" class="hidden fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50">
+    Wijzigingen opgeslagen
+</div>
+
+<!-- Dag-kaarten grid -->
+{% set day_colors = ['#6366f1', '#3b82f6', '#06b6d4', '#14b8a6', '#22c55e', '#f59e0b', '#f43f5e'] %}
+<div class="grid grid-cols-1 md:grid-cols-7 gap-3">
+    {% for day_index, day_name in days %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
+         style="border-top: 4px solid {{ day_colors[day_index] }};"
+         id="day-card-{{ day_index }}">
+
+        <!-- Dag-header -->
+        <div class="px-3 pt-3 pb-2">
+            <div class="font-bold text-sm text-gray-800">{{ day_name }}</div>
+            <div class="text-xs text-gray-400 mt-0.5" data-day-date="{{ day_index }}"></div>
+        </div>
+
+        <!-- Maaltijd-slots -->
+        <div class="px-3 pb-3">
+            {% for meal_code, meal_name in meal_types %}
+            <div class="relative {% if not loop.first %}border-t border-gray-50 pt-2 mt-2{% endif %}">
+
+                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{{ meal_name }}</label>
+
+                <!-- Hidden: recept ID -->
+                <input type="hidden"
+                       class="meal-input"
+                       data-day="{{ day_index }}"
+                       data-meal="{{ meal_code }}"
+                       value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.recipe_id }}{% endif %}{% endfor %}">
+
+                <!-- Hidden: portie-count (initialisatie) -->
+                <input type="hidden"
+                       class="people-input"
+                       data-day="{{ day_index }}"
+                       data-meal="{{ meal_code }}"
+                       value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.people_count or '' }}{% endif %}{% endfor %}">
+
+                <!-- Recept-zoekbalk -->
+                <input type="text"
+                       class="recipe-search w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm transition-colors bg-white"
+                       data-day="{{ day_index }}"
+                       data-meal="{{ meal_code }}"
+                       placeholder="Zoek recept…"
+                       value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
+                       autocomplete="off">
+
+                <!-- Portie-rij -->
+                <div class="people-count-container flex items-center gap-1.5 mt-1.5">
+                    <span class="text-gray-400 text-sm leading-none">&#128100;</span>
+                    <input type="number"
+                           class="people-count-input border border-gray-200 rounded-full bg-gray-50 text-center text-xs"
+                           style="width:46px; padding:2px 6px;"
+                           data-day="{{ day_index }}"
+                           data-meal="{{ meal_code }}"
+                           min="1" max="20">
+                    <span class="text-xs text-gray-400">pers.</span>
+                </div>
+
+                <!-- Kookboek-info -->
+                {% for item in menu_items %}
+                    {% if item.day_of_week == day_index and item.meal_type == meal_code %}
+                        {% for recipe in recipes %}
+                            {% if recipe.id == item.recipe_id %}
+                            <div class="recipe-info mt-1.5">
+                                {% if recipe.cookbook %}
+                                <span class="inline-block bg-indigo-50 text-indigo-700 rounded px-1.5 py-0.5 text-xs font-medium">
+                                    {{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}{% if recipe.page %} p.{{ recipe.page }}{% endif %}
+                                </span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+
+                <!-- Dropdown resultaten -->
+                <div class="recipe-dropdown absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto hidden z-10 mt-1">
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Quick Access sectie -->
+<div class="mt-8">
+    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Snel plannen</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Favorieten -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span>⭐</span> Favorieten
+            </h3>
+            <div id="favorites-list" class="space-y-0.5"></div>
+        </div>
+
+        <!-- Recent gebruikt -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span>🕒</span> Recent gebruikt
+            </h3>
+            <div id="recent-list" class="space-y-0.5"></div>
+        </div>
+
+        <!-- Populair -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span>📊</span> Populair
+            </h3>
+            <div id="popular-list" class="space-y-0.5"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Recept-selectie modal -->
 <div id="recipeModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
     <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 class="text-lg font-bold mb-4" id="modalTitle">Recept toevoegen</h3>
-            <p class="mb-4">Selecteer dag en maaltijd voor <strong id="selectedRecipe"></strong>:</p>
-            
+        <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h3 class="text-base font-bold text-gray-900 mb-1" id="modalTitle">Recept plannen</h3>
+            <p class="text-sm text-gray-500 mb-5">Kies dag en maaltijd voor <strong id="selectedRecipe"></strong>:</p>
+
             <div class="space-y-3">
                 {% for day_index, day_name in days %}
                 <div>
-                    <h4 class="font-medium">{{ day_name }}</h4>
-                    <div class="flex space-x-2 mt-1">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{{ day_name }}</h4>
+                    <div class="flex gap-1.5 flex-wrap">
                         {% for meal_code, meal_name in meal_types %}
-                        <button class="meal-select-btn px-3 py-1 text-sm border rounded hover:bg-gray-100" 
+                        <button class="meal-select-btn px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
                                 data-day="{{ day_index }}" data-meal="{{ meal_code }}">
                             {{ meal_name }}
                         </button>
@@ -154,9 +179,9 @@
                 </div>
                 {% endfor %}
             </div>
-            
-            <div class="flex justify-end space-x-2 mt-6">
-                <button id="cancelModal" class="px-4 py-2 text-gray-600 border rounded hover:bg-gray-100">
+
+            <div class="flex justify-end mt-6">
+                <button id="cancelModal" class="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                     Annuleren
                 </button>
             </div>
@@ -164,7 +189,7 @@
     </div>
 </div>
 
-<!-- Hidden recipe data for JavaScript -->
+<!-- Recept-data voor JavaScript -->
 <script>
 const recipes = [
     {% for recipe in recipes %}
@@ -188,13 +213,12 @@ const defaultServes = {{ default_serves or 'null' }};
 
 let selectedRecipeForModal = null;
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
 const debounce = (func, wait) => {
     let timeout;
     return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
+        const later = () => { clearTimeout(timeout); func(...args); };
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
@@ -203,10 +227,41 @@ const debounce = (func, wait) => {
 const showSaveStatus = () => {
     const status = document.getElementById('saveStatus');
     status.classList.remove('hidden');
-    setTimeout(() => {
-        status.classList.add('hidden');
-    }, 2000);
+    setTimeout(() => status.classList.add('hidden'), 2000);
 };
+
+// ── Dag-datums & week-bereik ────────────────────────────────────────────────
+
+const NL_MONTHS_SHORT = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+function getWeekMonday(week, year) {
+    const jan4 = new Date(year, 0, 4);
+    const dow  = jan4.getDay() || 7;
+    const mon  = new Date(jan4);
+    mon.setDate(jan4.getDate() - (dow - 1) + (week - 1) * 7);
+    return mon;
+}
+
+function fillDayDates(week, year) {
+    const mon = getWeekMonday(week, year);
+
+    // Datum per dag-kaart
+    document.querySelectorAll('[data-day-date]').forEach(el => {
+        const d = new Date(mon);
+        d.setDate(mon.getDate() + parseInt(el.dataset.dayDate));
+        el.textContent = d.getDate() + ' ' + NL_MONTHS_SHORT[d.getMonth()];
+    });
+
+    // Bereik in header
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const fmt = d => d.getDate() + ' ' + NL_MONTHS_SHORT[d.getMonth()];
+    const rangeEl = document.getElementById('week-date-range');
+    if (rangeEl) rangeEl.textContent = fmt(mon) + ' – ' + fmt(sun) + ' ' + year;
+
+}
+
+// ── Menu opslaan ────────────────────────────────────────────────────────────
 
 const updateMenu = async () => {
     const menu = [];
@@ -215,37 +270,22 @@ const updateMenu = async () => {
         ['ontbijt', 'lunch', 'diner'].forEach(mealType => {
             const recipeInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].meal-input`);
             const peopleCountInput = document.querySelector(`[data-day="${day}"][data-meal="${mealType}"].people-count-input`);
-
             if (recipeInput.value) {
                 const pcVal = peopleCountInput ? peopleCountInput.value.trim() : '';
                 const peopleCount = pcVal ? (parseInt(pcVal) || null) : null;
-                meals[mealType] = {
-                    recipe_id: recipeInput.value,
-                    people_count: peopleCount
-                };
+                meals[mealType] = { recipe_id: recipeInput.value, people_count: peopleCount };
             }
         });
         menu.push({ day, meals });
     }
-
     try {
         const response = await fetch('/update_menu', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                week: {{ week }},
-                year: {{ year }},
-                menu: menu
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ week: {{ week }}, year: {{ year }}, menu: menu })
         });
-
-        if (response.ok) {
-            showSaveStatus();
-        } else {
-            console.error('Error saving menu');
-        }
+        if (response.ok) showSaveStatus();
+        else console.error('Error saving menu');
     } catch (error) {
         console.error('Error:', error);
     }
@@ -253,28 +293,17 @@ const updateMenu = async () => {
 
 const debouncedUpdate = debounce(updateMenu, 500);
 
-// Search functionality
+// ── Zoeken ──────────────────────────────────────────────────────────────────
+
 function filterRecipes(query) {
     if (!query) return recipes;
-    
     const lowerQuery = query.toLowerCase();
-    
     return recipes.filter(recipe => {
-        // Maak één zoekbare string met alle velden
-        const searchString = [
-            recipe.name,
-            recipe.cookbook,
-            recipe.cookbookAbbr,
-            recipe.page,
-            `p${recipe.page}`
-        ].filter(Boolean).join(' ').toLowerCase();
-        
-        // Voor meerdere woorden: alle woorden moeten gevonden worden
+        const searchString = [recipe.name, recipe.cookbook, recipe.cookbookAbbr, recipe.page, `p${recipe.page}`]
+            .filter(Boolean).join(' ').toLowerCase();
         if (lowerQuery.includes(' ')) {
             return lowerQuery.split(' ').every(part => searchString.includes(part));
         }
-        
-        // Voor enkel woord: gewoon zoeken
         return searchString.includes(lowerQuery);
     });
 }
@@ -299,32 +328,31 @@ function clearPeopleCount(searchInput) {
 
 function showDropdown(searchInput, filteredRecipes) {
     const dropdown = searchInput.parentNode.querySelector('.recipe-dropdown');
-    
-    if (filteredRecipes.length === 0) {
-        dropdown.classList.add('hidden');
-        return;
-    }
-    
-    dropdown.innerHTML = filteredRecipes.map(recipe => 
-        `<div class="recipe-option p-2 hover:bg-gray-100 cursor-pointer text-sm" data-recipe-id="${recipe.id}" data-recipe-name="${recipe.name}" data-cookbook-abbr="${recipe.cookbookAbbr}" data-page="${recipe.page}" data-serves="${recipe.serves}">
-            <div class="font-medium">${recipe.name}</div>
-            ${recipe.cookbook ? `<div class="text-xs text-gray-600">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''} • ${recipe.serves} personen</div>` : `<div class="text-xs text-gray-600">${recipe.serves} personen</div>`}
+    if (filteredRecipes.length === 0) { dropdown.classList.add('hidden'); return; }
+
+    dropdown.innerHTML = filteredRecipes.map(recipe =>
+        `<div class="recipe-option px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm mx-1 rounded-lg transition-colors"
+              data-recipe-id="${recipe.id}" data-recipe-name="${recipe.name}"
+              data-cookbook-abbr="${recipe.cookbookAbbr}" data-page="${recipe.page}" data-serves="${recipe.serves}">
+            <div class="font-medium text-gray-800">${recipe.name}</div>
+            ${recipe.cookbook
+                ? `<div class="text-xs text-gray-400">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''} · ${recipe.serves} pers.</div>`
+                : `<div class="text-xs text-gray-400">${recipe.serves} pers.</div>`}
         </div>`
     ).join('');
-    
+
     dropdown.classList.remove('hidden');
-    
-    // Add click handlers to options
+
     dropdown.querySelectorAll('.recipe-option').forEach(option => {
         option.addEventListener('click', () => {
-            const recipeId = option.dataset.recipeId;
+            const recipeId   = option.dataset.recipeId;
             const recipeName = option.dataset.recipeName;
             const cookbookAbbr = option.dataset.cookbookAbbr;
-            const page = option.dataset.page;
+            const page       = option.dataset.page;
 
             searchInput.value = recipeName;
-            const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-            hiddenInput.value = recipeId;
+            searchInput.classList.add('has-recipe');
+            searchInput.parentNode.querySelector('.meal-input').value = recipeId;
 
             setPeopleCount(searchInput, recipeId);
             updateRecipeInfo(searchInput, cookbookAbbr, page);
@@ -336,19 +364,13 @@ function showDropdown(searchInput, filteredRecipes) {
 }
 
 function updateRecipeInfo(searchInput, cookbookAbbr, page) {
-    // Remove existing recipe info
-    const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
-    if (existingInfo) {
-        existingInfo.remove();
-    }
-    
-    // Add new recipe info if cookbook exists
+    const existing = searchInput.parentNode.querySelector('.recipe-info');
+    if (existing) existing.remove();
+
     if (cookbookAbbr && cookbookAbbr !== 'null') {
         const infoDiv = document.createElement('div');
-        infoDiv.className = 'recipe-info text-xs text-gray-600 mt-1';
-        infoDiv.textContent = cookbookAbbr + (page && page !== 'null' ? ` p.${page}` : '');
-        
-        // AANGEPAST: Insert after people count container or after search input
+        infoDiv.className = 'recipe-info mt-1.5';
+        infoDiv.innerHTML = `<span class="inline-block bg-indigo-50 text-indigo-700 rounded px-1.5 py-0.5 text-xs font-medium">${cookbookAbbr}${page && page !== 'null' ? ` p.${page}` : ''}</span>`;
         const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
         if (peopleContainer) {
             searchInput.parentNode.insertBefore(infoDiv, peopleContainer.nextSibling);
@@ -360,50 +382,38 @@ function updateRecipeInfo(searchInput, cookbookAbbr, page) {
 
 function hideDropdown(searchInput) {
     setTimeout(() => {
-        const dropdown = searchInput.parentNode.querySelector('.recipe-dropdown');
-        dropdown.classList.add('hidden');
-    }, 200); // Small delay to allow clicks
+        searchInput.parentNode.querySelector('.recipe-dropdown').classList.add('hidden');
+    }, 200);
 }
 
-// Initialize search inputs
+// Zoek-inputs initialiseren
 document.querySelectorAll('.recipe-search').forEach(searchInput => {
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value;
-        
         if (query.length > 0) {
-            const filteredRecipes = filterRecipes(query);
-            showDropdown(searchInput, filteredRecipes);
+            showDropdown(searchInput, filterRecipes(query));
         } else {
-            const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-            hiddenInput.value = '';
-
+            searchInput.classList.remove('has-recipe');
+            searchInput.parentNode.querySelector('.meal-input').value = '';
             clearPeopleCount(searchInput);
-
             const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
             if (existingInfo) existingInfo.remove();
-
             hideDropdown(searchInput);
             debouncedUpdate();
         }
     });
-    
-    searchInput.addEventListener('blur', (e) => {
-        hideDropdown(searchInput);
-    });
-    
-    // Clear selection when input is manually cleared
+
+    searchInput.addEventListener('blur', () => hideDropdown(searchInput));
+
     searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' || e.key === 'Delete') {
             setTimeout(() => {
                 if (searchInput.value === '') {
-                    const hiddenInput = searchInput.parentNode.querySelector('.meal-input');
-                    hiddenInput.value = '';
-
+                    searchInput.classList.remove('has-recipe');
+                    searchInput.parentNode.querySelector('.meal-input').value = '';
                     clearPeopleCount(searchInput);
-
                     const existingInfo = searchInput.parentNode.querySelector('.recipe-info');
                     if (existingInfo) existingInfo.remove();
-
                     debouncedUpdate();
                 }
             }, 10);
@@ -411,63 +421,58 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
     });
 });
 
-// Event listeners voor portie-inputs
+// Portie-inputs
 document.querySelectorAll('.people-count-input').forEach(input => {
     input.addEventListener('change', debouncedUpdate);
     input.addEventListener('input', debouncedUpdate);
 });
 
-// Hide dropdowns when clicking outside
+// Sluit dropdowns bij klik buiten
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.relative')) {
-        document.querySelectorAll('.recipe-dropdown').forEach(dropdown => {
-            dropdown.classList.add('hidden');
-        });
+        document.querySelectorAll('.recipe-dropdown').forEach(d => d.classList.add('hidden'));
     }
 });
 
-// BEHOUDEN: Quick Access functionality
+// ── Quick Access ────────────────────────────────────────────────────────────
+
 async function loadQuickAccessRecipes() {
     try {
         const response = await fetch('/api/quick_access_recipes');
         const data = await response.json();
-        
-        displayRecipeList('favorites-list', data.favorites, '⭐');
-        displayRecipeList('recent-list', data.recent, '🕒');
-        displayRecipeList('popular-list', data.popular, '📊');
+        displayRecipeList('favorites-list', data.favorites);
+        displayRecipeList('recent-list', data.recent);
+        displayRecipeList('popular-list', data.popular, true);
     } catch (error) {
         console.error('Error loading quick access recipes:', error);
     }
 }
 
-function displayRecipeList(containerId, recipes, icon) {
+function displayRecipeList(containerId, recipeList, showCount) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    
-    if (recipes.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm">Nog geen recepten</p>';
+
+    if (recipeList.length === 0) {
+        container.innerHTML = '<p class="text-xs text-gray-400 py-1">Nog geen recepten</p>';
         return;
     }
-    
-    container.innerHTML = recipes.map(recipe => {
-        const usageText = containerId === 'popular-list' ? ` (${recipe.usage_count}×)` : '';
-        return `
-            <div class="recipe-quick-item p-2 border rounded hover:bg-white cursor-pointer transition-colors" 
-                 data-recipe='${JSON.stringify(recipe)}'>
-                <div class="font-medium text-sm">${recipe.name}</div>
-                <div class="text-xs text-gray-600">
-                    ${recipe.cookbook_abbr || ''}${recipe.page ? ` p.${recipe.page}` : ''} • ${recipe.serves} pers.${usageText}
-                </div>
-            </div>
-        `;
+
+    container.innerHTML = recipeList.map(recipe => {
+        const meta = [
+            recipe.cookbook_abbr ? (recipe.cookbook_abbr + (recipe.page ? ` p.${recipe.page}` : '')) : null,
+            recipe.serves + ' pers.',
+            showCount && recipe.usage_count ? recipe.usage_count + '×' : null
+        ].filter(Boolean).join(' · ');
+
+        return `<div class="recipe-quick-item px-2 py-1.5 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                     data-recipe='${JSON.stringify(recipe)}'>
+                    <div class="text-sm font-medium text-gray-800 leading-snug">${recipe.name}</div>
+                    <div class="text-xs text-gray-400">${meta}</div>
+                </div>`;
     }).join('');
-    
-    // Add click handlers
+
     container.querySelectorAll('.recipe-quick-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const recipe = JSON.parse(item.dataset.recipe);
-            openRecipeModal(recipe);
-        });
+        item.addEventListener('click', () => openRecipeModal(JSON.parse(item.dataset.recipe)));
     });
 }
 
@@ -477,80 +482,69 @@ function openRecipeModal(recipe) {
     document.getElementById('recipeModal').classList.remove('hidden');
 }
 
-// Modal functionality
+// ── Modal ───────────────────────────────────────────────────────────────────
+
 document.getElementById('cancelModal').addEventListener('click', () => {
     document.getElementById('recipeModal').classList.add('hidden');
     selectedRecipeForModal = null;
 });
 
-// Meal selection buttons
 document.querySelectorAll('.meal-select-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         if (!selectedRecipeForModal) return;
-        
-        const day = parseInt(btn.dataset.day);
+        const day  = parseInt(btn.dataset.day);
         const meal = btn.dataset.meal;
-        
-        // Find the corresponding inputs
         const searchInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].recipe-search`);
         const hiddenInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].meal-input`);
-        const peopleHiddenInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
-        
         if (searchInput && hiddenInput) {
             searchInput.value = selectedRecipeForModal.name;
             hiddenInput.value = selectedRecipeForModal.id;
-
+            searchInput.classList.add('has-recipe');
             setPeopleCount(searchInput, selectedRecipeForModal.id);
             updateRecipeInfo(searchInput, selectedRecipeForModal.cookbook_abbr, selectedRecipeForModal.page);
-
             debouncedUpdate();
         }
-        
-        // Close modal
         document.getElementById('recipeModal').classList.add('hidden');
         selectedRecipeForModal = null;
     });
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadQuickAccessRecipes();
-
-    // Vul portie-inputs vanuit opgeslagen waarden
-    document.querySelectorAll('.meal-input').forEach(mealInput => {
-        if (mealInput.value) {
-            const day = mealInput.dataset.day;
-            const meal = mealInput.dataset.meal;
-            const peopleHidden = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
-            const peopleVisible = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-count-input`);
-            if (peopleHidden && peopleVisible && peopleHidden.value) {
-                peopleVisible.value = peopleHidden.value;
-            }
-        }
-    });
-});
+// ── Vorige week kopiëren ────────────────────────────────────────────────────
 
 async function copyPreviousWeek() {
-    if (!confirm('Weet je zeker dat je het menu van de vorige week wilt kopiëren? Het huidige menu wordt overschreven.')) {
-        return;
-    }
-
+    if (!confirm('Weet je zeker dat je het menu van de vorige week wilt kopiëren? Het huidige menu wordt overschreven.')) return;
     try {
         const response = await fetch('/copy_previous_week', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ week: {{ week }}, year: {{ year }} })
         });
-
         const data = await response.json();
-
-        if (data.status === 'success') {
-            location.reload();
-        } else {
-            alert('Fout: ' + (data.message || 'Onbekende fout'));
-        }
+        if (data.status === 'success') location.reload();
+        else alert('Fout: ' + (data.message || 'Onbekende fout'));
     } catch (error) {
         alert('Fout bij kopiëren: ' + error.message);
     }
 }
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    fillDayDates({{ week }}, {{ year }});
+    loadQuickAccessRecipes();
+
+    // Portie-inputs vullen vanuit opgeslagen waarden + has-recipe markeren
+    document.querySelectorAll('.meal-input').forEach(mealInput => {
+        if (mealInput.value) {
+            const day  = mealInput.dataset.day;
+            const meal = mealInput.dataset.meal;
+            const searchInput  = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].recipe-search`);
+            const peopleHidden  = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
+            const peopleVisible = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-count-input`);
+            if (searchInput && searchInput.value) searchInput.classList.add('has-recipe');
+            if (peopleHidden && peopleVisible && peopleHidden.value) peopleVisible.value = peopleHidden.value;
+        }
+    });
+});
 </script>
 {% endblock %}

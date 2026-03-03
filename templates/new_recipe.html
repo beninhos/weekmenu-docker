@@ -88,21 +88,9 @@
                     </div>
                     <div class="col-span-3">
                         <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
-                            <option value="AGF (Groenten & Fruit)">AGF (Groenten & Fruit)</option>
-                            <option value="Vlees & Vis">Vlees & Vis</option>
-                            <option value="Zuivel & Eieren">Zuivel & Eieren</option>
-                            <option value="Kaas & Vleeswaren">Kaas & Vleeswaren</option>
-                            <option value="Brood & Banket">Brood & Banket</option>
-                            <option value="Pasta, Rijst & Wereldkeuken">Pasta, Rijst & Wereldkeuken</option>
-                            <option value="Conserven & Soepen">Conserven & Soepen</option>
-                            <option value="Sauzen & Kruiden">Sauzen & Kruiden</option>
-                            <option value="Bakproducten">Bakproducten</option>
-                            <option value="Ontbijt & Broodbeleg">Ontbijt & Broodbeleg</option>
-                            <option value="Dranken">Dranken</option>
-                            <option value="Diepvries">Diepvries</option>
-                            <option value="Snoep & Koek">Snoep & Koek</option>
-                            <option value="Noten & Gedroogd fruit">Noten & Gedroogd fruit</option>
-                            <option value="Overig">Overig</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat }}">{{ cat }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="col-span-1 flex items-center justify-center">
