@@ -1878,6 +1878,112 @@ def ah_products():
     return render_template('ah_products.html', ingredients=ingredients)
 
 
+@app.route('/api/shopping-list/<int:year>/<int:week>/send-to-ah', methods=['POST'])
+def send_to_ah(year, week):
+    import requests as _req
+    import time
+
+    access_token = ah_get_access_token()
+    if not access_token:
+        return jsonify({'status': 'error', 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}), 401
+
+    # Bouw boodschappenlijst (zelfde logica als shopping_list route)
+    menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
+    shopping_dict = {}
+
+    def _multiplier(serves, count):
+        try:
+            return count / serves if serves and count else 1
+        except ZeroDivisionError:
+            return 1
+
+    for item in menu_items:
+        if item.skip_shopping_list or not item.recipe:
+            continue
+        m = _multiplier(item.recipe.serves, item.people_count)
+        for ri in item.recipe.ingredients:
+            key = (ri.ingredient_id, ri.ingredient.name, ri.unit)
+            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+
+    for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
+        if not qi.recipe:
+            continue
+        m = _multiplier(qi.recipe.serves, qi.people_count)
+        for ri in qi.recipe.ingredients:
+            key = (ri.ingredient_id, ri.ingredient.name, ri.unit)
+            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+
+    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
+        key = (ci.ingredient_id, ci.ingredient.name, ci.unit)
+        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
+
+    if not shopping_dict:
+        return jsonify({'status': 'ok', 'sent': 0, 'not_found': [], 'message': 'Boodschappenlijst is leeg'})
+
+    # Bepaal per ingredient het AH productId
+    VOLUME_WEIGHT = {'g', 'kg', 'ml', 'l', 'cl', 'dl', 'liter'}
+    sent, not_found, db_changed = 0, [], False
+
+    headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
+
+    for (ing_id, ing_name, unit), amount in shopping_dict.items():
+        ing = Ingredient.query.get(ing_id)
+        if not ing:
+            continue
+
+        # Zoek productId (uit cache of live)
+        if not ing.ah_product_id:
+            products = ah_search_products(ing_name, size=3)
+            if not products:
+                # fallback: eerste woord
+                products = ah_search_products(ing_name.split()[0], size=3)
+            if products:
+                p = products[0]
+                ing.ah_product_id    = p['productId']
+                ing.ah_product_name  = p['title']
+                ing.ah_product_size  = p['size']
+                ing.ah_product_price = p['price']
+                ing.ah_product_image = p['image']
+                ing.ah_product_bonus = p['isBonus']
+                ing.ah_product_updated = int(time.time())
+                db_changed = True
+
+        if not ing.ah_product_id:
+            not_found.append(ing_name)
+            continue
+
+        # Quantity-logica
+        unit_lower = (unit or '').lower().strip()
+        if unit_lower in VOLUME_WEIGHT:
+            quantity = 1
+        else:
+            quantity = max(1, round(amount))
+
+        # Stuur naar AH shopping list
+        try:
+            resp = _req.patch(
+                _AH_SHOPPINGLIST_URL,
+                json={'items': [{'originCode': 'PRD', 'productId': ing.ah_product_id,
+                                 'quantity': quantity, 'type': 'SHOPPABLE'}]},
+                headers=headers,
+                timeout=10,
+            )
+            if resp.status_code in (200, 201, 204):
+                sent += 1
+            else:
+                not_found.append(ing_name)
+        except Exception:
+            not_found.append(ing_name)
+
+    if db_changed:
+        db.session.commit()
+
+    msg = f'{sent} item{"s" if sent != 1 else ""} toegevoegd aan AH'
+    if not_found:
+        msg += f', {len(not_found)} niet gevonden: {", ".join(not_found[:5])}'
+    return jsonify({'status': 'ok', 'sent': sent, 'not_found': not_found, 'message': msg})
+
+
 # ── End AH routes ────────────────────────────────────────────────────────────
 
 

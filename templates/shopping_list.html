@@ -8,12 +8,17 @@
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
                 ✕ Wissen
             </button>
+            <button onclick="sendToAH()" id="btnSendAH"
+                    class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
+                🛒 Stuur naar AH
+            </button>
             <button onclick="window.print()"
                     class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">
                 Printen
             </button>
         </div>
     </div>
+    <div id="ahToast" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"></div>
 
     {% for group in grouped_shopping_list %}
         <h3 class="shopping-category text-xs font-semibold uppercase tracking-wide text-gray-400 mt-6 mb-3">{{ group.category }}</h3>
@@ -52,6 +57,31 @@ function clearAll() {
                 document.querySelectorAll('.shopping-item, .shopping-category, .space-y-2').forEach(el => el.remove());
             }
         });
+}
+
+async function sendToAH() {
+    const btn = document.getElementById('btnSendAH');
+    const toast = document.getElementById('ahToast');
+    btn.textContent = '⏳ Bezig...';
+    btn.disabled = true;
+    toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-gray-100 text-gray-600';
+    toast.textContent = 'Items worden verstuurd naar AH...';
+    try {
+        const resp = await fetch('/api/shopping-list/{{ year }}/{{ week }}/send-to-ah', {method: 'POST'});
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-green-50 text-green-800 border border-green-200';
+            toast.textContent = '✓ ' + data.message;
+        } else {
+            toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-800 border border-red-200';
+            toast.textContent = '✕ ' + (data.message || 'Versturen mislukt');
+        }
+    } catch (e) {
+        toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-800 border border-red-200';
+        toast.textContent = 'Fout: ' + e.message;
+    }
+    btn.textContent = '🛒 Stuur naar AH';
+    btn.disabled = false;
 }
 
 function removeItem(btn) {
