@@ -1828,6 +1828,56 @@ def ah_disconnect():
     return jsonify({'status': 'ok'})
 
 
+@app.route('/api/ah/product-search')
+def ah_product_search():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    return jsonify(ah_search_products(q, size=8))
+
+
+@app.route('/api/ah/ingredient/<int:ingredient_id>/link', methods=['POST'])
+def ah_link_ingredient(ingredient_id):
+    import time
+    data = request.json or {}
+    ing = Ingredient.query.get_or_404(ingredient_id)
+    ing.ah_product_id      = data.get('productId')
+    ing.ah_product_name    = data.get('title', '')
+    ing.ah_product_size    = data.get('size', '')
+    ing.ah_product_price   = data.get('price', '')
+    ing.ah_product_image   = data.get('image', '')
+    ing.ah_product_bonus   = bool(data.get('isBonus', False))
+    ing.ah_product_updated = int(time.time())
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/ah/ingredient/<int:ingredient_id>/refresh', methods=['POST'])
+def ah_refresh_ingredient(ingredient_id):
+    import time
+    ing = Ingredient.query.get_or_404(ingredient_id)
+    if not ing.ah_product_id:
+        return jsonify({'status': 'error', 'message': 'Geen product gekoppeld'}), 400
+    products = ah_search_products(ing.name, size=1)
+    if not products:
+        return jsonify({'status': 'error', 'message': 'Geen resultaten'}), 404
+    p = products[0]
+    ing.ah_product_name    = p['title']
+    ing.ah_product_size    = p['size']
+    ing.ah_product_price   = p['price']
+    ing.ah_product_image   = p['image']
+    ing.ah_product_bonus   = p['isBonus']
+    ing.ah_product_updated = int(time.time())
+    db.session.commit()
+    return jsonify({'status': 'ok', 'product': p})
+
+
+@app.route('/ah-producten')
+def ah_products():
+    ingredients = Ingredient.query.order_by(Ingredient.name).all()
+    return render_template('ah_products.html', ingredients=ingredients)
+
+
 # ── End AH routes ────────────────────────────────────────────────────────────
 
 
