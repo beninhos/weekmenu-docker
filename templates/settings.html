@@ -34,6 +34,61 @@
         </form>
     </div>
 
+    <!-- AH Account -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Albert Heijn</h3>
+        {% if ah_connected %}
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="font-medium text-green-700">✓ Gekoppeld</p>
+                {% if ah_expires_dt %}
+                <p class="text-sm text-gray-500 mt-0.5">Token verloopt circa {{ ah_expires_dt }}</p>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('ah_products') }}"
+                   class="text-sm bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    Beheer AH-producten →
+                </a>
+                <button onclick="ahDisconnect()"
+                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50">
+                    Ontkoppelen
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-600 mb-4">
+            Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
+        </p>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    OAuth-code uit de Appie-app
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" id="ahCode" placeholder="Plak code hier..."
+                           class="flex-1 rounded-md border-gray-300 shadow-sm text-sm">
+                    <button onclick="ahConnect()"
+                            class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
+                        Koppelen
+                    </button>
+                </div>
+                <p id="ahConnectMsg" class="text-xs mt-2 hidden"></p>
+            </div>
+            <details class="text-xs text-gray-500">
+                <summary class="cursor-pointer hover:text-gray-700">Hoe kom ik aan de code?</summary>
+                <ol class="mt-2 space-y-1 list-decimal list-inside">
+                    <li>Open de Appie-app op je telefoon</li>
+                    <li>Ga naar Profiel → Instellingen</li>
+                    <li>Scroll omlaag en tik 5× snel op het AH-logo</li>
+                    <li>Tik op "OAuth Code" en kopieer de code (30 seconden geldig)</li>
+                    <li>Plak de code hierboven en klik op Koppelen</li>
+                </ol>
+            </details>
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Statistieken -->
     <div class="bg-white rounded-lg shadow p-6">
         <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Database</h3>
@@ -125,6 +180,38 @@
 </div>
 
 <script>
+async function ahConnect() {
+    const code = document.getElementById('ahCode').value.trim();
+    const msg = document.getElementById('ahConnectMsg');
+    if (!code) return;
+    msg.textContent = 'Bezig...';
+    msg.className = 'text-xs mt-2 text-gray-500';
+    msg.classList.remove('hidden');
+    try {
+        const resp = await fetch('/api/ah/connect', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({code}),
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            msg.textContent = data.message || 'Koppelen mislukt';
+            msg.className = 'text-xs mt-2 text-red-600';
+        }
+    } catch (e) {
+        msg.textContent = 'Fout: ' + e.message;
+        msg.className = 'text-xs mt-2 text-red-600';
+    }
+}
+
+async function ahDisconnect() {
+    if (!confirm('AH-account ontkoppelen?')) return;
+    await fetch('/api/ah/disconnect', {method: 'POST'});
+    location.reload();
+}
+
 async function importData(input) {
     const file = input.files[0];
     if (!file) return;

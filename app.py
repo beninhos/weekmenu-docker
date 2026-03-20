@@ -181,6 +181,113 @@ class Settings(db.Model):
     key = db.Column(db.String(50), nullable=False, unique=True)
     value = db.Column(db.String(200), nullable=True)
 
+
+# ── AH API helpers ──────────────────────────────────────────────────────────
+
+_AH_ANON_TOKEN_URL  = 'https://api.ah.nl/mobile-auth/v1/auth/token/anonymous'
+_AH_TOKEN_URL       = 'https://api.ah.nl/mobile-auth/v1/auth/token'
+_AH_REFRESH_URL     = 'https://api.ah.nl/mobile-auth/v1/auth/token/refresh'
+_AH_SEARCH_URL      = 'https://api.ah.nl/mobile-services/product/search/v2'
+_AH_SHOPPINGLIST_URL = 'https://api.ah.nl/mobile-services/shoppinglist/v2/items'
+_AH_HEADERS = {'User-Agent': 'Appie/8.22.3', 'x-application': 'AHWEBSHOP'}
+
+
+def _ah_setting(key, value=None):
+    """Get or set a Settings value by key."""
+    s = Settings.query.filter_by(key=key).first()
+    if value is None:
+        return s.value if s else None
+    if s:
+        s.value = value
+    else:
+        db.session.add(Settings(key=key, value=value))
+    db.session.commit()
+
+
+def _ah_get_anon_token():
+    """Return a valid anonymous AH access token (for product search)."""
+    import requests as _req
+    import time
+    token   = _ah_setting('ah_anon_token')
+    expires = _ah_setting('ah_anon_expires')
+    if token and expires and int(time.time()) < int(expires) - 60:
+        return token
+    resp = _req.post(
+        _AH_ANON_TOKEN_URL,
+        json={'clientId': 'appie-android', 'clientSecret': 'secret'},
+        headers=_AH_HEADERS,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    _ah_setting('ah_anon_token', data['access_token'])
+    _ah_setting('ah_anon_expires', str(int(time.time()) + data.get('expires_in', 604798)))
+    return data['access_token']
+
+
+def ah_get_access_token():
+    """Return a valid user AH access token, auto-refreshing if needed."""
+    import requests as _req
+    import time
+    token   = _ah_setting('ah_access_token')
+    expires = _ah_setting('ah_token_expires')
+    if token and expires and int(time.time()) < int(expires) - 60:
+        return token
+    refresh = _ah_setting('ah_refresh_token')
+    if not refresh:
+        return None
+    try:
+        resp = _req.post(
+            _AH_REFRESH_URL,
+            json={'clientId': 'appie', 'refreshToken': refresh},
+            headers=_AH_HEADERS,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        _ah_setting('ah_access_token', data['access_token'])
+        _ah_setting('ah_refresh_token', data.get('refresh_token', refresh))
+        _ah_setting('ah_token_expires', str(int(time.time()) + data.get('expires_in', 604798)))
+        return data['access_token']
+    except Exception:
+        return None
+
+
+def ah_search_products(query, size=8):
+    """Search AH product catalog. Returns list of product dicts."""
+    import requests as _req
+    try:
+        token = _ah_get_anon_token()
+        headers = {**_AH_HEADERS, 'Authorization': f'Bearer {token}'}
+        resp = _req.get(
+            _AH_SEARCH_URL,
+            params={'query': query, 'size': size},
+            headers=headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        products = []
+        for p in resp.json().get('products', []):
+            images = p.get('images') or []
+            img_url = next((i['url'] for i in images if i.get('width') == 200), '')
+            if not img_url and images:
+                img_url = images[0].get('url', '')
+            price_raw = p.get('currentPrice') or p.get('priceBeforeBonus')
+            products.append({
+                'productId':  p.get('webshopId'),
+                'title':      p.get('title', ''),
+                'size':       p.get('salesUnitSize', ''),
+                'price':      f"{price_raw:.2f}".replace('.', ',') if price_raw else '',
+                'isBonus':    bool(p.get('isBonus') or p.get('discountLabels')),
+                'image':      img_url,
+            })
+        return products
+    except Exception:
+        return []
+
+
+# ── End AH API helpers ───────────────────────────────────────────────────────
+
 # Routes
 @app.route('/')
 def index():
@@ -1381,7 +1488,16 @@ def settings():
     }
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
-    return render_template('settings.html', stats=stats, default_serves=default_serves)
+    import time
+    ah_refresh = _ah_setting('ah_refresh_token')
+    ah_expires = _ah_setting('ah_token_expires')
+    ah_connected = bool(ah_refresh)
+    ah_expires_dt = None
+    if ah_expires:
+        import datetime as _dt
+        ah_expires_dt = _dt.datetime.fromtimestamp(int(ah_expires)).strftime('%d %b %Y')
+    return render_template('settings.html', stats=stats, default_serves=default_serves,
+                           ah_connected=ah_connected, ah_expires_dt=ah_expires_dt)
 
 
 @app.route('/export')
@@ -1659,6 +1775,60 @@ def import_zip():
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+# ── AH routes ───────────────────────────────────────────────────────────────
+
+@app.route('/api/ah/connect', methods=['POST'])
+def ah_connect():
+    import requests as _req
+    import time
+    code = (request.json or {}).get('code', '').strip()
+    if not code:
+        return jsonify({'status': 'error', 'message': 'Geen code opgegeven'}), 400
+    try:
+        resp = _req.post(
+            _AH_TOKEN_URL,
+            json={'clientId': 'appie', 'code': code},
+            headers=_AH_HEADERS,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        _ah_setting('ah_access_token', data['access_token'])
+        _ah_setting('ah_refresh_token', data['refresh_token'])
+        expires_at = int(time.time()) + data.get('expires_in', 604798)
+        _ah_setting('ah_token_expires', str(expires_at))
+        return jsonify({'status': 'ok', 'expires_at': expires_at})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Koppelen mislukt: {e}'}), 400
+
+
+@app.route('/api/ah/status')
+def ah_status():
+    import time
+    refresh = _ah_setting('ah_refresh_token')
+    expires = _ah_setting('ah_token_expires')
+    connected = bool(refresh)
+    expires_ts = int(expires) if expires else None
+    return jsonify({
+        'connected': connected,
+        'expires_at': expires_ts,
+        'expired': connected and expires_ts is not None and int(time.time()) > expires_ts,
+    })
+
+
+@app.route('/api/ah/disconnect', methods=['POST'])
+def ah_disconnect():
+    for key in ('ah_access_token', 'ah_refresh_token', 'ah_token_expires'):
+        s = Settings.query.filter_by(key=key).first()
+        if s:
+            db.session.delete(s)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+# ── End AH routes ────────────────────────────────────────────────────────────
 
 
 def migrate_db():
