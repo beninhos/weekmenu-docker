@@ -37,27 +37,30 @@
     <!-- AH Account -->
     <div class="bg-white rounded-lg shadow p-6">
         <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Albert Heijn</h3>
+        <!-- AH Producten-link: altijd zichtbaar -->
+        <div class="flex items-center justify-between mb-4">
+            <p class="text-sm text-gray-600">Koppel per ingrediënt je voorkeurs-AH-product.</p>
+            <a href="{{ url_for('ah_products') }}"
+               class="text-sm bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                AH Producten →
+            </a>
+        </div>
+        <hr class="border-gray-100 mb-4">
         {% if ah_connected %}
         <div class="flex items-center justify-between">
             <div>
-                <p class="font-medium text-green-700">✓ Gekoppeld</p>
+                <p class="font-medium text-green-700">✓ Account gekoppeld</p>
                 {% if ah_expires_dt %}
                 <p class="text-sm text-gray-500 mt-0.5">Token verloopt circa {{ ah_expires_dt }}</p>
                 {% endif %}
             </div>
-            <div class="flex items-center gap-3">
-                <a href="{{ url_for('ah_products') }}"
-                   class="text-sm bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-                    Beheer AH-producten →
-                </a>
-                <button onclick="ahDisconnect()"
-                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50">
-                    Ontkoppelen
-                </button>
-            </div>
+            <button onclick="ahDisconnect()"
+                    class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50">
+                Ontkoppelen
+            </button>
         </div>
         {% else %}
-        <p class="text-sm text-gray-600 mb-4">
+        <p class="text-sm text-gray-600 mb-3">
             Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
         </p>
         <div class="space-y-3">
