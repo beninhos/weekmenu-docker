@@ -117,6 +117,13 @@ class Ingredient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
     category = db.Column(db.String(50), nullable=False)
+    ah_product_id      = db.Column(db.Integer, nullable=True)
+    ah_product_name    = db.Column(db.String(200), nullable=True)
+    ah_product_size    = db.Column(db.String(50), nullable=True)
+    ah_product_price   = db.Column(db.String(20), nullable=True)
+    ah_product_image   = db.Column(db.String(500), nullable=True)
+    ah_product_bonus   = db.Column(db.Boolean, default=False)
+    ah_product_updated = db.Column(db.Integer, nullable=True)
 
 class RecipeIngredient(db.Model):
     __tablename__ = 'recipe_ingredient'
@@ -1682,6 +1689,22 @@ def migrate_db():
                 conn.execute(text('ALTER TABLE cookbook ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0'))
             except OperationalError:
                 pass
+
+        ingredient_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
+        for col, col_def in [
+            ('ah_product_id', 'INTEGER'),
+            ('ah_product_name', 'VARCHAR(200)'),
+            ('ah_product_size', 'VARCHAR(50)'),
+            ('ah_product_price', 'VARCHAR(20)'),
+            ('ah_product_image', 'VARCHAR(500)'),
+            ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
+            ('ah_product_updated', 'INTEGER'),
+        ]:
+            if col not in ingredient_cols:
+                try:
+                    conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+                except OperationalError:
+                    pass
 
         conn.execute(text('''
             CREATE TABLE IF NOT EXISTS settings (
