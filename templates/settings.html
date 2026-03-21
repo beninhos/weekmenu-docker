@@ -60,28 +60,14 @@
             </button>
         </div>
         {% else %}
-        <p class="text-sm text-gray-600 mb-4">
-            Log in met je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
+        <p class="text-sm text-gray-600 mb-3">
+            Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
         </p>
-        <div class="space-y-3 max-w-sm">
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">E-mailadres</label>
-                <input type="email" id="ahEmail" placeholder="jouw@email.nl"
-                       class="w-full rounded-md border-gray-300 shadow-sm text-sm">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Wachtwoord</label>
-                <input type="password" id="ahPassword"
-                       class="w-full rounded-md border-gray-300 shadow-sm text-sm"
-                       onkeydown="if(event.key==='Enter') ahLoginPassword()">
-            </div>
-            <button onclick="ahLoginPassword()"
-                    id="btnAhLogin"
-                    class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm w-full">
-                Inloggen &amp; koppelen
-            </button>
-            <p id="ahConnectMsg" class="text-xs mt-1 hidden"></p>
-        </div>
+        <a href="{{ url_for('ah_login_start') }}"
+           class="inline-block bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
+            Log in met AH-account →
+        </a>
+        <p class="text-xs text-gray-400 mt-2">Je wordt doorgestuurd naar de officiële AH-loginpagina.</p>
         {% endif %}
     </div>
 
@@ -176,65 +162,6 @@
 </div>
 
 <script>
-async function ahLoginPassword() {
-    const email    = document.getElementById('ahEmail').value.trim();
-    const password = document.getElementById('ahPassword').value;
-    const msg      = document.getElementById('ahConnectMsg');
-    const btn      = document.getElementById('btnAhLogin');
-    if (!email || !password) return;
-    btn.disabled = true;
-    btn.textContent = 'Bezig met inloggen...';
-    msg.textContent = '';
-    msg.classList.add('hidden');
-    try {
-        const resp = await fetch('/api/ah/login-password', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({email, password}),
-        });
-        const data = await resp.json();
-        if (data.status === 'ok') {
-            location.reload();
-        } else {
-            msg.textContent = data.message || 'Inloggen mislukt';
-            msg.className = 'text-xs mt-2 text-red-600';
-            msg.classList.remove('hidden');
-        }
-    } catch (e) {
-        msg.textContent = 'Fout: ' + e.message;
-        msg.className = 'text-xs mt-2 text-red-600';
-        msg.classList.remove('hidden');
-    }
-    btn.disabled = false;
-    btn.textContent = 'Inloggen & koppelen';
-}
-
-async function ahConnect() {
-    const code = document.getElementById('ahCode') ? document.getElementById('ahCode').value.trim() : '';
-    const msg = document.getElementById('ahConnectMsg');
-    if (!code) return;
-    msg.textContent = 'Bezig...';
-    msg.className = 'text-xs mt-2 text-gray-500';
-    msg.classList.remove('hidden');
-    try {
-        const resp = await fetch('/api/ah/connect', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({code}),
-        });
-        const data = await resp.json();
-        if (data.status === 'ok') {
-            location.reload();
-        } else {
-            msg.textContent = data.message || 'Koppelen mislukt';
-            msg.className = 'text-xs mt-2 text-red-600';
-        }
-    } catch (e) {
-        msg.textContent = 'Fout: ' + e.message;
-        msg.className = 'text-xs mt-2 text-red-600';
-    }
-}
-
 async function ahDisconnect() {
     if (!confirm('AH-account ontkoppelen?')) return;
     await fetch('/api/ah/disconnect', {method: 'POST'});

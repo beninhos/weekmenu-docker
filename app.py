@@ -184,12 +184,30 @@ class Settings(db.Model):
 
 # ── AH API helpers ──────────────────────────────────────────────────────────
 
-_AH_ANON_TOKEN_URL  = 'https://api.ah.nl/mobile-auth/v1/auth/token/anonymous'
-_AH_TOKEN_URL       = 'https://api.ah.nl/mobile-auth/v1/auth/token'
-_AH_REFRESH_URL     = 'https://api.ah.nl/mobile-auth/v1/auth/token/refresh'
-_AH_SEARCH_URL      = 'https://api.ah.nl/mobile-services/product/search/v2'
+_AH_LOGIN_BASE       = 'https://login.ah.nl'
+_AH_AUTHORIZE_PATH   = '/secure/oauth/authorize?client_id=appie&redirect_uri=appie%3A%2F%2Flogin-exit&response_type=code'
+_AH_ANON_TOKEN_URL   = 'https://api.ah.nl/mobile-auth/v1/auth/token/anonymous'
+_AH_TOKEN_URL        = 'https://api.ah.nl/mobile-auth/v1/auth/token'
+_AH_REFRESH_URL      = 'https://api.ah.nl/mobile-auth/v1/auth/token/refresh'
+_AH_SEARCH_URL       = 'https://api.ah.nl/mobile-services/product/search/v2'
 _AH_SHOPPINGLIST_URL = 'https://api.ah.nl/mobile-services/shoppinglist/v2/items'
-_AH_HEADERS = {'User-Agent': 'Appie/8.22.3', 'x-application': 'AHWEBSHOP'}
+_AH_HEADERS          = {'User-Agent': 'Appie/8.22.3', 'x-application': 'AHWEBSHOP'}
+
+# Eén enkele requests.Session voor de login-proxy (single-user app)
+_ah_proxy_sess = None
+
+
+def _ah_proxy_session_get():
+    global _ah_proxy_sess
+    if _ah_proxy_sess is None:
+        import requests as _r
+        _ah_proxy_sess = _r.Session()
+    return _ah_proxy_sess
+
+
+def _ah_proxy_session_reset():
+    global _ah_proxy_sess
+    _ah_proxy_sess = None
 
 
 def _ah_setting(key, value=None):
@@ -214,7 +232,7 @@ def _ah_get_anon_token():
         return token
     resp = _req.post(
         _AH_ANON_TOKEN_URL,
-        json={'clientId': 'appie-android', 'clientSecret': 'secret'},
+        json={'clientId': 'appie'},
         headers=_AH_HEADERS,
         timeout=10,
     )
@@ -1809,86 +1827,106 @@ def ah_callback():
     return redirect(url_for('settings'))
 
 
-def ah_login_with_password(email, password):
-    """Voer server-side AH login uit met e-mail + wachtwoord via curl-cffi.
-    Geeft (access_token, refresh_token, expires_in) terug of gooit een Exception."""
-    from curl_cffi import requests as cffi_req
-    import re, time as _time
+@app.route('/ah/login')
+def ah_login_start():
+    """Start de AH OAuth-koppeling via de reverse proxy."""
+    _ah_proxy_session_reset()
+    return redirect('/ah/proxy' + _AH_AUTHORIZE_PATH)
 
-    AUTHORIZE_URL = (
-        'https://login.ah.nl/secure/oauth/authorize'
-        '?client_id=appie&redirect_uri=appie%3A%2F%2Flogin-exit&response_type=code'
-    )
 
-    session = cffi_req.Session(impersonate='chrome120')
-
-    # Stap 1 – laad login-pagina (volgt server-side redirects tot het form)
-    r = session.get(AUTHORIZE_URL, timeout=15, allow_redirects=True)
-    r.raise_for_status()
-
-    # Zoek action-URL uit het form
-    m = re.search(r'action=["\']([^"\']+)["\']', r.text)
-    if not m:
-        raise ValueError('Login form niet gevonden (AH-pagina onverwacht)')
-    action = m.group(1)
-    if action.startswith('/'):
-        action = 'https://login.ah.nl' + action
-
-    # Stap 2 – POST credentials; volg redirects NIET automatisch zodat we
-    #           de appie://-redirect kunnen onderscheppen.
-    r2 = session.post(
-        action,
-        data={'username': email, 'password': password},
-        headers={'Referer': r.url, 'Origin': 'https://login.ah.nl'},
-        timeout=15,
-        allow_redirects=False,
-    )
-
-    # Volg redirects handmatig tot we appie:// tegenkomen
-    max_hops = 10
-    location = r2.headers.get('Location', '')
-    for _ in range(max_hops):
-        if not location:
-            break
-        if location.startswith('appie://'):
-            break
-        r2 = session.get(location, timeout=15, allow_redirects=False)
-        location = r2.headers.get('Location', '')
-
-    code = _ah_extract_code(location)
-    if not code or code == location:
-        raise ValueError('Kon OAuth-code niet uit AH-response halen (verkeerde inloggegevens?)')
-
-    # Stap 3 – wissel code in voor tokens
+@app.route('/ah/proxy', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT'])
+@app.route('/ah/proxy/<path:subpath>', methods=['GET', 'POST', 'PUT'])
+def ah_proxy(subpath):
+    """Reverse proxy voor login.ah.nl — de browser van de gebruiker handelt
+    hCaptcha en alle JS af; wij onderscheppen alleen de appie://-redirect."""
+    import re, time
     import requests as _req
-    resp = _req.post(
-        _AH_TOKEN_URL,
-        json={'clientId': 'appie', 'code': code},
-        headers=_AH_HEADERS,
-        timeout=10,
+    from flask import make_response
+
+    # Bouw doel-URL
+    target = _AH_LOGIN_BASE + ('/' + subpath if subpath else '')
+    if request.query_string:
+        target += '?' + request.query_string.decode('utf-8', errors='replace')
+
+    sess     = _ah_proxy_session_get()
+    our_base = request.host_url.rstrip('/')
+
+    # Stuur browser-headers door, maar overschrijf Host
+    skip_req = {'host', 'connection', 'content-length', 'transfer-encoding'}
+    fwd = {k: v for k, v in request.headers if k.lower() not in skip_req}
+
+    resp = sess.request(
+        method=request.method,
+        url=target,
+        headers=fwd,
+        data=request.get_data() or None,
+        allow_redirects=False,
+        timeout=15,
     )
-    resp.raise_for_status()
-    data = resp.json()
-    return data['access_token'], data['refresh_token'], data.get('expires_in', 604798)
 
+    # Succes: AH redirect naar appie://login-exit?code=...
+    location = resp.headers.get('Location', '')
+    if 'appie://login-exit' in location:
+        code = _ah_extract_code(location)
+        if code:
+            try:
+                tok = _req.post(
+                    _AH_TOKEN_URL,
+                    json={'clientId': 'appie', 'code': code},
+                    headers=_AH_HEADERS,
+                    timeout=10,
+                )
+                tok.raise_for_status()
+                data = tok.json()
+                expires_at = int(time.time()) + data.get('expires_in', 604798)
+                _ah_setting('ah_access_token',  data['access_token'])
+                _ah_setting('ah_refresh_token', data['refresh_token'])
+                _ah_setting('ah_token_expires', str(expires_at))
+                _ah_proxy_session_reset()
+                flash('AH-account succesvol gekoppeld!')
+            except Exception as e:
+                flash(f'Koppelen mislukt: {e}')
+        return redirect(url_for('settings'))
 
-@app.route('/api/ah/login-password', methods=['POST'])
-def ah_login_password():
-    import time
-    body = request.json or {}
-    email    = body.get('email', '').strip()
-    password = body.get('password', '').strip()
-    if not email or not password:
-        return jsonify({'status': 'error', 'message': 'E-mail en wachtwoord zijn verplicht'}), 400
-    try:
-        access_token, refresh_token, expires_in = ah_login_with_password(email, password)
-        expires_at = int(time.time()) + expires_in
-        _ah_setting('ah_access_token', access_token)
-        _ah_setting('ah_refresh_token', refresh_token)
-        _ah_setting('ah_token_expires', str(expires_at))
-        return jsonify({'status': 'ok', 'expires_at': expires_at})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+    # Herschrijf overige Location-headers zodat ze via de proxy lopen
+    if location:
+        if location.startswith(_AH_LOGIN_BASE):
+            location = location.replace(_AH_LOGIN_BASE, our_base + '/ah/proxy')
+        elif location.startswith('/'):
+            location = our_base + '/ah/proxy' + location
+
+    # Herschrijf HTML-body: vervang login.ah.nl-URLs door proxy-URLs
+    content_type = resp.headers.get('Content-Type', '')
+    if 'text/html' in content_type and resp.content:
+        body = resp.content.decode('utf-8', errors='replace')
+        body = body.replace(_AH_LOGIN_BASE, our_base + '/ah/proxy')
+        body = body.encode('utf-8')
+    else:
+        body = resp.content
+
+    # Strip security-headers die de browser in de war brengen
+    skip_resp = {
+        'content-encoding', 'content-length', 'transfer-encoding', 'connection',
+        'strict-transport-security', 'content-security-policy',
+        'x-frame-options', 'x-xss-protection', 'location',
+    }
+    flask_resp = make_response(body, resp.status_code)
+    for k, v in resp.headers.items():
+        if k.lower() not in skip_resp:
+            flask_resp.headers[k] = v
+    if location:
+        flask_resp.headers['Location'] = location
+    if 'text/html' in content_type:
+        flask_resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+
+    # Kopieer cookies zonder Secure/SameSite/Domain (werkt ook via http://)
+    for raw_cookie in resp.raw.headers.getlist('Set-Cookie'):
+        cookie = re.sub(r';\s*Secure',        '',  raw_cookie, flags=re.I)
+        cookie = re.sub(r';\s*SameSite=[^;]+', '', cookie,     flags=re.I)
+        cookie = re.sub(r';\s*Domain=[^;]+',   '', cookie,     flags=re.I)
+        flask_resp.headers.add('Set-Cookie', cookie)
+
+    return flask_resp
 
 
 @app.route('/api/ah/connect', methods=['POST'])
