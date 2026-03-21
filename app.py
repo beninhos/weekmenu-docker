@@ -1809,6 +1809,88 @@ def ah_callback():
     return redirect(url_for('settings'))
 
 
+def ah_login_with_password(email, password):
+    """Voer server-side AH login uit met e-mail + wachtwoord via curl-cffi.
+    Geeft (access_token, refresh_token, expires_in) terug of gooit een Exception."""
+    from curl_cffi import requests as cffi_req
+    import re, time as _time
+
+    AUTHORIZE_URL = (
+        'https://login.ah.nl/secure/oauth/authorize'
+        '?client_id=appie&redirect_uri=appie%3A%2F%2Flogin-exit&response_type=code'
+    )
+
+    session = cffi_req.Session(impersonate='chrome120')
+
+    # Stap 1 – laad login-pagina (volgt server-side redirects tot het form)
+    r = session.get(AUTHORIZE_URL, timeout=15, allow_redirects=True)
+    r.raise_for_status()
+
+    # Zoek action-URL uit het form
+    m = re.search(r'action=["\']([^"\']+)["\']', r.text)
+    if not m:
+        raise ValueError('Login form niet gevonden (AH-pagina onverwacht)')
+    action = m.group(1)
+    if action.startswith('/'):
+        action = 'https://login.ah.nl' + action
+
+    # Stap 2 – POST credentials; volg redirects NIET automatisch zodat we
+    #           de appie://-redirect kunnen onderscheppen.
+    r2 = session.post(
+        action,
+        data={'username': email, 'password': password},
+        headers={'Referer': r.url, 'Origin': 'https://login.ah.nl'},
+        timeout=15,
+        allow_redirects=False,
+    )
+
+    # Volg redirects handmatig tot we appie:// tegenkomen
+    max_hops = 10
+    location = r2.headers.get('Location', '')
+    for _ in range(max_hops):
+        if not location:
+            break
+        if location.startswith('appie://'):
+            break
+        r2 = session.get(location, timeout=15, allow_redirects=False)
+        location = r2.headers.get('Location', '')
+
+    code = _ah_extract_code(location)
+    if not code or code == location:
+        raise ValueError('Kon OAuth-code niet uit AH-response halen (verkeerde inloggegevens?)')
+
+    # Stap 3 – wissel code in voor tokens
+    import requests as _req
+    resp = _req.post(
+        _AH_TOKEN_URL,
+        json={'clientId': 'appie', 'code': code},
+        headers=_AH_HEADERS,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data['access_token'], data['refresh_token'], data.get('expires_in', 604798)
+
+
+@app.route('/api/ah/login-password', methods=['POST'])
+def ah_login_password():
+    import time
+    body = request.json or {}
+    email    = body.get('email', '').strip()
+    password = body.get('password', '').strip()
+    if not email or not password:
+        return jsonify({'status': 'error', 'message': 'E-mail en wachtwoord zijn verplicht'}), 400
+    try:
+        access_token, refresh_token, expires_in = ah_login_with_password(email, password)
+        expires_at = int(time.time()) + expires_in
+        _ah_setting('ah_access_token', access_token)
+        _ah_setting('ah_refresh_token', refresh_token)
+        _ah_setting('ah_token_expires', str(expires_at))
+        return jsonify({'status': 'ok', 'expires_at': expires_at})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
 @app.route('/api/ah/connect', methods=['POST'])
 def ah_connect():
     import requests as _req

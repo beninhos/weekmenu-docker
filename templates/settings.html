@@ -61,46 +61,27 @@
         </div>
         {% else %}
         <p class="text-sm text-gray-600 mb-4">
-            Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
+            Log in met je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
         </p>
-        <ol class="space-y-4 list-none">
-            <!-- Stap 1 -->
-            <li class="flex gap-3">
-                <span class="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs font-bold flex items-center justify-center">1</span>
-                <div class="space-y-2 flex-1">
-                    <p class="text-sm font-medium text-gray-700">Klik op de knop en log in met je AH-account</p>
-                    <a href="https://login.ah.nl/secure/oauth/authorize?client_id=appie&redirect_uri=appie://login-exit&response_type=code"
-                       target="_blank"
-                       class="inline-block bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
-                        Open AH login →
-                    </a>
-                </div>
-            </li>
-            <!-- Stap 2 -->
-            <li class="flex gap-3">
-                <span class="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs font-bold flex items-center justify-center">2</span>
-                <div class="space-y-1 flex-1">
-                    <p class="text-sm font-medium text-gray-700">Na het inloggen zie je een foutpagina — kopieer de volledige URL</p>
-                    <p class="text-xs text-gray-500">De URL in je adresbalk begint met <code class="bg-gray-100 px-1 rounded">appie://login-exit?code=...</code> — kopieer die hele URL.</p>
-                </div>
-            </li>
-            <!-- Stap 3 -->
-            <li class="flex gap-3">
-                <span class="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs font-bold flex items-center justify-center">3</span>
-                <div class="space-y-2 flex-1">
-                    <p class="text-sm font-medium text-gray-700">Plak de URL hier</p>
-                    <div class="flex gap-2">
-                        <input type="text" id="ahCode" placeholder="appie://login-exit?code=..."
-                               class="flex-1 rounded-md border-gray-300 shadow-sm text-sm font-mono">
-                        <button onclick="ahConnect()"
-                                class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
-                            Koppelen
-                        </button>
-                    </div>
-                    <p id="ahConnectMsg" class="text-xs mt-1 hidden"></p>
-                </div>
-            </li>
-        </ol>
+        <div class="space-y-3 max-w-sm">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">E-mailadres</label>
+                <input type="email" id="ahEmail" placeholder="jouw@email.nl"
+                       class="w-full rounded-md border-gray-300 shadow-sm text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Wachtwoord</label>
+                <input type="password" id="ahPassword"
+                       class="w-full rounded-md border-gray-300 shadow-sm text-sm"
+                       onkeydown="if(event.key==='Enter') ahLoginPassword()">
+            </div>
+            <button onclick="ahLoginPassword()"
+                    id="btnAhLogin"
+                    class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm w-full">
+                Inloggen &amp; koppelen
+            </button>
+            <p id="ahConnectMsg" class="text-xs mt-1 hidden"></p>
+        </div>
         {% endif %}
     </div>
 
@@ -195,8 +176,41 @@
 </div>
 
 <script>
+async function ahLoginPassword() {
+    const email    = document.getElementById('ahEmail').value.trim();
+    const password = document.getElementById('ahPassword').value;
+    const msg      = document.getElementById('ahConnectMsg');
+    const btn      = document.getElementById('btnAhLogin');
+    if (!email || !password) return;
+    btn.disabled = true;
+    btn.textContent = 'Bezig met inloggen...';
+    msg.textContent = '';
+    msg.classList.add('hidden');
+    try {
+        const resp = await fetch('/api/ah/login-password', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({email, password}),
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            msg.textContent = data.message || 'Inloggen mislukt';
+            msg.className = 'text-xs mt-2 text-red-600';
+            msg.classList.remove('hidden');
+        }
+    } catch (e) {
+        msg.textContent = 'Fout: ' + e.message;
+        msg.className = 'text-xs mt-2 text-red-600';
+        msg.classList.remove('hidden');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Inloggen & koppelen';
+}
+
 async function ahConnect() {
-    const code = document.getElementById('ahCode').value.trim();
+    const code = document.getElementById('ahCode') ? document.getElementById('ahCode').value.trim() : '';
     const msg = document.getElementById('ahConnectMsg');
     if (!code) return;
     msg.textContent = 'Bezig...';

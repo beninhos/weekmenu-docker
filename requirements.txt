@@ -8,3 +8,4 @@ Flask-WTF==1.1.1
 email-validator==2.0.0
 recipe-scrapers>=14.0.0
 ingredient-parser-nlp>=2.0.0
+curl-cffi>=0.7.0
