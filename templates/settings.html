@@ -60,34 +60,42 @@
             </button>
         </div>
         {% else %}
-        <p class="text-sm text-gray-600 mb-3">
+        <p class="text-sm text-gray-600 mb-4">
             Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
         </p>
-        <div class="space-y-3">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">
-                    OAuth-code uit de Appie-app
-                </label>
+        <div class="space-y-4">
+            <!-- Stap 1: login-link -->
+            <div class="bg-gray-50 rounded-lg p-4 space-y-2">
+                <p class="text-sm font-medium text-gray-700">Stap 1 — Log in via je browser</p>
+                <p class="text-xs text-gray-500">Klik op de knop, log in met je AH-account. De browser probeert daarna een app-link te openen die <strong>niet werkt</strong> — dat is normaal.</p>
+                <a href="https://login.ah.nl/secure/oauth/authorize?client_id=appie&redirect_uri=appie://login-exit&response_type=code"
+                   target="_blank"
+                   class="inline-block bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
+                    Open AH login →
+                </a>
+            </div>
+            <!-- Stap 2: code kopiëren -->
+            <div class="bg-gray-50 rounded-lg p-4 space-y-2">
+                <p class="text-sm font-medium text-gray-700">Stap 2 — Kopieer de code uit de URL</p>
+                <p class="text-xs text-gray-500">
+                    Na het inloggen zie je een foutpagina of lege pagina. Kijk in de adresbalk — de URL ziet er zo uit:<br>
+                    <code class="bg-gray-100 px-1 rounded">appie://login-exit?code=<strong>AB12CD34EF...</strong></code><br>
+                    Kopieer alleen het stuk <strong>na</strong> <code>?code=</code>.
+                </p>
+            </div>
+            <!-- Stap 3: plakken -->
+            <div class="space-y-2">
+                <p class="text-sm font-medium text-gray-700">Stap 3 — Plak de code hieronder</p>
                 <div class="flex gap-2">
-                    <input type="text" id="ahCode" placeholder="Plak code hier..."
-                           class="flex-1 rounded-md border-gray-300 shadow-sm text-sm">
+                    <input type="text" id="ahCode" placeholder="AB12CD34EF..."
+                           class="flex-1 rounded-md border-gray-300 shadow-sm text-sm font-mono">
                     <button onclick="ahConnect()"
                             class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
                         Koppelen
                     </button>
                 </div>
-                <p id="ahConnectMsg" class="text-xs mt-2 hidden"></p>
+                <p id="ahConnectMsg" class="text-xs mt-1 hidden"></p>
             </div>
-            <details class="text-xs text-gray-500">
-                <summary class="cursor-pointer hover:text-gray-700">Hoe kom ik aan de code?</summary>
-                <ol class="mt-2 space-y-1 list-decimal list-inside">
-                    <li>Open de Appie-app op je telefoon</li>
-                    <li>Ga naar Profiel → Instellingen</li>
-                    <li>Scroll omlaag en tik 5× snel op het AH-logo</li>
-                    <li>Tik op "OAuth Code" en kopieer de code (30 seconden geldig)</li>
-                    <li>Plak de code hierboven en klik op Koppelen</li>
-                </ol>
-            </details>
         </div>
         {% endif %}
     </div>
