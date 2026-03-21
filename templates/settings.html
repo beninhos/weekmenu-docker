@@ -63,40 +63,44 @@
         <p class="text-sm text-gray-600 mb-4">
             Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
         </p>
-        <div class="space-y-4">
-            <!-- Stap 1: login-link -->
-            <div class="bg-gray-50 rounded-lg p-4 space-y-2">
-                <p class="text-sm font-medium text-gray-700">Stap 1 — Log in via je browser</p>
-                <p class="text-xs text-gray-500">Klik op de knop, log in met je AH-account. De browser probeert daarna een app-link te openen die <strong>niet werkt</strong> — dat is normaal.</p>
-                <a href="https://login.ah.nl/secure/oauth/authorize?client_id=appie&redirect_uri=appie://login-exit&response_type=code"
-                   target="_blank"
-                   class="inline-block bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
-                    Open AH login →
-                </a>
-            </div>
-            <!-- Stap 2: code kopiëren -->
-            <div class="bg-gray-50 rounded-lg p-4 space-y-2">
-                <p class="text-sm font-medium text-gray-700">Stap 2 — Kopieer de code uit de URL</p>
-                <p class="text-xs text-gray-500">
-                    Na het inloggen zie je een foutpagina of lege pagina. Kijk in de adresbalk — de URL ziet er zo uit:<br>
-                    <code class="bg-gray-100 px-1 rounded">appie://login-exit?code=<strong>AB12CD34EF...</strong></code><br>
-                    Kopieer alleen het stuk <strong>na</strong> <code>?code=</code>.
-                </p>
-            </div>
-            <!-- Stap 3: plakken -->
-            <div class="space-y-2">
-                <p class="text-sm font-medium text-gray-700">Stap 3 — Plak de code hieronder</p>
-                <div class="flex gap-2">
-                    <input type="text" id="ahCode" placeholder="AB12CD34EF..."
-                           class="flex-1 rounded-md border-gray-300 shadow-sm text-sm font-mono">
-                    <button onclick="ahConnect()"
-                            class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
-                        Koppelen
-                    </button>
+        <ol class="space-y-4 list-none">
+            <!-- Stap 1 -->
+            <li class="flex gap-3">
+                <span class="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs font-bold flex items-center justify-center">1</span>
+                <div class="space-y-2 flex-1">
+                    <p class="text-sm font-medium text-gray-700">Klik op de knop en log in met je AH-account</p>
+                    <a href="https://login.ah.nl/secure/oauth/authorize?client_id=appie&redirect_uri=appie://login-exit&response_type=code"
+                       target="_blank"
+                       class="inline-block bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
+                        Open AH login →
+                    </a>
                 </div>
-                <p id="ahConnectMsg" class="text-xs mt-1 hidden"></p>
-            </div>
-        </div>
+            </li>
+            <!-- Stap 2 -->
+            <li class="flex gap-3">
+                <span class="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+                <div class="space-y-1 flex-1">
+                    <p class="text-sm font-medium text-gray-700">Na het inloggen zie je een foutpagina — kopieer de volledige URL</p>
+                    <p class="text-xs text-gray-500">De URL in je adresbalk begint met <code class="bg-gray-100 px-1 rounded">appie://login-exit?code=...</code> — kopieer die hele URL.</p>
+                </div>
+            </li>
+            <!-- Stap 3 -->
+            <li class="flex gap-3">
+                <span class="flex-shrink-0 w-6 h-6 rounded-full bg-green-600 text-white text-xs font-bold flex items-center justify-center">3</span>
+                <div class="space-y-2 flex-1">
+                    <p class="text-sm font-medium text-gray-700">Plak de URL hier</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="ahCode" placeholder="appie://login-exit?code=..."
+                               class="flex-1 rounded-md border-gray-300 shadow-sm text-sm font-mono">
+                        <button onclick="ahConnect()"
+                                class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
+                            Koppelen
+                        </button>
+                    </div>
+                    <p id="ahConnectMsg" class="text-xs mt-1 hidden"></p>
+                </div>
+            </li>
+        </ol>
         {% endif %}
     </div>
 

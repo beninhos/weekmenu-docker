@@ -1779,11 +1779,42 @@ def import_zip():
 
 # ── AH routes ───────────────────────────────────────────────────────────────
 
+def _ah_extract_code(raw):
+    """Haal de OAuth-code op uit een volledige URL of losse code."""
+    raw = raw.strip()
+    # Ondersteun: "appie://login-exit?code=XXX", "?code=XXX", of gewoon "XXX"
+    import re
+    m = re.search(r'[?&]code=([^&\s]+)', raw)
+    return m.group(1) if m else raw
+
+
+@app.route('/ah/callback')
+def ah_callback():
+    """Automatische callback: gebruiker plakt appie://...-URL en navigeert naar onze server."""
+    code = request.args.get('code', '').strip()
+    if not code:
+        return redirect(url_for('settings') + '#ah-account')
+    try:
+        import requests as _req, time
+        resp = _req.post(_AH_TOKEN_URL, json={'clientId': 'appie', 'code': code},
+                         headers=_AH_HEADERS, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        _ah_setting('ah_access_token', data['access_token'])
+        _ah_setting('ah_refresh_token', data['refresh_token'])
+        _ah_setting('ah_token_expires', str(int(time.time()) + data.get('expires_in', 604798)))
+        flash('AH-account succesvol gekoppeld!')
+    except Exception as e:
+        flash(f'Koppelen mislukt: {e}')
+    return redirect(url_for('settings'))
+
+
 @app.route('/api/ah/connect', methods=['POST'])
 def ah_connect():
     import requests as _req
     import time
-    code = (request.json or {}).get('code', '').strip()
+    raw = (request.json or {}).get('code', '').strip()
+    code = _ah_extract_code(raw)
     if not code:
         return jsonify({'status': 'error', 'message': 'Geen code opgegeven'}), 400
     try:
