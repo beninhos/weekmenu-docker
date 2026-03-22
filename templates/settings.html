@@ -34,6 +34,113 @@
         </form>
     </div>
 
+    <!-- AH Account -->
+    <div class="bg-white rounded-lg shadow p-6" id="ah-account">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Albert Heijn</h3>
+            <a href="{{ url_for('ah_products') }}"
+               class="text-sm bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700">
+                AH Producten →
+            </a>
+        </div>
+
+        {% if ah_connected %}
+        <!-- Verbonden -->
+        <div class="flex items-start justify-between">
+            <div>
+                <p class="font-medium text-green-700">✓ Verbonden</p>
+                {% if ah_expires_dt %}
+                <p class="text-sm text-gray-500 mt-0.5">Token verloopt circa {{ ah_expires_dt }}</p>
+                {% endif %}
+                <div id="ahVerifyResult" class="mt-2 text-sm hidden"></div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+                <button onclick="ahVerify()"
+                        class="text-sm text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-2 rounded hover:bg-blue-50">
+                    Verbinding testen
+                </button>
+                <button onclick="ahDisconnect()"
+                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50">
+                    Ontkoppelen
+                </button>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- Niet verbonden: 3-stappen koppelaar -->
+        <div id="ahStep0">
+            <p class="text-sm text-gray-600 mb-4">
+                Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
+            </p>
+            <button onclick="ahStartLogin()"
+                    id="ahStartBtn"
+                    class="bg-green-600 text-white px-5 py-2.5 rounded hover:bg-green-700 text-sm font-medium">
+                Start AH-koppelaar
+            </button>
+            <div id="ahStartError" class="hidden mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2"></div>
+        </div>
+
+        <div id="ahStep1" class="hidden space-y-4">
+            <!-- Stap 2: SSH-tunnel -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <p class="text-sm font-medium text-gray-700 mb-2">
+                    <span class="inline-flex items-center justify-center w-5 h-5 bg-green-600 text-white rounded-full text-xs mr-1.5">1</span>
+                    Open een SSH-tunnel op je computer:
+                </p>
+                <div class="flex items-center gap-2">
+                    <code class="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono" id="ahSshCmd">
+                        ssh -L 9002:localhost:9002 user@server
+                    </code>
+                    <button onclick="ahCopy('ahSshCmd')"
+                            class="shrink-0 text-xs border border-gray-300 bg-white px-2 py-1.5 rounded hover:bg-gray-50">
+                        Kopieer
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stap 3: Inloggen -->
+            <div class="bg-gray-50 rounded-lg p-4">
+                <p class="text-sm font-medium text-gray-700 mb-2">
+                    <span class="inline-flex items-center justify-center w-5 h-5 bg-green-600 text-white rounded-full text-xs mr-1.5">2</span>
+                    Ga naar deze URL in je browser en log in:
+                </p>
+                <div class="flex items-center gap-2">
+                    <code class="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono" id="ahLoginUrl">
+                        http://localhost:9002
+                    </code>
+                    <a href="http://localhost:9002" target="_blank"
+                       class="shrink-0 text-xs bg-green-600 text-white px-2 py-1.5 rounded hover:bg-green-700">
+                        Openen
+                    </a>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Log in met je AH-account. Sluit het tabblad daarna.</p>
+            </div>
+
+            <!-- Wachten -->
+            <div class="flex items-center gap-3 text-sm text-gray-500">
+                <svg class="animate-spin h-4 w-4 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                Wachten op koppeling…
+                <button onclick="ahPollNow()" class="ml-auto text-xs text-blue-600 hover:underline">Nu controleren</button>
+            </div>
+        </div>
+
+        <details class="mt-4">
+            <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600">Handmatig refresh_token invoeren</summary>
+            <div class="mt-2 flex gap-2">
+                <input type="text" id="ahManualToken" placeholder="refresh_token..."
+                       class="flex-1 rounded-md border-gray-300 shadow-sm text-xs">
+                <button onclick="ahSaveToken()"
+                        class="text-xs bg-gray-100 border border-gray-300 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200">
+                    Opslaan
+                </button>
+            </div>
+        </details>
+        {% endif %}
+    </div>
+
     <!-- Statistieken -->
     <div class="bg-white rounded-lg shadow p-6">
         <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-4">Database</h3>
@@ -125,6 +232,94 @@
 </div>
 
 <script>
+let _ahPollInterval = null;
+
+async function ahStartLogin() {
+    const btn    = document.getElementById('ahStartBtn');
+    const errDiv = document.getElementById('ahStartError');
+    btn.disabled = true;
+    btn.textContent = 'Starten…';
+    errDiv.classList.add('hidden');
+
+    try {
+        const resp = await fetch('/api/ah/start-login', {method: 'POST'});
+        const data = await resp.json();
+        if (!data.ok) {
+            errDiv.textContent = data.reason || 'Kon de koppelaar niet starten';
+            errDiv.classList.remove('hidden');
+            btn.disabled = false;
+            btn.textContent = 'Start AH-koppelaar';
+            return;
+        }
+        // Toon stap 1 instructies
+        document.getElementById('ahStep0').classList.add('hidden');
+        document.getElementById('ahStep1').classList.remove('hidden');
+        // Start polling
+        _ahPollInterval = setInterval(ahPollNow, 3000);
+    } catch (e) {
+        errDiv.textContent = 'Netwerkfout: ' + e.message;
+        errDiv.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Start AH-koppelaar';
+    }
+}
+
+async function ahPollNow() {
+    try {
+        const resp = await fetch('/api/ah/poll-token');
+        const data = await resp.json();
+        if (data.ready) {
+            clearInterval(_ahPollInterval);
+            location.reload();
+        }
+    } catch (_) {}
+}
+
+function ahCopy(id) {
+    const text = document.getElementById(id).textContent.trim();
+    navigator.clipboard.writeText(text).catch(() => {});
+}
+
+async function ahVerify() {
+    const div = document.getElementById('ahVerifyResult');
+    div.textContent = 'Testen…';
+    div.className = 'mt-2 text-sm text-gray-500';
+    div.classList.remove('hidden');
+    try {
+        const resp = await fetch('/api/ah/verify');
+        const data = await resp.json();
+        if (data.ok) {
+            div.textContent = data.name ? `✓ Werkt — hallo ${data.name}!` : '✓ Verbinding werkt';
+            div.className = 'mt-2 text-sm text-green-700';
+        } else {
+            div.textContent = '✗ ' + (data.reason || 'Verbinding mislukt');
+            div.className = 'mt-2 text-sm text-red-700';
+        }
+    } catch (e) {
+        div.textContent = 'Fout: ' + e.message;
+        div.className = 'mt-2 text-sm text-red-700';
+    }
+}
+
+async function ahSaveToken() {
+    const token = document.getElementById('ahManualToken').value.trim();
+    if (!token) return;
+    const resp = await fetch('/api/ah/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({code: token}),
+    });
+    const data = await resp.json();
+    if (data.status === 'ok') location.reload();
+    else alert('Opslaan mislukt: ' + data.message);
+}
+
+async function ahDisconnect() {
+    if (!confirm('AH-account ontkoppelen?')) return;
+    await fetch('/api/ah/disconnect', {method: 'POST'});
+    location.reload();
+}
+
 async function importData(input) {
     const file = input.files[0];
     if (!file) return;

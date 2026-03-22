@@ -3,22 +3,33 @@
 <div class="bg-white rounded-lg shadow p-6">
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Boodschappenlijst — Week {{ week }}</h2>
-        <button onclick="window.print()" 
-                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            Printen
-        </button>
+        <div class="flex gap-2">
+            <button onclick="clearAll()"
+                    class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
+                ✕ Wissen
+            </button>
+            <button onclick="sendToAH()" id="btnSendAH"
+                    class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm">
+                🛒 Stuur naar AH
+            </button>
+            <button onclick="window.print()"
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">
+                Printen
+            </button>
+        </div>
     </div>
-    
+    <div id="ahToast" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"></div>
+
     {% for group in grouped_shopping_list %}
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-6 mb-3">{{ group.category }}</h3>
+        <h3 class="shopping-category text-xs font-semibold uppercase tracking-wide text-gray-400 mt-6 mb-3">{{ group.category }}</h3>
         <div class="space-y-2">
             {% for item in group.producten %}
-            <div class="flex items-center">
+            <div class="shopping-item flex items-center" data-key="{{ item.name }}|{{ item.unit }}">
                 <input type="checkbox" class="mr-2" onchange="toggleItem(this)">
                 <span class="flex-grow">
                     {{ item.amount_display }} {{ item.unit }} {{ item.name }}
                 </span>
-                <button onclick="removeItem(this)" class="ml-2 text-red-500 hover:text-red-700">✕</button>
+                <button onclick="removeItem(this)" class="ml-2 text-red-400 hover:text-red-600 text-xs">✕</button>
             </div>
             {% endfor %}
         </div>
@@ -38,26 +49,50 @@ function toggleItem(cb) {
     cb.parentElement.style.opacity = cb.checked ? '0.5' : '1';
 }
 
+function clearAll() {
+    fetch('/api/shopping-list/{{ year }}/{{ week }}/clear', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                document.querySelectorAll('.shopping-item, .shopping-category, .space-y-2').forEach(el => el.remove());
+            }
+        });
+}
+
+async function sendToAH() {
+    const btn = document.getElementById('btnSendAH');
+    const toast = document.getElementById('ahToast');
+    btn.textContent = '⏳ Bezig...';
+    btn.disabled = true;
+    toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-gray-100 text-gray-600';
+    toast.textContent = 'Items worden verstuurd naar AH...';
+    try {
+        const resp = await fetch('/api/shopping-list/{{ year }}/{{ week }}/send-to-ah', {method: 'POST'});
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-green-50 text-green-800 border border-green-200';
+            toast.textContent = '✓ ' + data.message;
+        } else {
+            toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-800 border border-red-200';
+            toast.textContent = '✕ ' + (data.message || 'Versturen mislukt');
+        }
+    } catch (e) {
+        toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-800 border border-red-200';
+        toast.textContent = 'Fout: ' + e.message;
+    }
+    btn.textContent = '🛒 Stuur naar AH';
+    btn.disabled = false;
+}
+
 function removeItem(btn) {
     const item = btn.parentElement;
     const categoryDiv = item.parentElement;
-    
-    // Verwijder het item
-    item.style.opacity = '0';
-    setTimeout(() => {
-        item.remove();
-        
-        // Check of de categorie nu leeg is
-        const remainingItems = categoryDiv.querySelectorAll('.flex.items-center');
-        if (remainingItems.length === 0) {
-            // Verberg de lege categorie header
-            const categoryHeader = categoryDiv.previousElementSibling;
-            if (categoryHeader && categoryHeader.tagName === 'H3') {
-                categoryHeader.style.display = 'none';
-            }
-            categoryDiv.style.display = 'none';
-        }
-    }, 300);
+    item.remove();
+    if (categoryDiv.querySelectorAll('.shopping-item').length === 0) {
+        const h = categoryDiv.previousElementSibling;
+        if (h && h.tagName === 'H3') h.style.display = 'none';
+        categoryDiv.style.display = 'none';
+    }
 }
 </script>
 {% endblock %}

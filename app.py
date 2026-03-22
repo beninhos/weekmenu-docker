@@ -39,40 +39,52 @@ MEAL_TYPES = [
 
 # NIEUW: Uitgebreide categorieën die aansluiten bij supermarktindeling
 PRODUCT_CATEGORIES = [
-    'AGF (Groenten & Fruit)',
-    'Vlees & Vis',
+    'Groente & Aardappelen',
+    'Fruit',
+    'Vlees',
+    'Vis',
+    'Vegetarisch & Vegan',
+    'Vleeswaren',
+    'Kaas',
     'Zuivel & Eieren',
-    'Kaas & Vleeswaren',
-    'Brood & Banket',
+    'Bakkerij',
     'Pasta, Rijst & Wereldkeuken',
-    'Conserven & Soepen',
-    'Sauzen & Kruiden',
-    'Bakproducten',
-    'Ontbijt & Broodbeleg',
-    'Dranken',
+    'Blikken & Potten',
+    'Soepen, Sauzen & Kruiden',
+    'Bakken',
+    'Ontbijt & Beleg',
+    'Snacks & Noten',
+    'Koek, Snoep & Chocolade',
+    'Koffie & Thee',
+    'Frisdrank & Water',
+    'Bier, Wijn & Aperitieven',
     'Diepvries',
-    'Snoep & Koek',
-    'Noten & Gedroogd fruit',
     'Overig'
 ]
 
-# Sorteervolgorde voor boodschappenlijst - Supermarkt looproute
+# Sorteervolgorde boodschappenlijst — AH looproute
 CATEGORY_ORDER_SUPERMARKET = [
-    'AGF (Groenten & Fruit)',           # Bij binnenkomst
-    'Brood & Banket',                   # Vaak vooraan
-    'Kaas & Vleeswaren',                # Versafdeling
-    'Vlees & Vis',                      # Verse afdeling
-    'Zuivel & Eieren',                  # Koeling zijkant
-    'Pasta, Rijst & Wereldkeuken',      # Middenpad
-    'Conserven & Soepen',               # Middenpaden
-    'Sauzen & Kruiden',                 # Middenpaden
-    'Bakproducten',                     # Middenpaden
-    'Ontbijt & Broodbeleg',            # Middenpaden
-    'Snoep & Koek',                    # Vaak bij kassa gebied
-    'Noten & Gedroogd fruit',          # Bij snacks
-    'Dranken',                          # Zwaar, vaak achteraan
-    'Diepvries',                        # Helemaal achteraan
-    'Overig'                            # Rest
+    'Groente & Aardappelen',        # Vers, bij binnenkomst
+    'Fruit',                        # Vers, bij binnenkomst
+    'Vlees',                        # Versafdeling
+    'Vis',                          # Versafdeling
+    'Vegetarisch & Vegan',          # Versafdeling
+    'Vleeswaren',                   # Versafdeling
+    'Kaas',                         # Versafdeling
+    'Zuivel & Eieren',              # Koeling
+    'Bakkerij',                     # Broodafdeling
+    'Pasta, Rijst & Wereldkeuken',  # Droog middenpad
+    'Blikken & Potten',             # Droog middenpad
+    'Soepen, Sauzen & Kruiden',     # Droog middenpad
+    'Bakken',                       # Droog middenpad
+    'Ontbijt & Beleg',              # Droog middenpad
+    'Snacks & Noten',               # Snackafdeling
+    'Koek, Snoep & Chocolade',      # Snoepgang
+    'Koffie & Thee',                # Drankengang
+    'Frisdrank & Water',            # Drankengang
+    'Bier, Wijn & Aperitieven',     # Drankengang
+    'Diepvries',                    # Achteraan
+    'Overig'
 ]
 
 # App setup
@@ -105,6 +117,13 @@ class Ingredient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
     category = db.Column(db.String(50), nullable=False)
+    ah_product_id      = db.Column(db.Integer, nullable=True)
+    ah_product_name    = db.Column(db.String(200), nullable=True)
+    ah_product_size    = db.Column(db.String(50), nullable=True)
+    ah_product_price   = db.Column(db.String(20), nullable=True)
+    ah_product_image   = db.Column(db.String(500), nullable=True)
+    ah_product_bonus   = db.Column(db.Boolean, default=False)
+    ah_product_updated = db.Column(db.Integer, nullable=True)
 
 class RecipeIngredient(db.Model):
     __tablename__ = 'recipe_ingredient'
@@ -162,6 +181,114 @@ class Settings(db.Model):
     key = db.Column(db.String(50), nullable=False, unique=True)
     value = db.Column(db.String(200), nullable=True)
 
+
+# ── AH API helpers ──────────────────────────────────────────────────────────
+
+_AH_LOGIN_BASE       = 'https://login.ah.nl'
+_AH_AUTHORIZE_PATH   = '/secure/oauth/authorize?client_id=appie&redirect_uri=appie%3A%2F%2Flogin-exit&response_type=code'
+_AH_ANON_TOKEN_URL   = 'https://api.ah.nl/mobile-auth/v1/auth/token/anonymous'
+_AH_TOKEN_URL        = 'https://api.ah.nl/mobile-auth/v1/auth/token'
+_AH_REFRESH_URL      = 'https://api.ah.nl/mobile-auth/v1/auth/token/refresh'
+_AH_SEARCH_URL       = 'https://api.ah.nl/mobile-services/product/search/v2'
+_AH_SHOPPINGLIST_URL = 'https://api.ah.nl/mobile-services/shoppinglist/v2/items'
+_AH_HEADERS          = {'User-Agent': 'Appie/8.22.3', 'x-application': 'AHWEBSHOP'}
+
+def _ah_setting(key, value=None):
+    """Get or set a Settings value by key."""
+    s = Settings.query.filter_by(key=key).first()
+    if value is None:
+        return s.value if s else None
+    if s:
+        s.value = value
+    else:
+        db.session.add(Settings(key=key, value=value))
+    db.session.commit()
+
+
+def _ah_get_anon_token():
+    """Return a valid anonymous AH access token (for product search)."""
+    import requests as _req
+    import time
+    token   = _ah_setting('ah_anon_token')
+    expires = _ah_setting('ah_anon_expires')
+    if token and expires and int(time.time()) < int(expires) - 60:
+        return token
+    resp = _req.post(
+        _AH_ANON_TOKEN_URL,
+        json={'clientId': 'appie'},
+        headers=_AH_HEADERS,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    _ah_setting('ah_anon_token', data['access_token'])
+    _ah_setting('ah_anon_expires', str(int(time.time()) + data.get('expires_in', 604798)))
+    return data['access_token']
+
+
+def ah_get_access_token():
+    """Return a valid user AH access token, auto-refreshing if needed."""
+    import requests as _req
+    import time
+    token   = _ah_setting('ah_access_token')
+    expires = _ah_setting('ah_token_expires')
+    if token and expires and int(time.time()) < int(expires) - 60:
+        return token
+    refresh = _ah_setting('ah_refresh_token')
+    if not refresh:
+        return None
+    try:
+        resp = _req.post(
+            _AH_REFRESH_URL,
+            json={'clientId': 'appie', 'refreshToken': refresh},
+            headers=_AH_HEADERS,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        _ah_setting('ah_access_token', data['access_token'])
+        _ah_setting('ah_refresh_token', data.get('refresh_token', refresh))
+        _ah_setting('ah_token_expires', str(int(time.time()) + data.get('expires_in', 604798)))
+        return data['access_token']
+    except Exception:
+        return None
+
+
+def ah_search_products(query, size=8):
+    """Search AH product catalog. Returns list of product dicts."""
+    import requests as _req
+    try:
+        token = _ah_get_anon_token()
+        headers = {**_AH_HEADERS, 'Authorization': f'Bearer {token}'}
+        resp = _req.get(
+            _AH_SEARCH_URL,
+            params={'query': query, 'size': size},
+            headers=headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        products = []
+        for p in resp.json().get('products', []):
+            images = p.get('images') or []
+            img_url = next((i['url'] for i in images if i.get('width') == 200), '')
+            if not img_url and images:
+                img_url = images[0].get('url', '')
+            price_raw = p.get('currentPrice') or p.get('priceBeforeBonus')
+            products.append({
+                'productId':  p.get('webshopId'),
+                'title':      p.get('title', ''),
+                'size':       p.get('salesUnitSize', ''),
+                'price':      f"{price_raw:.2f}".replace('.', ',') if price_raw else '',
+                'isBonus':    bool(p.get('isBonus') or p.get('discountLabels')),
+                'image':      img_url,
+            })
+        return products
+    except Exception:
+        return []
+
+
+# ── End AH API helpers ───────────────────────────────────────────────────────
+
 # Routes
 @app.route('/')
 def index():
@@ -169,6 +296,12 @@ def index():
     week_number = today.isocalendar()[1]
     year = today.year
     return redirect(url_for('week_menu', year=year, week=week_number))
+
+@app.route('/boodschappenlijst')
+def boodschappenlijst_redirect():
+    today = date.today()
+    iso = today.isocalendar()
+    return redirect(url_for('shopping_list', year=iso[0], week=iso[1]))
 
 @app.route('/week/<int:year>/<int:week>')
 def week_menu(year, week):
@@ -528,6 +661,20 @@ def update_menu():
                     )
                     db.session.add(menu_item)
         
+        # Verwijder CustomShoppingIngredients voor recepten die uit het menu zijn gehaald
+        new_recipe_ids = {pos[2] for pos in new_positions}
+        removed_recipe_ids = {pos[2] for pos in old_positions} - new_recipe_ids
+        for rid in removed_recipe_ids:
+            recipe = Recipe.query.get(rid)
+            if recipe:
+                ing_ids = [ri.ingredient_id for ri in recipe.ingredients]
+                if ing_ids:
+                    CustomShoppingIngredient.query.filter(
+                        CustomShoppingIngredient.week_number == data['week'],
+                        CustomShoppingIngredient.year == data['year'],
+                        CustomShoppingIngredient.ingredient_id.in_(ing_ids)
+                    ).delete(synchronize_session='fetch')
+
         truly_new_positions = new_positions - old_positions
         
         for position in truly_new_positions:
@@ -549,6 +696,20 @@ def update_menu():
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
+@app.route('/api/shopping-list/<int:year>/<int:week>/clear', methods=['POST'])
+def clear_shopping_list(year, week):
+    """Wis de boodschappenlijst: verberg alle huidige items zonder recepten uit weekmenu te verwijderen."""
+    try:
+        MenuItem.query.filter_by(
+            week_number=week, year=year, skip_shopping_list=False
+        ).update({'skip_shopping_list': True})
+        CustomShoppingIngredient.query.filter_by(week_number=week, year=year).delete()
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
 @app.route('/clear_week_menu', methods=['POST'])
 def clear_week_menu():
     """Clear all menu items for a specific week"""
@@ -561,7 +722,8 @@ def clear_week_menu():
             week_number=week,
             year=year
         ).delete()
-        
+        CustomShoppingIngredient.query.filter_by(week_number=week, year=year).delete()
+
         db.session.commit()
         return jsonify({'status': 'success'})
     except Exception as e:
@@ -850,6 +1012,7 @@ def copy_previous_week():
             return jsonify({'status': 'error', 'message': 'Geen menu gevonden voor de vorige week'}), 404
 
         MenuItem.query.filter_by(week_number=week, year=year).delete()
+        CustomShoppingIngredient.query.filter_by(week_number=week, year=year).delete()
 
         for item in prev_items:
             new_item = MenuItem(
@@ -941,27 +1104,85 @@ _AMOUNT_ONLY_RE = re.compile(
 
 # Category guessing: ordered list checked in sequence (most specific first)
 _CATEGORY_KEYWORDS = [
-    ('Vlees & Vis', ['kip', 'gehakt', 'varken', 'rundvlees', 'lam', 'zalm', 'tonijn', 'vis', 'garnaal', 'mossel', 'inktvis', 'spek', 'bacon', 'worst', 'biefstuk', 'tartaar', 'ossenhaas', 'forel', 'haring', 'makreel', 'ansjovis', 'kabeljauw', 'tilapia', 'kreeft', 'krab', 'salami', 'pancetta', 'chorizo', 'kalkoen', 'eend', 'konijn']),
-    ('Kaas & Vleeswaren', ['kaas', 'parmezaan', 'mozzarella', 'feta', 'ricotta', 'mascarpone', 'grana', 'pecorino', 'emmentaler', 'rookvlees']),
-    ('Zuivel & Eieren', ['slagroom', 'karnemelk', 'melk', 'yoghurt', 'kwark', 'boter', 'margarine', 'crème fraîche', 'ei']),
-    ('Pasta, Rijst & Wereldkeuken', ['spaghetti', 'penne', 'rigatoni', 'fusilli', 'lasagne', 'tagliatelle', 'fettuccine', 'noodle', 'couscous', 'bulgur', 'quinoa', 'polenta', 'gnocchi', 'tortellini', 'ravioli', 'macaroni', 'pasta', 'rijst', 'risotto', 'mie']),
-    ('Conserven & Soepen', ['tomatenblokje', 'tomatenpuree', 'passata', 'kikkererwt', 'linzen', 'bonen', 'bouillon', 'soep']),
-    ('Sauzen & Kruiden', ['olijfolie', 'zonnebloemolie', 'ketchup', 'mosterd', 'mayonaise', 'sojasaus', 'worcester', 'tabasco', 'pesto', 'sambal', 'harissa', 'paprikapoeder', 'komijn', 'kaneel', 'kurkuma', 'oregano', 'laurier', 'honing', 'stroop', 'vanille', 'azijn', 'olie', 'zout', 'suiker', 'peper']),
-    ('Bakproducten', ['bloem', 'bakpoeder', 'maizena', 'gist', 'chocolade', 'cacao']),
-    ('Ontbijt & Broodbeleg', ['jam', 'pindakaas', 'hagelslag', 'muesli', 'havermout', 'granola']),
-    ('Dranken', ['wijn', 'bier', 'cognac', 'rum', 'wodka', 'gin', 'likeur']),
-    ('Noten & Gedroogd fruit', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'rozijn', 'cranberry', 'pinda']),
-    ('Brood & Banket', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'tortilla', 'cracker', 'brood']),
-    ('AGF (Groenten & Fruit)', ['ui', 'sjalot', 'knoflook', 'tomat', 'appel', 'peer', 'citroen', 'limoen', 'wortel', 'aardappel', 'prei', 'courgette', 'paprika', 'champignon', 'paddenstoel', 'broccoli', 'bloemkool', 'spinazie', 'komkommer', 'avocado', 'banaan', 'aardbei', 'sinaasappel', 'kiwi', 'mango', 'ananas', 'peterselie', 'basilicum', 'rozemarijn', 'tijm', 'bieslook', 'selderij', 'venkel', 'asperge', 'sperziebonen', 'doperwt', 'mais', 'biet', 'radijs', 'spruitjes', 'kool', 'witlof', 'paksoi', 'aubergine', 'chilipeper', 'gember', 'andijvie', 'sla', 'dragon', 'koriander']),
+    # ── Specifieke overrides ── (worden vóór generieke entries gecheckt)
+    ('Groente & Aardappelen', ['vleestomaat', 'vleestomaten', 'bladspinazie', 'sperziebonen', 'sperzieboon', 'winterpeen', 'winterpenen', 'puntpaprika', 'bosui', 'bosuitje', 'bleekselderij', 'augurk']),
+    ('Soepen, Sauzen & Kruiden', ['satésaus', 'sesamolie', 'ahornsiroop', 'boemboe', 'garam', 'massala', 'jus', 'saus']),
+    ('Bakken', ['maizena', 'maïzena', 'zelfrijzend']),
+    ('Bakkerij', ['volkoren bolletje', 'bolletje', 'papadum', 'chapati', 'wraps']),
+    ('Vleeswaren', ['ontbijtspek', 'ontbijtspekje']),
+    ('Kaas', ['burrata']),
+    ('Pasta, Rijst & Wereldkeuken', ['basmatirijst', 'zilvervliesrijst', 'zilvervlies', 'conchiglie', 'bami goreng', 'nasi goreng', 'papadums']),
+    ('Frisdrank & Water', ['bronwater', 'kraanwater']),
+    # ── Vlees — gevogelte, rund, varken, lam, wild
+    ('Vlees', ['kipfilet', 'kippendij', 'kip', 'gehakt', 'varkensvlees', 'varken', 'rundvlees', 'rund', 'lamsrack', 'lam', 'biefstuk', 'tartaar', 'ossenhaas', 'entrecote', 'speklap', 'kalkoen', 'eend', 'konijn', 'wild', 'hert', 'klapstuk', 'riblap', 'cordon bleu', 'saté ajam', 'saté', 'vlees']),
+    # Vleeswaren — verwerkt vlees, beleg
+    ('Vleeswaren', ['ham', 'salami', 'rookworst', 'cervelaat', 'leverworst', 'worst', 'chorizo', 'pancetta', 'prosciutto', 'spek', 'bacon', 'rookvlees', 'pastrami']),
+    # Vis & zeevruchten
+    ('Vis', ['zalm', 'tonijn', 'vis', 'garnaal', 'mossel', 'inktvis', 'forel', 'haring', 'makreel', 'ansjovis', 'kabeljauw', 'tilapia', 'kreeft', 'krab', 'schol', 'sardine', 'zeebaars', 'dorade', 'paling', 'sint-jakobsschelp']),
+    # Vegetarisch & vegan producten (niet groente)
+    ('Vegetarisch & Vegan', ['tofu', 'tempeh', 'tahoe', 'seitan', 'quorn', 'soja', 'lupine']),
+    # Kaas
+    ('Kaas', ['kaas', 'parmezaan', 'mozzarella', 'feta', 'ricotta', 'mascarpone', 'grana', 'pecorino', 'emmentaler', 'gorgonzola', 'brie', 'camembert', 'cheddar', 'gouda', 'edam', 'gruyère']),
+    # Zuivel & eieren
+    ('Zuivel & Eieren', ['slagroom', 'karnemelk', 'volle melk', 'melk', 'yoghurt', 'kwark', 'boter', 'margarine', 'crème fraîche', 'fromage frais', 'zure room', 'room', 'ei', 'quark']),
+    # Bakkerij — vers brood
+    ('Bakkerij', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'focaccia', 'brioche', 'tortilla', 'pitabrood', 'naan', 'brood']),
+    # Pasta, rijst & granen — droge pasta en granen
+    ('Pasta, Rijst & Wereldkeuken', ['spaghetti', 'penne', 'rigatoni', 'fusilli', 'lasagne', 'tagliatelle', 'fettuccine', 'noodle', 'noedel', 'couscous', 'bulgur', 'quinoa', 'polenta', 'gnocchi', 'tortellini', 'ravioli', 'macaroni', 'pasta', 'rijst', 'risotto', 'mie', 'orzo']),
+    # Blikken & potten — conserven, peulvruchten in blik
+    ('Blikken & Potten', ['tomatenblokje', 'tomatenstukje', 'passata', 'kikkererwt', 'linzen', 'bruine bonen', 'witte bonen', 'kidneybonen', 'bonen', 'maïs', 'artisjok', 'olijf']),
+    # Soepen, sauzen, kruiden & olie
+    ('Soepen, Sauzen & Kruiden', ['tomatenpuree', 'olijfolie', 'zonnebloemolie', 'koolzaadolie', 'bouillon', 'fond', 'soep', 'ketchup', 'mosterd', 'mayonaise', 'sojasaus', 'worcester', 'tabasco', 'pesto', 'sambal', 'harissa', 'hoisin', 'misopasta', 'tahini', 'paprikapoeder', 'komijn', 'kaneel', 'kurkuma', 'oregano', 'laurier', 'honing', 'siroop', 'stroop', 'azijn', 'olie', 'zout', 'peper', 'nootmuskaat', 'kardemom', 'kruidnagel', 'steranijs', 'kerrie', 'curry', 'ras el hanout', 'five spice', 'za\'atar', 'sumak']),
+    # Bakken — droge bak-ingrediënten
+    ('Bakken', ['bloem', 'zelfrijzend', 'bakpoeder', 'maizena', 'gist', 'baksoda', 'vanille', 'vanillesuiker', 'amandelpoeder', 'amandelmeel', 'suiker', 'poedersuiker', 'basterdsuiker', 'rietsuiker', 'cacaopoeder', 'cacao']),
+    # Chocolade (apart van bakken, voor gebruik als ingredient/snack)
+    ('Koek, Snoep & Chocolade', ['chocolade', 'pure chocolade', 'melkchocolade', 'witte chocolade', 'koek', 'stroopwafel', 'biscuit', 'marshmallow']),
+    # Ontbijt & beleg
+    ('Ontbijt & Beleg', ['jam', 'marmelade', 'pindakaas', 'notenpasta', 'hagelslag', 'vlokken', 'muesli', 'havermout', 'granola', 'cornflakes', 'honing op brood']),
+    # Snacks & noten
+    ('Snacks & Noten', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'vijg', 'abrikoos', 'pinda']),
+    # Koffie & thee
+    ('Koffie & Thee', ['koffie', 'espresso', 'thee', 'groene thee', 'cacao poeder']),
+    # Alcoholische dranken — relevant als kookvloeistof
+    ('Bier, Wijn & Aperitieven', ['wijn', 'rode wijn', 'witte wijn', 'rosé', 'bier', 'cognac', 'rum', 'wodka', 'gin', 'whisky', 'port', 'marsala', 'sherry', 'champagne', 'prosecco', 'likeur', 'calvados', 'armagnac']),
+    # Frisdrank & water
+    ('Frisdrank & Water', ['limonade', 'cola', 'spa', 'mineraalwater', 'appelsap', 'sinaasappelsap', 'tomatensap', 'kokosmelk', 'amandelmelk', 'havermelk', 'sojamelk', 'water']),
+    # Groente & aardappelen — breed spectrum
+    ('Groente & Aardappelen', ['ui', 'rode ui', 'sjalot', 'knoflook', 'wortel', 'aardappel', 'zoete aardappel', 'bataat', 'prei', 'courgette', 'paprika', 'paparika', 'champignon', 'paddenstoel', 'shiitake', 'broccoli', 'bloemkool', 'romanesco', 'spinazie', 'komkommer', 'tomaat', 'tomaten', 'tomat', 'venkel', 'asperge', 'doperwt', 'erwt', 'biet', 'radijs', 'spruitje', 'kool', 'rode kool', 'witlof', 'paksoi', 'aubergine', 'chilipeper', 'gember', 'andijvie', 'sla', 'ijsbergsla', 'peterselie', 'basilicum', 'rozemarijn', 'tijm', 'bieslook', 'selderij', 'dragon', 'koriander', 'munt', 'salie', 'dille', 'mais', 'maïs', 'artisjok', 'palmhart', 'radicchio', 'rucola', 'rucolo', 'waterkers', 'knolselderij', 'pastinaak', 'rettich', 'raap', 'avocado', 'peen', 'groente']),
+    # Fruit — los van groente
+    ('Fruit', ['appel', 'peer', 'citroen', 'limoen', 'sinaasappel', 'mandarijn', 'grapefruit', 'banaan', 'banan', 'aardbei', 'framboos', 'blauwe bes', 'bosbes', 'braambes', 'kiwi', 'mango', 'ananas', 'papaja', 'passievrucht', 'granaatappel', 'pruim', 'kers', 'abrikoos', 'perzik', 'nectarine', 'vijg', 'meloen', 'watermeloen', 'lychee', 'kokos']),
+    # Diepvries
+    ('Diepvries', ['diepvries', 'ingevroren', 'bevroren']),
 ]
 
+def _normalize_ingredient(s):
+    """Lowercase + strip common Dutch/French diacritics to ASCII."""
+    return (s.lower()
+        .replace('ï', 'i').replace('ë', 'e').replace('é', 'e').replace('è', 'e')
+        .replace('ü', 'u').replace('ö', 'o').replace('ä', 'a')
+        .replace('â', 'a').replace('ê', 'e').replace('î', 'i')
+        .replace('ô', 'o').replace('û', 'u').replace('à', 'a')
+    )
+
 def _guess_ingredient_category(name):
-    """Guess supermarket category by keyword-matching ingredient name."""
-    lower = name.lower()
+    """Guess supermarket category by keyword-matching ingredient name.
+
+    - Long keywords (> 3 chars): simple substring match, handles Dutch compound
+      words like basmatirijst, bladspinazie, ontbijtspek, uien, crème fraîche.
+    - Short keywords (≤ 3 chars): leading-boundary regex only, so plurals
+      like 'uien' match 'ui' but 'provisie' does not match 'vis'.
+    - Both sides are normalized to the same ASCII form first.
+    """
+    norm = _normalize_ingredient(name)
     for category, keywords in _CATEGORY_KEYWORDS:
         for kw in keywords:
-            if re.search(r'(?<![a-z])' + re.escape(kw), lower):
-                return category
+            kw_n = _normalize_ingredient(kw)
+            if len(kw_n) <= 3:
+                if re.search(r'(^|[^a-z])' + re.escape(kw_n), norm):
+                    return category
+            else:
+                if kw_n in norm:
+                    return category
     return 'Overig'
 
 def _parse_dutch_ingredient(raw):
@@ -1168,10 +1389,29 @@ def scrape_recipe():
     except Exception:
         instructions = ''
 
+    # Probeer ingredient_groups() voor multi-sectie recepten (bijv. saus + hoofdrecept)
+    raw_ingredients = []
+    section_names = []
     try:
-        raw_ingredients = scraper.ingredients() or []
+        groups = scraper.ingredient_groups()
+        if groups and len(groups) > 1:
+            for g in groups:
+                if g.ingredients:
+                    raw_ingredients.extend(g.ingredients)
+                if g.purpose:
+                    section_names.append(g.purpose)
+        else:
+            raise ValueError('single group, use .ingredients()')
     except Exception:
-        raw_ingredients = []
+        try:
+            raw_ingredients = scraper.ingredients() or []
+        except Exception:
+            raw_ingredients = []
+
+    # Zet sectienamen als prefix in de instructies
+    if section_names:
+        prefix = 'Secties: ' + ' + '.join(section_names) + '\n\n'
+        instructions = prefix + instructions
 
     parsed_ingredients = parse_ingredients_from_list(raw_ingredients)
 
@@ -1249,7 +1489,16 @@ def settings():
     }
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
-    return render_template('settings.html', stats=stats, default_serves=default_serves)
+    import time
+    ah_refresh = _ah_setting('ah_refresh_token')
+    ah_expires = _ah_setting('ah_token_expires')
+    ah_connected = bool(ah_refresh)
+    ah_expires_dt = None
+    if ah_expires:
+        import datetime as _dt
+        ah_expires_dt = _dt.datetime.fromtimestamp(int(ah_expires)).strftime('%d %b %Y')
+    return render_template('settings.html', stats=stats, default_serves=default_serves,
+                           ah_connected=ah_connected, ah_expires_dt=ah_expires_dt)
 
 
 @app.route('/export')
@@ -1529,6 +1778,434 @@ def import_zip():
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 
+# ── AH routes ───────────────────────────────────────────────────────────────
+
+def _ah_extract_code(raw):
+    """Haal de OAuth-code op uit een volledige URL of losse code."""
+    raw = raw.strip()
+    # Ondersteun: "appie://login-exit?code=XXX", "?code=XXX", of gewoon "XXX"
+    import re
+    m = re.search(r'[?&]code=([^&\s]+)', raw)
+    return m.group(1) if m else raw
+
+
+_AH_CAPTCHA_SITEKEY = '617563f1-54b0-496d-a13d-95de4a9c641a'
+_AH_CAPTCHA_PAGE    = 'https://login.ah.nl/login'
+
+
+def _solve_hcaptcha_capsolver(api_key):
+    """
+    Los de invisible hCaptcha op via Capsolver (https://capsolver.com).
+    Geeft het h-captcha-response token terug.
+    """
+    import requests as _req, time as _time
+    create = _req.post(
+        'https://api.capsolver.com/createTask',
+        json={
+            'clientKey': api_key,
+            'task': {
+                'type': 'HCaptchaTaskProxyless',
+                'websiteURL': _AH_CAPTCHA_PAGE,
+                'websiteKey': _AH_CAPTCHA_SITEKEY,
+                'isInvisible': True,
+            },
+        },
+        timeout=10,
+    ).json()
+    if create.get('errorId'):
+        raise ValueError(f'Capsolver fout: {create.get("errorDescription", create)}')
+    task_id = create['taskId']
+
+    for _ in range(30):
+        _time.sleep(3)
+        result = _req.post(
+            'https://api.capsolver.com/getTaskResult',
+            json={'clientKey': api_key, 'taskId': task_id},
+            timeout=10,
+        ).json()
+        if result.get('status') == 'ready':
+            return result['solution']['gRecaptchaResponse']
+        if result.get('status') == 'failed':
+            raise ValueError(f'Capsolver: captcha mislukt — {result}')
+    raise TimeoutError('Capsolver: timeout bij oplossen captcha')
+
+
+def ah_login_with_password(email, password, capsolver_key=None):
+    """
+    Voert de volledige AH OAuth-flow server-side uit via curl_cffi (Chrome TLS-fingerprint).
+    Vereist een Capsolver API-key om de invisible hCaptcha op te lossen.
+    Geeft (access_token, refresh_token, expires_at) terug, of raise een Exception.
+    """
+    from curl_cffi import requests as cffi_req
+    import time as _time
+
+    key = capsolver_key or _ah_setting('capsolver_key') or ''
+    if not key:
+        raise ValueError(
+            'Een Capsolver API-key is vereist. '
+            'Maak gratis een account aan op capsolver.com en voer de key in bij instellingen.'
+        )
+
+    # Los captcha op vóór het inloggen
+    captcha_token = _solve_hcaptcha_capsolver(key)
+
+    sess = cffi_req.Session(impersonate='chrome120')
+    hdrs = {
+        'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    }
+
+    # Stap 1: OAuth authorize → cookies + redirect naar /login?...
+    r1 = sess.get(
+        _AH_LOGIN_BASE + _AH_AUTHORIZE_PATH,
+        headers=hdrs,
+        allow_redirects=True,
+        timeout=15,
+    )
+
+    # Stap 2: POST credentials + captcha-token naar Next.js API route
+    r2 = sess.post(
+        _AH_LOGIN_BASE + '/login/api/login',
+        json={
+            'username':          email,
+            'password':          password,
+            'h-captcha-response': captcha_token,
+        },
+        headers={
+            **hdrs,
+            'Content-Type': 'application/json',
+            'Origin':        _AH_LOGIN_BASE,
+            'Referer':       r1.url or (_AH_LOGIN_BASE + '/login'),
+        },
+        allow_redirects=False,
+        timeout=15,
+    )
+
+    # Stap 3: volg HTTP-redirects tot appie://login-exit?code=...
+    location = r2.headers.get('Location', '')
+    if not location:
+        body = r2.text[:200]
+        raise ValueError(f'Inloggen mislukt — {body}')
+
+    for _ in range(10):
+        if 'appie://login-exit' in location:
+            break
+        if not location or not location.startswith('http'):
+            break
+        r = sess.get(location, headers=hdrs, allow_redirects=False, timeout=15)
+        location = r.headers.get('Location', '')
+
+    code = _ah_extract_code(location)
+    if not code or code == location:
+        raise ValueError(
+            f'Inloggen mislukt — geen OAuth-code ontvangen. '
+            f'Controleer e-mail en wachtwoord. (laatste redirect: {location!r:.120})'
+        )
+
+    # Stap 4: code inwisselen voor tokens
+    import requests as _req
+    tok = _req.post(
+        _AH_TOKEN_URL,
+        json={'clientId': 'appie', 'code': code},
+        headers=_AH_HEADERS,
+        timeout=10,
+    )
+    tok.raise_for_status()
+    data = tok.json()
+    expires_at = int(_time.time()) + data.get('expires_in', 604798)
+    return data['access_token'], data['refresh_token'], expires_at
+
+
+
+
+
+
+@app.route('/api/ah/connect', methods=['POST'])
+def ah_connect():
+    import requests as _req
+    import time
+    raw = (request.json or {}).get('code', '').strip()
+    code = _ah_extract_code(raw)
+    if not code:
+        return jsonify({'status': 'error', 'message': 'Geen code opgegeven'}), 400
+    try:
+        resp = _req.post(
+            _AH_TOKEN_URL,
+            json={'clientId': 'appie', 'code': code},
+            headers=_AH_HEADERS,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        _ah_setting('ah_access_token', data['access_token'])
+        _ah_setting('ah_refresh_token', data['refresh_token'])
+        expires_at = int(time.time()) + data.get('expires_in', 604798)
+        _ah_setting('ah_token_expires', str(expires_at))
+        return jsonify({'status': 'ok', 'expires_at': expires_at})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Koppelen mislukt: {e}'}), 400
+
+
+@app.route('/api/ah/status')
+def ah_status():
+    import time
+    refresh = _ah_setting('ah_refresh_token')
+    expires = _ah_setting('ah_token_expires')
+    connected = bool(refresh)
+    expires_ts = int(expires) if expires else None
+    return jsonify({
+        'connected': connected,
+        'expires_at': expires_ts,
+        'expired': connected and expires_ts is not None and int(time.time()) > expires_ts,
+    })
+
+
+@app.route('/api/ah/disconnect', methods=['POST'])
+def ah_disconnect():
+    for key in ('ah_access_token', 'ah_refresh_token', 'ah_token_expires'):
+        s = Settings.query.filter_by(key=key).first()
+        if s:
+            db.session.delete(s)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/ah/start-login', methods=['POST'])
+def ah_start_login():
+    """Reset het tokenbestand zodat polling opnieuw kan beginnen."""
+    import os
+    token_file = '/tmp/appie-tokens.json'
+    if os.path.exists(token_file):
+        os.remove(token_file)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/ah/poll-token')
+def ah_poll_token():
+    """Controleer of de proxy al een token heeft opgeslagen."""
+    import json as _json, os, time as _time
+    token_file = '/tmp/appie-tokens.json'
+    if not os.path.exists(token_file):
+        return jsonify({'ready': False})
+    try:
+        with open(token_file) as f:
+            data = _json.load(f)
+        access  = data.get('access_token', '')
+        refresh = data.get('refresh_token', '')
+        expires = data.get('expires_at', int(_time.time()) + 604798)
+        if not access or not refresh:
+            return jsonify({'ready': False})
+        _ah_setting('ah_access_token',  access)
+        _ah_setting('ah_refresh_token', refresh)
+        _ah_setting('ah_token_expires', str(expires))
+        os.remove(token_file)
+        return jsonify({'ready': True})
+    except Exception as e:
+        return jsonify({'ready': False, 'error': str(e)})
+
+
+@app.route('/api/ah/login-password', methods=['POST'])
+def ah_login_password():
+    data = request.json or {}
+    email         = data.get('email', '').strip()
+    password      = data.get('password', '').strip()
+    capsolver_key = data.get('capsolver_key', '').strip()
+    if not email or not password:
+        return jsonify({'status': 'error', 'message': 'E-mail en wachtwoord zijn verplicht'}), 400
+    # Sla capsolver key op als die meegegeven wordt
+    if capsolver_key:
+        _ah_setting('capsolver_key', capsolver_key)
+    try:
+        access, refresh, expires = ah_login_with_password(email, password, capsolver_key or None)
+        _ah_setting('ah_access_token',  access)
+        _ah_setting('ah_refresh_token', refresh)
+        _ah_setting('ah_token_expires', str(expires))
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 401
+
+
+@app.route('/api/ah/verify')
+def ah_verify():
+    """Test of het opgeslagen token écht werkt bij AH (haalt profiel op)."""
+    import requests as _req
+    token = ah_get_access_token()
+    if not token:
+        return jsonify({'ok': False, 'reason': 'Geen token opgeslagen'})
+    try:
+        r = _req.get(
+            'https://api.ah.nl/mobile-services/v1/member/profile',
+            headers={**_AH_HEADERS, 'Authorization': f'Bearer {token}'},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            body = r.json()
+            name = body.get('firstName') or body.get('name') or ''
+            return jsonify({'ok': True, 'name': name})
+        return jsonify({'ok': False, 'reason': f'HTTP {r.status_code}'})
+    except Exception as e:
+        return jsonify({'ok': False, 'reason': str(e)})
+
+
+@app.route('/api/ah/product-search')
+def ah_product_search():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify([])
+    return jsonify(ah_search_products(q, size=8))
+
+
+@app.route('/api/ah/ingredient/<int:ingredient_id>/link', methods=['POST'])
+def ah_link_ingredient(ingredient_id):
+    import time
+    data = request.json or {}
+    ing = Ingredient.query.get_or_404(ingredient_id)
+    ing.ah_product_id      = data.get('productId')
+    ing.ah_product_name    = data.get('title', '')
+    ing.ah_product_size    = data.get('size', '')
+    ing.ah_product_price   = data.get('price', '')
+    ing.ah_product_image   = data.get('image', '')
+    ing.ah_product_bonus   = bool(data.get('isBonus', False))
+    ing.ah_product_updated = int(time.time())
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/ah/ingredient/<int:ingredient_id>/refresh', methods=['POST'])
+def ah_refresh_ingredient(ingredient_id):
+    import time
+    ing = Ingredient.query.get_or_404(ingredient_id)
+    if not ing.ah_product_id:
+        return jsonify({'status': 'error', 'message': 'Geen product gekoppeld'}), 400
+    products = ah_search_products(ing.name, size=1)
+    if not products:
+        return jsonify({'status': 'error', 'message': 'Geen resultaten'}), 404
+    p = products[0]
+    ing.ah_product_name    = p['title']
+    ing.ah_product_size    = p['size']
+    ing.ah_product_price   = p['price']
+    ing.ah_product_image   = p['image']
+    ing.ah_product_bonus   = p['isBonus']
+    ing.ah_product_updated = int(time.time())
+    db.session.commit()
+    return jsonify({'status': 'ok', 'product': p})
+
+
+@app.route('/ah-producten')
+def ah_products():
+    ingredients = Ingredient.query.order_by(Ingredient.name).all()
+    return render_template('ah_products.html', ingredients=ingredients)
+
+
+@app.route('/api/shopping-list/<int:year>/<int:week>/send-to-ah', methods=['POST'])
+def send_to_ah(year, week):
+    import requests as _req
+    import time
+
+    access_token = ah_get_access_token()
+    if not access_token:
+        return jsonify({'status': 'error', 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}), 401
+
+    # Bouw boodschappenlijst (zelfde logica als shopping_list route)
+    menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
+    shopping_dict = {}
+
+    def _multiplier(serves, count):
+        try:
+            return count / serves if serves and count else 1
+        except ZeroDivisionError:
+            return 1
+
+    for item in menu_items:
+        if item.skip_shopping_list or not item.recipe:
+            continue
+        m = _multiplier(item.recipe.serves, item.people_count)
+        for ri in item.recipe.ingredients:
+            key = (ri.ingredient_id, ri.ingredient.name, ri.unit)
+            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+
+    for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
+        if not qi.recipe:
+            continue
+        m = _multiplier(qi.recipe.serves, qi.people_count)
+        for ri in qi.recipe.ingredients:
+            key = (ri.ingredient_id, ri.ingredient.name, ri.unit)
+            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+
+    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
+        key = (ci.ingredient_id, ci.ingredient.name, ci.unit)
+        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
+
+    if not shopping_dict:
+        return jsonify({'status': 'ok', 'sent': 0, 'not_found': [], 'message': 'Boodschappenlijst is leeg'})
+
+    # Bepaal per ingredient het AH productId
+    VOLUME_WEIGHT = {'g', 'kg', 'ml', 'l', 'cl', 'dl', 'liter'}
+    sent, not_found, db_changed = 0, [], False
+
+    headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
+
+    for (ing_id, ing_name, unit), amount in shopping_dict.items():
+        ing = Ingredient.query.get(ing_id)
+        if not ing:
+            continue
+
+        # Zoek productId (uit cache of live)
+        if not ing.ah_product_id:
+            products = ah_search_products(ing_name, size=3)
+            if not products:
+                # fallback: eerste woord
+                products = ah_search_products(ing_name.split()[0], size=3)
+            if products:
+                p = products[0]
+                ing.ah_product_id    = p['productId']
+                ing.ah_product_name  = p['title']
+                ing.ah_product_size  = p['size']
+                ing.ah_product_price = p['price']
+                ing.ah_product_image = p['image']
+                ing.ah_product_bonus = p['isBonus']
+                ing.ah_product_updated = int(time.time())
+                db_changed = True
+
+        if not ing.ah_product_id:
+            not_found.append(ing_name)
+            continue
+
+        # Quantity-logica
+        unit_lower = (unit or '').lower().strip()
+        if unit_lower in VOLUME_WEIGHT:
+            quantity = 1
+        else:
+            quantity = max(1, round(amount))
+
+        # Stuur naar AH shopping list
+        try:
+            resp = _req.patch(
+                _AH_SHOPPINGLIST_URL,
+                json={'items': [{'originCode': 'PRD', 'productId': ing.ah_product_id,
+                                 'quantity': quantity, 'type': 'SHOPPABLE'}]},
+                headers=headers,
+                timeout=10,
+            )
+            if resp.status_code in (200, 201, 204):
+                sent += 1
+            else:
+                not_found.append(ing_name)
+        except Exception:
+            not_found.append(ing_name)
+
+    if db_changed:
+        db.session.commit()
+
+    msg = f'{sent} item{"s" if sent != 1 else ""} toegevoegd aan AH'
+    if not_found:
+        msg += f', {len(not_found)} niet gevonden: {", ".join(not_found[:5])}'
+    return jsonify({'status': 'ok', 'sent': sent, 'not_found': not_found, 'message': msg})
+
+
+# ── End AH routes ────────────────────────────────────────────────────────────
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
@@ -1558,6 +2235,22 @@ def migrate_db():
             except OperationalError:
                 pass
 
+        ingredient_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
+        for col, col_def in [
+            ('ah_product_id', 'INTEGER'),
+            ('ah_product_name', 'VARCHAR(200)'),
+            ('ah_product_size', 'VARCHAR(50)'),
+            ('ah_product_price', 'VARCHAR(20)'),
+            ('ah_product_image', 'VARCHAR(500)'),
+            ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
+            ('ah_product_updated', 'INTEGER'),
+        ]:
+            if col not in ingredient_cols:
+                try:
+                    conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+                except OperationalError:
+                    pass
+
         conn.execute(text('''
             CREATE TABLE IF NOT EXISTS settings (
                 id INTEGER PRIMARY KEY,
@@ -1565,6 +2258,16 @@ def migrate_db():
                 value VARCHAR(200)
             )
         '''))
+
+        # Herclassificeer ALLE ingrediënten met de verbeterde keyword-matcher.
+        # Dit garandeert dat bestaande recepten de nieuwe AH-categoriestructuur krijgen.
+        all_ingredients = conn.execute(text('SELECT id, name FROM ingredient')).fetchall()
+        for ing_id, ing_name in all_ingredients:
+            new_cat = _guess_ingredient_category(ing_name)
+            conn.execute(
+                text('UPDATE ingredient SET category = :cat WHERE id = :id'),
+                {'cat': new_cat, 'id': ing_id}
+            )
 
         conn.commit()
 

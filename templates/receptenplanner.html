@@ -618,7 +618,7 @@ function openDetail(recipeId) {
   `).join('') || '<p class="text-sm text-gray-400">Geen ingrediënten.</p>';
 
   // Pre-fill popup persons: recipe serves, or fall back to household default
-  document.getElementById('popup-persons').value = r.serves || DEFAULT_SERVES;
+  document.getElementById('popup-persons').value = DEFAULT_SERVES || r.serves;
 
   // Open
   document.getElementById('detail-overlay').style.display = 'block';

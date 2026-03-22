@@ -5,6 +5,7 @@ services:
     build: .
     ports:
       - "5001:5001"
+      - "9002:9002"
     volumes:
       - ./data:/data
       - ./static/uploads:/app/static/uploads
