@@ -34,6 +34,20 @@
         </form>
     </div>
 
+    <!-- Recepten -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-1">Recepten</h3>
+                <p class="text-sm text-gray-500">Alle recepten, ook bereikbaar via Kookboeken.</p>
+            </div>
+            <a href="{{ url_for('recipes') }}"
+               class="text-sm bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 shrink-0">
+                Recepten →
+            </a>
+        </div>
+    </div>
+
     <!-- AH Account -->
     <div class="bg-white rounded-lg shadow p-6" id="ah-account">
         <div class="flex items-center justify-between mb-4">

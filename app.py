@@ -124,6 +124,7 @@ class Ingredient(db.Model):
     ah_product_image   = db.Column(db.String(500), nullable=True)
     ah_product_bonus   = db.Column(db.Boolean, default=False)
     ah_product_updated = db.Column(db.Integer, nullable=True)
+    ah_product_color   = db.Column(db.String(20), nullable=True)
 
 class RecipeIngredient(db.Model):
     __tablename__ = 'recipe_ingredient'
@@ -182,7 +183,39 @@ class Settings(db.Model):
     value = db.Column(db.String(200), nullable=True)
 
 
+class ShoppingListOverride(db.Model):
+    __tablename__ = 'shopping_list_override'
+    __table_args__ = (
+        db.UniqueConstraint('year', 'week_number', 'ingredient_id',
+                            name='uq_override_week_ingredient'),
+    )
+    id            = db.Column(db.Integer, primary_key=True)
+    year          = db.Column(db.Integer, nullable=False)
+    week_number   = db.Column(db.Integer, nullable=False)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    qty           = db.Column(db.Integer, nullable=False)
+
+
 # ── AH API helpers ──────────────────────────────────────────────────────────
+
+_VOLUME_WEIGHT = {
+    'g', 'gr', 'gram',
+    'kg', 'kilogram',
+    'ml', 'cl', 'dl', 'l', 'liter', 'litre',
+    'el', 'eetlepel', 'eetlepels',
+    'tl', 'theelepel', 'theelepels',
+    'mespunt', 'snuf', 'snufje', 'scheutje',
+}
+
+
+def _calc_default_qty(amount: float, unit: str) -> int:
+    """Bereken standaard AH-winkelwagenaantal voor een ingredient.
+    Gewicht/volume-eenheden → 1 (één pak); stuks → max(1, round(amount)).
+    """
+    if (unit or '').lower().strip() in _VOLUME_WEIGHT:
+        return 1
+    qty = max(1, round(amount or 1))
+    return 1 if qty > 20 else qty  # >20 is bijna altijd gewicht/volume, geen stuks
 
 _AH_LOGIN_BASE       = 'https://login.ah.nl'
 _AH_AUTHORIZE_PATH   = '/secure/oauth/authorize?client_id=appie&redirect_uri=appie%3A%2F%2Flogin-exit&response_type=code'
@@ -205,13 +238,13 @@ def _ah_setting(key, value=None):
     db.session.commit()
 
 
-def _ah_get_anon_token():
+def _ah_get_anon_token(force=False):
     """Return a valid anonymous AH access token (for product search)."""
     import requests as _req
     import time
     token   = _ah_setting('ah_anon_token')
     expires = _ah_setting('ah_anon_expires')
-    if token and expires and int(time.time()) < int(expires) - 60:
+    if not force and token and expires and int(time.time()) < int(expires) - 60:
         return token
     resp = _req.post(
         _AH_ANON_TOKEN_URL,
@@ -257,15 +290,22 @@ def ah_get_access_token():
 def ah_search_products(query, size=8):
     """Search AH product catalog. Returns list of product dicts."""
     import requests as _req
-    try:
-        token = _ah_get_anon_token()
+
+    def _do_search(token):
         headers = {**_AH_HEADERS, 'Authorization': f'Bearer {token}'}
-        resp = _req.get(
+        return _req.get(
             _AH_SEARCH_URL,
             params={'query': query, 'size': size},
             headers=headers,
             timeout=10,
         )
+
+    try:
+        token = _ah_get_anon_token()
+        resp = _do_search(token)
+        if resp.status_code == 401:
+            token = _ah_get_anon_token(force=True)
+            resp = _do_search(token)
         resp.raise_for_status()
         products = []
         for p in resp.json().get('products', []):
@@ -274,6 +314,14 @@ def ah_search_products(query, size=8):
             if not img_url and images:
                 img_url = images[0].get('url', '')
             price_raw = p.get('currentPrice') or p.get('priceBeforeBonus')
+            # Probeer achtergrondkleur uit diverse mogelijke API-velden
+            bg_color = (
+                p.get('highlight') or
+                p.get('backgroundColor') or
+                p.get('bgColor') or
+                (images[0].get('backgroundColor') if images else None) or
+                ''
+            )
             products.append({
                 'productId':  p.get('webshopId'),
                 'title':      p.get('title', ''),
@@ -281,6 +329,7 @@ def ah_search_products(query, size=8):
                 'price':      f"{price_raw:.2f}".replace('.', ',') if price_raw else '',
                 'isBonus':    bool(p.get('isBonus') or p.get('discountLabels')),
                 'image':      img_url,
+                'bgColor':    bg_color,
             })
         return products
     except Exception:
@@ -796,16 +845,60 @@ def shopping_list(year, week):
         else:
             shopping_dict[key] = ci.amount
 
-    shopping_list = [
-    {
-        'name': k[0],
-        'amount': v,
-        'amount_display': format_amount(v),  # Dit is nieuw
-        'unit': k[1],
-        'category': k[2]
+    overrides = {
+        o.ingredient_id: o.qty
+        for o in ShoppingListOverride.query.filter_by(year=year, week_number=week).all()
     }
-    for k, v in shopping_dict.items()
-]
+
+    _CATEGORY_BG = {
+        'Groente & Aardappelen':       '#e8f5e9',
+        'Fruit':                       '#fff8e1',
+        'Vlees':                       '#fce4ec',
+        'Vis':                         '#e3f2fd',
+        'Vegetarisch & Vegan':         '#f1f8e9',
+        'Vleeswaren':                  '#fbe9e7',
+        'Kaas':                        '#fffde7',
+        'Zuivel & Eieren':             '#fff3e0',
+        'Bakkerij':                    '#efebe9',
+        'Snacks & Noten':              '#f3e5f5',
+        'Diepvries':                   '#e8eaf6',
+        'Pasta, Rijst & Wereldkeuken': '#fff8e1',
+        'Blikken & Potten':            '#fff3e0',
+        'Soepen, Sauzen & Kruiden':    '#fff8e1',
+        'Bakken':                      '#efebe9',
+        'Ontbijt & Beleg':             '#fff3e0',
+        'Koek, Snoep & Chocolade':     '#fce4ec',
+        'Frisdrank & Water':           '#e3f2fd',
+        'Bier, Wijn & Aperitieven':    '#ede7f6',
+        'Koffie & Thee':               '#efebe9',
+        'Salades & Maaltijdsalades':   '#e8f5e9',
+        'Overig':                      '#f0ede8',
+    }
+
+    shopping_list = []
+    for k, v in shopping_dict.items():
+        ing = Ingredient.query.filter_by(name=k[0]).first()
+        default_qty = _calc_default_qty(v, k[1])
+        ing_id      = ing.id if ing else None
+        qty         = overrides.get(ing_id, default_qty) if ing_id else default_qty
+        api_color   = (ing.ah_product_color or '') if ing else ''
+        shopping_list.append({
+            'name':              k[0],
+            'amount':            v,
+            'amount_display':    format_amount(v),
+            'unit':              k[1],
+            'category':          k[2],
+            'ingredient_id':     ing_id,
+            'ah_product_id':     ing.ah_product_id      if ing else None,
+            'ah_product_name':   ing.ah_product_name    if ing else None,
+            'ah_product_size':   ing.ah_product_size    if ing else None,
+            'ah_product_image':  ing.ah_product_image   if ing else None,
+            'ah_product_price':  ing.ah_product_price   if ing else None,
+            'ah_product_bonus':  ing.ah_product_bonus   if ing else False,
+            'ah_product_bg':     api_color or _CATEGORY_BG.get(k[2], '#f0ede8'),
+            'default_qty':       default_qty,
+            'qty':               qty,
+        })
 
     # Sorteer volgens supermarkt looproute
     category_order = {cat: i for i, cat in enumerate(CATEGORY_ORDER_SUPERMARKET)}
@@ -2052,7 +2145,8 @@ def ah_product_search():
     q = request.args.get('q', '').strip()
     if not q:
         return jsonify([])
-    return jsonify(ah_search_products(q, size=8))
+    size = min(int(request.args.get('size', 8)), 20)
+    return jsonify(ah_search_products(q, size=size))
 
 
 @app.route('/api/ah/ingredient/<int:ingredient_id>/link', methods=['POST'])
@@ -2066,6 +2160,7 @@ def ah_link_ingredient(ingredient_id):
     ing.ah_product_price   = data.get('price', '')
     ing.ah_product_image   = data.get('image', '')
     ing.ah_product_bonus   = bool(data.get('isBonus', False))
+    ing.ah_product_color   = data.get('bgColor', '')
     ing.ah_product_updated = int(time.time())
     db.session.commit()
     return jsonify({'status': 'ok'})
@@ -2095,6 +2190,38 @@ def ah_refresh_ingredient(ingredient_id):
 def ah_products():
     ingredients = Ingredient.query.order_by(Ingredient.name).all()
     return render_template('ah_products.html', ingredients=ingredients)
+
+
+@app.route('/api/shopping-list/<int:year>/<int:week>/item/<int:ingredient_id>/qty',
+           methods=['POST'])
+def update_shopping_qty(year, week, ingredient_id):
+    data = request.get_json(force=True) or {}
+    try:
+        new_qty = int(data['qty'])
+    except (KeyError, ValueError, TypeError):
+        return jsonify({'ok': False, 'error': 'qty must be an integer'}), 400
+    if new_qty < 1:
+        return jsonify({'ok': False, 'error': 'qty must be >= 1'}), 400
+
+    override = ShoppingListOverride.query.filter_by(
+        year=year, week_number=week, ingredient_id=ingredient_id
+    ).first()
+
+    if data.get('is_default'):
+        if override:
+            db.session.delete(override)
+            db.session.commit()
+        return jsonify({'ok': True, 'qty': new_qty, 'is_default': True})
+
+    if override:
+        override.qty = new_qty
+    else:
+        db.session.add(ShoppingListOverride(
+            year=year, week_number=week,
+            ingredient_id=ingredient_id, qty=new_qty
+        ))
+    db.session.commit()
+    return jsonify({'ok': True, 'qty': new_qty})
 
 
 @app.route('/api/shopping-list/<int:year>/<int:week>/send-to-ah', methods=['POST'])
@@ -2139,44 +2266,22 @@ def send_to_ah(year, week):
     if not shopping_dict:
         return jsonify({'status': 'ok', 'sent': 0, 'not_found': [], 'message': 'Boodschappenlijst is leeg'})
 
+    # Qty-overrides komen uit de POST body (niet meer persistent opgeslagen)
+    _body = request.get_json(force=True) or {}
+    qty_overrides = {int(k): v for k, v in _body.get('qty_overrides', {}).items()}
+
     # Bepaal per ingredient het AH productId
-    VOLUME_WEIGHT = {'g', 'kg', 'ml', 'l', 'cl', 'dl', 'liter'}
-    sent, not_found, db_changed = 0, [], False
+    sent, not_found = 0, []
 
     headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
 
     for (ing_id, ing_name, unit), amount in shopping_dict.items():
         ing = Ingredient.query.get(ing_id)
-        if not ing:
+        if not ing or not ing.ah_product_id:
             continue
 
-        # Zoek productId (uit cache of live)
-        if not ing.ah_product_id:
-            products = ah_search_products(ing_name, size=3)
-            if not products:
-                # fallback: eerste woord
-                products = ah_search_products(ing_name.split()[0], size=3)
-            if products:
-                p = products[0]
-                ing.ah_product_id    = p['productId']
-                ing.ah_product_name  = p['title']
-                ing.ah_product_size  = p['size']
-                ing.ah_product_price = p['price']
-                ing.ah_product_image = p['image']
-                ing.ah_product_bonus = p['isBonus']
-                ing.ah_product_updated = int(time.time())
-                db_changed = True
-
-        if not ing.ah_product_id:
-            not_found.append(ing_name)
-            continue
-
-        # Quantity-logica
-        unit_lower = (unit or '').lower().strip()
-        if unit_lower in VOLUME_WEIGHT:
-            quantity = 1
-        else:
-            quantity = max(1, round(amount))
+        # Quantity-logica: gebruik override als beschikbaar, anders berekend default
+        quantity = qty_overrides.get(ing_id, _calc_default_qty(amount, unit))
 
         # Stuur naar AH shopping list
         try:
@@ -2193,9 +2298,6 @@ def send_to_ah(year, week):
                 not_found.append(ing_name)
         except Exception:
             not_found.append(ing_name)
-
-    if db_changed:
-        db.session.commit()
 
     msg = f'{sent} item{"s" if sent != 1 else ""} toegevoegd aan AH'
     if not_found:
@@ -2244,6 +2346,7 @@ def migrate_db():
             ('ah_product_image', 'VARCHAR(500)'),
             ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
             ('ah_product_updated', 'INTEGER'),
+            ('ah_product_color', 'VARCHAR(20)'),
         ]:
             if col not in ingredient_cols:
                 try:
@@ -2268,6 +2371,9 @@ def migrate_db():
                 text('UPDATE ingredient SET category = :cat WHERE id = :id'),
                 {'cat': new_cat, 'id': ing_id}
             )
+
+        # Qty-overrides worden niet meer persistent opgeslagen; tabel leegmaken.
+        conn.execute(text('DELETE FROM shopping_list_override'))
 
         conn.commit()
 
