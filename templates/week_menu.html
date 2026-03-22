@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-/* Dag-kaart kleuren via border-top */
-.has-recipe { background-color: #eff6ff !important; border-color: #bfdbfe !important; }
-.recipe-search:focus { outline: none; border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(147,197,253,0.3); }
+.recipe-search:focus { outline: none; border-color: var(--color-sepia-light); box-shadow: 0 0 0 3px rgba(201,168,130,0.2); }
+.has-recipe { background-color: var(--color-sepia-bg) !important; border-color: var(--color-sepia-light) !important; }
 .recipe-option:first-child { margin-top: 4px; }
 .recipe-option:last-child  { margin-bottom: 4px; }
 </style>
@@ -12,23 +11,24 @@
 <div class="mb-6">
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h1 class="text-2xl font-extrabold tracking-tight text-gray-900">Weekmenu</h1>
-            <p class="text-sm text-gray-500 mt-0.5">
-                Week {{ week }} &bull; <span id="week-date-range" class="text-gray-400"></span>
+            <h1 class="page-title">Weekmenu</h1>
+            <p class="meta mt-0.5">
+                Week {{ week }} &bull; <span id="week-date-range"></span>
             </p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
             <!-- Week navigatie -->
-            <div class="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
+            <div class="flex items-center rounded-lg overflow-hidden" style="border: 1px solid var(--color-border); background: white;">
                 <a href="{{ url_for('week_menu', year=year, week=week-1) }}"
-                   class="px-3 py-2 text-gray-500 hover:bg-gray-50 hover:text-gray-800 text-sm transition-colors">&#8592;</a>
-                <span class="px-3 py-2 text-sm font-medium text-gray-700 border-l border-r border-gray-200">Week {{ week }}</span>
+                   style="color: var(--color-pencil); text-decoration:none;"
+                   class="px-3 py-2 text-sm transition-colors hover:bg-[#F5F2ED]">&#8592;</a>
+                <span class="px-3 py-2 text-sm font-medium" style="color: var(--color-ink); border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);">Week {{ week }}</span>
                 <a href="{{ url_for('week_menu', year=year, week=week+1) }}"
-                   class="px-3 py-2 text-gray-500 hover:bg-gray-50 hover:text-gray-800 text-sm transition-colors">&#8594;</a>
+                   style="color: var(--color-pencil); text-decoration:none;"
+                   class="px-3 py-2 text-sm transition-colors hover:bg-[#F5F2ED]">&#8594;</a>
             </div>
-            <!-- Actie-knoppen -->
             <button onclick="copyPreviousWeek()"
-                    class="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm">
+                    class="btn-secondary inline-flex items-center gap-1.5 text-sm">
                 &#8635; Kopieer week
             </button>
         </div>
@@ -36,74 +36,73 @@
 </div>
 
 <!-- Save-status toast -->
-<div id="saveStatus" class="hidden fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50">
-    Wijzigingen opgeslagen
+<div id="saveStatus" class="hidden fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg text-sm z-50"
+     style="background: var(--color-ink); color: var(--color-paper);">
+    Opgeslagen
 </div>
 
 <!-- Dag-kaarten grid -->
-{% set day_colors = ['#6366f1', '#3b82f6', '#06b6d4', '#14b8a6', '#22c55e', '#f59e0b', '#f43f5e'] %}
 <div class="grid grid-cols-1 md:grid-cols-7 gap-3">
     {% for day_index, day_name in days %}
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
-         style="border-top: 4px solid {{ day_colors[day_index] }};"
+    <div class="rounded-xl overflow-hidden"
+         style="background: var(--color-paper); border: 0.5px solid var(--color-border);"
          id="day-card-{{ day_index }}">
 
         <!-- Dag-header -->
         <div class="px-3 pt-3 pb-2">
-            <div class="font-bold text-sm text-gray-800">{{ day_name }}</div>
-            <div class="text-xs text-gray-400 mt-0.5" data-day-date="{{ day_index }}"></div>
+            <div class="font-semibold text-sm" style="color: var(--color-ink);">{{ day_name }}</div>
+            <div class="text-xs mt-0.5" style="color: var(--color-pencil);" data-day-date="{{ day_index }}"></div>
         </div>
 
         <!-- Maaltijd-slots -->
         <div class="px-3 pb-3">
             {% for meal_code, meal_name in meal_types %}
-            <div class="relative {% if not loop.first %}border-t border-gray-50 pt-2 mt-2{% endif %}">
+            <div class="relative {% if not loop.first %}pt-2 mt-2{% endif %}"
+                 {% if not loop.first %}style="border-top: 1px dashed var(--color-linen);"{% endif %}>
 
-                <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{{ meal_name }}</label>
+                <label class="block text-xs font-semibold uppercase tracking-wide mb-1"
+                       style="color: var(--color-pencil);">{{ meal_name }}</label>
 
-                <!-- Hidden: recept ID -->
                 <input type="hidden"
                        class="meal-input"
                        data-day="{{ day_index }}"
                        data-meal="{{ meal_code }}"
                        value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.recipe_id }}{% endif %}{% endfor %}">
 
-                <!-- Hidden: portie-count (initialisatie) -->
                 <input type="hidden"
                        class="people-input"
                        data-day="{{ day_index }}"
                        data-meal="{{ meal_code }}"
                        value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{{ item.people_count or '' }}{% endif %}{% endfor %}">
 
-                <!-- Recept-zoekbalk -->
                 <input type="text"
-                       class="recipe-search w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm transition-colors bg-white"
+                       class="recipe-search w-full rounded-lg px-2.5 py-1.5 text-sm transition-colors"
+                       style="border: 1px solid var(--color-linen); background: white; color: var(--color-ink);"
                        data-day="{{ day_index }}"
                        data-meal="{{ meal_code }}"
                        placeholder="Zoek recept…"
                        value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
                        autocomplete="off">
 
-                <!-- Portie-rij -->
                 <div class="people-count-container flex items-center gap-1.5 mt-1.5">
-                    <span class="text-gray-400 text-sm leading-none">&#128100;</span>
+                    <span class="text-sm leading-none" style="color: var(--color-pencil);">&#128100;</span>
                     <input type="number"
-                           class="people-count-input border border-gray-200 rounded-full bg-gray-50 text-center text-xs"
-                           style="width:46px; padding:2px 6px;"
+                           class="people-count-input rounded-full text-center text-xs"
+                           style="width:46px; padding:2px 6px; border: 1px solid var(--color-linen); background: var(--color-card); color: var(--color-ink);"
                            data-day="{{ day_index }}"
                            data-meal="{{ meal_code }}"
                            min="1" max="20">
-                    <span class="text-xs text-gray-400">pers.</span>
+                    <span class="text-xs" style="color: var(--color-pencil);">pers.</span>
                 </div>
 
-                <!-- Kookboek-info -->
                 {% for item in menu_items %}
                     {% if item.day_of_week == day_index and item.meal_type == meal_code %}
                         {% for recipe in recipes %}
                             {% if recipe.id == item.recipe_id %}
                             <div class="recipe-info mt-1.5">
                                 {% if recipe.cookbook %}
-                                <span class="inline-block bg-indigo-50 text-indigo-700 rounded px-1.5 py-0.5 text-xs font-medium">
+                                <span class="inline-block rounded px-1.5 py-0.5 text-xs font-medium"
+                                      style="background: var(--color-sepia-bg); color: var(--color-sepia);">
                                     {{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}{% if recipe.page %} p.{{ recipe.page }}{% endif %}
                                 </span>
                                 {% endif %}
@@ -113,8 +112,8 @@
                     {% endif %}
                 {% endfor %}
 
-                <!-- Dropdown resultaten -->
-                <div class="recipe-dropdown absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto hidden z-10 mt-1">
+                <div class="recipe-dropdown absolute top-full left-0 right-0 rounded-xl shadow-xl max-h-60 overflow-y-auto hidden z-10 mt-1"
+                     style="background: white; border: 1px solid var(--color-border);">
                 </div>
             </div>
             {% endfor %}
@@ -125,28 +124,23 @@
 
 <!-- Quick Access sectie -->
 <div class="mt-8">
-    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Snel plannen</h2>
+    <h2 class="section-title mb-4">Snel plannen</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <!-- Favorieten -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <span>⭐</span> Favorieten
+        <div class="card p-4">
+            <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--color-ink);">
+                <span style="color: var(--color-sepia);">★</span> Favorieten
             </h3>
             <div id="favorites-list" class="space-y-0.5"></div>
         </div>
-
-        <!-- Recent gebruikt -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <span>🕒</span> Recent gebruikt
+        <div class="card p-4">
+            <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--color-ink);">
+                <span style="color: var(--color-pencil);">🕒</span> Recent gebruikt
             </h3>
             <div id="recent-list" class="space-y-0.5"></div>
         </div>
-
-        <!-- Populair -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <span>📊</span> Populair
+        <div class="card p-4">
+            <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--color-ink);">
+                <span style="color: var(--color-pencil);">📊</span> Populair
             </h3>
             <div id="popular-list" class="space-y-0.5"></div>
         </div>
@@ -154,19 +148,22 @@
 </div>
 
 <!-- Recept-selectie modal -->
-<div id="recipeModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+<div id="recipeModal" class="fixed inset-0 hidden z-50" style="background: rgba(44,44,44,0.5);">
     <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <h3 class="text-base font-bold text-gray-900 mb-1" id="modalTitle">Recept plannen</h3>
-            <p class="text-sm text-gray-500 mb-5">Kies dag en maaltijd voor <strong id="selectedRecipe"></strong>:</p>
+        <div class="rounded-xl p-6 max-w-md w-full shadow-2xl" style="background: white;">
+            <h3 class="text-base font-semibold mb-1" style="color: var(--color-ink);">Recept plannen</h3>
+            <p class="text-sm mb-5" style="color: var(--color-pencil);">Kies dag en maaltijd voor <strong id="selectedRecipe"></strong>:</p>
 
             <div class="space-y-3">
                 {% for day_index, day_name in days %}
                 <div>
-                    <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{{ day_name }}</h4>
+                    <h4 class="text-xs font-semibold uppercase tracking-wide mb-1" style="color: var(--color-pencil);">{{ day_name }}</h4>
                     <div class="flex gap-1.5 flex-wrap">
                         {% for meal_code, meal_name in meal_types %}
-                        <button class="meal-select-btn px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+                        <button class="meal-select-btn px-3 py-1 text-sm rounded-lg transition-colors"
+                                style="border: 1px solid var(--color-linen); color: var(--color-ink);"
+                                onmouseover="this.style.background='var(--color-sepia-bg)';this.style.borderColor='var(--color-sepia-light)';this.style.color='var(--color-sepia)';"
+                                onmouseout="this.style.background='';this.style.borderColor='var(--color-linen)';this.style.color='var(--color-ink)';"
                                 data-day="{{ day_index }}" data-meal="{{ meal_code }}">
                             {{ meal_name }}
                         </button>
@@ -177,7 +174,7 @@
             </div>
 
             <div class="flex justify-end mt-6">
-                <button id="cancelModal" class="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <button id="cancelModal" class="btn-secondary px-4 py-2 text-sm">
                     Annuleren
                 </button>
             </div>
@@ -185,7 +182,6 @@
     </div>
 </div>
 
-<!-- Recept-data voor JavaScript -->
 <script>
 const recipes = [
     {% for recipe in recipes %}
@@ -239,22 +235,27 @@ function getWeekMonday(week, year) {
 }
 
 function fillDayDates(week, year) {
-    const mon = getWeekMonday(week, year);
+    const mon   = getWeekMonday(week, year);
+    const today = new Date();
+    today.setHours(0,0,0,0);
 
-    // Datum per dag-kaart
     document.querySelectorAll('[data-day-date]').forEach(el => {
         const d = new Date(mon);
         d.setDate(mon.getDate() + parseInt(el.dataset.dayDate));
         el.textContent = d.getDate() + ' ' + NL_MONTHS_SHORT[d.getMonth()];
+
+        // Vandaag markeren
+        if (d.getTime() === today.getTime()) {
+            const card = document.getElementById('day-card-' + el.dataset.dayDate);
+            if (card) card.classList.add('day-today');
+        }
     });
 
-    // Bereik in header
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
     const fmt = d => d.getDate() + ' ' + NL_MONTHS_SHORT[d.getMonth()];
     const rangeEl = document.getElementById('week-date-range');
     if (rangeEl) rangeEl.textContent = fmt(mon) + ' – ' + fmt(sun) + ' ' + year;
-
 }
 
 // ── Menu opslaan ────────────────────────────────────────────────────────────
@@ -327,13 +328,16 @@ function showDropdown(searchInput, filteredRecipes) {
     if (filteredRecipes.length === 0) { dropdown.classList.add('hidden'); return; }
 
     dropdown.innerHTML = filteredRecipes.map(recipe =>
-        `<div class="recipe-option px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm mx-1 rounded-lg transition-colors"
+        `<div class="recipe-option px-3 py-2 cursor-pointer text-sm mx-1 rounded-lg transition-colors"
+              style="color: var(--color-ink);"
+              onmouseover="this.style.background='var(--color-sepia-bg)'"
+              onmouseout="this.style.background=''"
               data-recipe-id="${recipe.id}" data-recipe-name="${recipe.name}"
               data-cookbook-abbr="${recipe.cookbookAbbr}" data-page="${recipe.page}" data-serves="${recipe.serves}">
-            <div class="font-medium text-gray-800">${recipe.name}</div>
+            <div class="font-medium">${recipe.name}</div>
             ${recipe.cookbook
-                ? `<div class="text-xs text-gray-400">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''} · ${recipe.serves} pers.</div>`
-                : `<div class="text-xs text-gray-400">${recipe.serves} pers.</div>`}
+                ? `<div class="text-xs" style="color:var(--color-pencil)">${recipe.cookbook}${recipe.page ? `, p.${recipe.page}` : ''} · ${recipe.serves} pers.</div>`
+                : `<div class="text-xs" style="color:var(--color-pencil)">${recipe.serves} pers.</div>`}
         </div>`
     ).join('');
 
@@ -341,10 +345,10 @@ function showDropdown(searchInput, filteredRecipes) {
 
     dropdown.querySelectorAll('.recipe-option').forEach(option => {
         option.addEventListener('click', () => {
-            const recipeId   = option.dataset.recipeId;
-            const recipeName = option.dataset.recipeName;
+            const recipeId     = option.dataset.recipeId;
+            const recipeName   = option.dataset.recipeName;
             const cookbookAbbr = option.dataset.cookbookAbbr;
-            const page       = option.dataset.page;
+            const page         = option.dataset.page;
 
             searchInput.value = recipeName;
             searchInput.classList.add('has-recipe');
@@ -366,7 +370,8 @@ function updateRecipeInfo(searchInput, cookbookAbbr, page) {
     if (cookbookAbbr && cookbookAbbr !== 'null') {
         const infoDiv = document.createElement('div');
         infoDiv.className = 'recipe-info mt-1.5';
-        infoDiv.innerHTML = `<span class="inline-block bg-indigo-50 text-indigo-700 rounded px-1.5 py-0.5 text-xs font-medium">${cookbookAbbr}${page && page !== 'null' ? ` p.${page}` : ''}</span>`;
+        infoDiv.innerHTML = `<span class="inline-block rounded px-1.5 py-0.5 text-xs font-medium"
+            style="background: var(--color-sepia-bg); color: var(--color-sepia);">${cookbookAbbr}${page && page !== 'null' ? ` p.${page}` : ''}</span>`;
         const peopleContainer = searchInput.parentNode.querySelector('.people-count-container');
         if (peopleContainer) {
             searchInput.parentNode.insertBefore(infoDiv, peopleContainer.nextSibling);
@@ -382,7 +387,6 @@ function hideDropdown(searchInput) {
     }, 200);
 }
 
-// Zoek-inputs initialiseren
 document.querySelectorAll('.recipe-search').forEach(searchInput => {
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value;
@@ -417,13 +421,11 @@ document.querySelectorAll('.recipe-search').forEach(searchInput => {
     });
 });
 
-// Portie-inputs
 document.querySelectorAll('.people-count-input').forEach(input => {
     input.addEventListener('change', debouncedUpdate);
     input.addEventListener('input', debouncedUpdate);
 });
 
-// Sluit dropdowns bij klik buiten
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.relative')) {
         document.querySelectorAll('.recipe-dropdown').forEach(d => d.classList.add('hidden'));
@@ -449,7 +451,7 @@ function displayRecipeList(containerId, recipeList, showCount) {
     if (!container) return;
 
     if (recipeList.length === 0) {
-        container.innerHTML = '<p class="text-xs text-gray-400 py-1">Nog geen recepten</p>';
+        container.innerHTML = '<p class="text-xs py-1" style="color:var(--color-pencil)">Nog geen recepten</p>';
         return;
     }
 
@@ -460,10 +462,13 @@ function displayRecipeList(containerId, recipeList, showCount) {
             showCount && recipe.usage_count ? recipe.usage_count + '×' : null
         ].filter(Boolean).join(' · ');
 
-        return `<div class="recipe-quick-item px-2 py-1.5 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+        return `<div class="recipe-quick-item px-2 py-1.5 rounded-lg cursor-pointer transition-colors"
+                     style="color: var(--color-ink);"
+                     onmouseover="this.style.background='var(--color-sepia-bg)'"
+                     onmouseout="this.style.background=''"
                      data-recipe='${JSON.stringify(recipe)}'>
-                    <div class="text-sm font-medium text-gray-800 leading-snug">${recipe.name}</div>
-                    <div class="text-xs text-gray-400">${meta}</div>
+                    <div class="text-sm font-medium leading-snug">${recipe.name}</div>
+                    <div class="text-xs" style="color:var(--color-pencil)">${meta}</div>
                 </div>`;
     }).join('');
 
@@ -529,12 +534,11 @@ document.addEventListener('DOMContentLoaded', () => {
     fillDayDates({{ week }}, {{ year }});
     loadQuickAccessRecipes();
 
-    // Portie-inputs vullen vanuit opgeslagen waarden + has-recipe markeren
     document.querySelectorAll('.meal-input').forEach(mealInput => {
         if (mealInput.value) {
             const day  = mealInput.dataset.day;
             const meal = mealInput.dataset.meal;
-            const searchInput  = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].recipe-search`);
+            const searchInput   = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].recipe-search`);
             const peopleHidden  = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-input`);
             const peopleVisible = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].people-count-input`);
             if (searchInput && searchInput.value) searchInput.classList.add('has-recipe');

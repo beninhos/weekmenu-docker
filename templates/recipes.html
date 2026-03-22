@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
+<div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">Recepten</h2>
+        <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten</h2>
         <a href="{{ url_for('new_recipe') }}"
-           class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+           class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
             Nieuw Recept
         </a>
     </div>
     <div class="grid gap-4">
         {% for recipe in recipes %}
-        <div class="border p-4 rounded hover:bg-gray-50 flex">
+        <div class="border p-4 rounded hover:bg-[#F5F2ED] flex">
             <!-- Afbeelding -->
             {% if recipe.image_path %}
             <div class="w-24 h-24 mr-4">
@@ -23,8 +23,8 @@
             <div class="flex-grow">
                 <div class="flex justify-between items-start">
                     <div>
-                        <h3 class="font-semibold text-gray-900">{{ recipe.name }}</h3>
-                        <div class="flex items-center space-x-4 text-sm text-gray-600">
+                        <h3 class="font-semibold text-[#2C2C2C]">{{ recipe.name }}</h3>
+                        <div class="flex items-center space-x-4 text-sm text-[#6B6B6B]">
                             {% if recipe.cookbook %}
                             <span>{{ recipe.cookbook.name }}</span>
                             {% endif %}
@@ -32,28 +32,28 @@
                             <span>p. {{ recipe.page }}</span>
                             {% elif recipe.url %}
                             <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer"
-                               class="text-blue-500 hover:text-blue-700 underline">Online recept ↗</a>
+                               class="text-[#8B4513] hover:text-[#8B4513] underline">Online recept ↗</a>
                             {% endif %}
-                            <span class="text-blue-600">{{ recipe.serves or 4 }} personen</span>
+                            <span class="text-[#8B4513]">{{ recipe.serves or 4 }} personen</span>
                             {% if recipe.usage_count and recipe.usage_count > 0 %}
-                            <span class="text-green-600">{{ recipe.usage_count }}× gebruikt</span>
+                            <span class="text-[#8B4513]">{{ recipe.usage_count }}× gebruikt</span>
                             {% endif %}
                         </div>
                     </div>
                     <div class="flex items-center space-x-2">
                         <button onclick="toggleFavorite({{ recipe.id }}, this)" 
-                                class="favorite-btn text-yellow-500 hover:text-yellow-600 text-lg"
+                                class="favorite-btn text-[#8B4513] hover:text-[#6B3410] text-lg"
                                 data-is-favorite="{{ recipe.is_favorite|lower }}">
                             {{ '⭐' if recipe.is_favorite else '☆' }}
                         </button>
                         <a href="{{ url_for('edit_recipe', id=recipe.id) }}"
-                           class="text-blue-500 hover:text-blue-700">Bewerken</a>
+                           class="text-[#8B4513] hover:text-[#8B4513]">Bewerken</a>
                         <button onclick="deleteRecipe({{ recipe.id }})"
                                 class="text-red-500 hover:text-red-700">Verwijderen</button>
                     </div>
                 </div>
                 <div class="mt-4">
-                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Ingrediënten</h4>
+                    <h4 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h4>
                     <ul class="list-disc list-inside">
                         {% for ri in recipe.ingredients %}
                         <li>{{ ri.amount }} {{ ri.unit }} {{ ri.ingredient.name }}</li>

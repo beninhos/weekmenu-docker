@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <h2 class="text-2xl font-extrabold tracking-tight text-gray-900 mb-6">Recept Bewerken</h2>
+<div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-6">Recept Bewerken</h2>
     
     <form method="POST" enctype="multipart/form-data" class="space-y-6">
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Naam</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Naam</label>
             <input type="text" name="name" required value="{{ recipe.name }}"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Standaard aantal personen</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Standaard aantal personen</label>
             <input type="number" name="serves" value="{{ recipe.serves or '' }}" min="1" max="12"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-            <p class="text-gray-400 text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
+            <p class="text-[#6B6B6B] text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
         </div>
         
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Kookboek</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Kookboek</label>
             <select name="cookbook" 
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 <option value="">Selecteer een kookboek</option>
                 {% for cookbook in cookbooks %}
                 <option value="{{ cookbook.id }}" 
@@ -32,25 +32,25 @@
         </div>
         
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Pagina</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Pagina</label>
             <input type="number" name="page" value="{{ recipe.page or '' }}"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">URL (online recept)</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">URL (online recept)</label>
             <input type="url" name="url" value="{{ recipe.url or '' }}" placeholder="https://..."
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Bereidingswijze</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Bereidingswijze</label>
             <textarea name="instructions" rows="6" placeholder="Beschrijf de bereidingsstappen..."
-                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">{{ recipe.instructions or '' }}</textarea>
+                      class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">{{ recipe.instructions or '' }}</textarea>
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Receptafbeelding</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Receptafbeelding</label>
             {% if recipe.image_path %}
             <div class="mb-2">
                 <img src="{{ url_for('static', filename=recipe.image_path.replace('static/', '')) }}" 
@@ -59,28 +59,28 @@
             </div>
             {% endif %}
             <input type="file" name="image" accept="image/*"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         
         <div>
-            <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-2">Ingrediënten</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h3>
             <div id="ingredients" class="space-y-4">
                 {% for ri in recipe.ingredients %}
                 <div class="grid grid-cols-12 gap-2">
                     <div class="col-span-4">
                         <input type="text" name="ingredient[]" value="{{ ri.ingredient.name }}"
-                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                               class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-2">
                         <input type="number" step="0.1" name="amount[]" value="{{ ri.amount }}"
-                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                               class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-2">
                         <input type="text" name="unit[]" value="{{ ri.unit }}"
-                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                               class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-3">
-                        <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                             {% for cat in categories %}
                             <option value="{{ cat }}" {{ 'selected' if ri.ingredient.category == cat }}>
                                 {{ cat }}
@@ -97,18 +97,18 @@
             </div>
             
             <button type="button" onclick="addIngredient()"
-                    class="mt-4 text-blue-500 hover:text-blue-700">
+                    class="mt-4 text-[#8B4513] hover:text-[#8B4513]">
                 + Ingrediënt toevoegen
             </button>
         </div>
         
         <div class="flex justify-end space-x-4">
             <a href="{{ url_for('recipes') }}"
-               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+               class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#F5F2ED]">
                 Annuleren
             </a>
             <button type="submit"
-                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
                 Opslaan
             </button>
         </div>
@@ -128,18 +128,18 @@ function addIngredient() {
     newRow.innerHTML = `
         <div class="col-span-4">
             <input type="text" name="ingredient[]" placeholder="Ingrediënt"
-                   class="block w-full rounded-md border-gray-300 shadow-sm">
+                   class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         <div class="col-span-2">
             <input type="number" step="0.1" name="amount[]" placeholder="Aantal"
-                   class="block w-full rounded-md border-gray-300 shadow-sm">
+                   class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         <div class="col-span-2">
             <input type="text" name="unit[]" placeholder="Eenheid"
-                   class="block w-full rounded-md border-gray-300 shadow-sm">
+                   class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         <div class="col-span-3">
-            <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
+            <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 ${optionsHtml}
             </select>
         </div>

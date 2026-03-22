@@ -5,28 +5,28 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div>
-            <h2 class="text-2xl font-extrabold tracking-tight text-gray-900">AH Producten</h2>
-            <p class="text-sm text-gray-500 mt-1">Koppel per ingrediënt je voorkeurs-AH-product. Eenmalig instellen, altijd gebruikt bij "Stuur naar AH".</p>
+            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">AH Producten</h2>
+            <p class="text-sm text-[#6B6B6B] mt-1">Koppel per ingrediënt je voorkeurs-AH-product. Eenmalig instellen, altijd gebruikt bij "Stuur naar AH".</p>
         </div>
-        <a href="{{ url_for('settings') }}" class="text-sm text-gray-500 hover:text-gray-700">← Instellingen</a>
+        <a href="{{ url_for('settings') }}" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C]">← Instellingen</a>
     </div>
 
     <!-- Zoekfilter -->
-    <div class="bg-white rounded-lg shadow px-4 py-3">
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] px-4 py-3">
         <input type="text" id="filterInput" placeholder="Filter ingrediënten..."
                oninput="filterIngredients(this.value)"
-               class="w-full text-sm border-gray-300 rounded-md shadow-sm">
+               class="w-full text-sm border-[#D4CEC4] rounded-md shadow-sm">
     </div>
 
     <!-- Statistieken -->
-    <div class="flex gap-4 text-sm text-gray-500">
+    <div class="flex gap-4 text-sm text-[#6B6B6B]">
         <span id="statTotal">{{ ingredients|length }} ingrediënten</span>
         <span>·</span>
-        <span id="statLinked" class="text-green-600 font-medium">
+        <span id="statLinked" class="text-[#8B4513] font-medium">
             {{ ingredients|selectattr('ah_product_id')|list|length }} gekoppeld
         </span>
         <span>·</span>
-        <span id="statUnlinked" class="text-orange-500">
+        <span id="statUnlinked" class="text-[#8B4513]">
             {{ ingredients|rejectattr('ah_product_id')|list|length }} nog te koppelen
         </span>
     </div>
@@ -34,20 +34,20 @@
     <!-- Ingrediëntenlijst -->
     <div id="ingredientList" class="space-y-3">
         {% for ing in ingredients %}
-        <div class="ingredient-card bg-white rounded-lg shadow overflow-hidden"
+        <div class="ingredient-card bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] overflow-hidden"
              data-name="{{ ing.name|lower }}"
              data-id="{{ ing.id }}">
 
             <!-- Ingredientnaam + categorie -->
-            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div class="px-4 py-3 border-b border-[#E8E4DC] flex items-center justify-between">
                 <div>
-                    <span class="font-semibold text-gray-800">{{ ing.name }}</span>
-                    <span class="ml-2 text-xs text-gray-400">{{ ing.category }}</span>
+                    <span class="font-semibold text-[#2C2C2C]">{{ ing.name }}</span>
+                    <span class="ml-2 text-xs text-[#6B6B6B]">{{ ing.category }}</span>
                 </div>
                 {% if ing.ah_product_id %}
-                <span class="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">✓ gekoppeld</span>
+                <span class="text-xs text-[#8B4513] font-medium bg-[#FAF8F5] px-2 py-0.5 rounded-full">✓ gekoppeld</span>
                 {% else %}
-                <span class="text-xs text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">niet gekoppeld</span>
+                <span class="text-xs text-[#6B6B6B] bg-[#F5F2ED] px-2 py-0.5 rounded-full">niet gekoppeld</span>
                 {% endif %}
             </div>
 
@@ -56,31 +56,31 @@
             <div class="px-4 py-3 flex items-center gap-4" id="card-{{ ing.id }}">
                 {% if ing.ah_product_image %}
                 <img src="{{ ing.ah_product_image }}" alt="{{ ing.ah_product_name }}"
-                     class="w-16 h-16 object-contain rounded border border-gray-100 flex-shrink-0">
+                     class="w-16 h-16 object-contain rounded border border-[#E8E4DC] flex-shrink-0">
                 {% else %}
-                <div class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center text-gray-300 text-2xl flex-shrink-0">🛒</div>
+                <div class="w-16 h-16 bg-[#F5F2ED] rounded flex items-center justify-center text-[#D4CEC4] text-2xl flex-shrink-0">🛒</div>
                 {% endif %}
                 <div class="flex-1 min-w-0">
-                    <p class="font-medium text-gray-800 text-sm leading-tight">{{ ing.ah_product_name }}</p>
-                    <p class="text-xs text-gray-500 mt-0.5">{{ ing.ah_product_size }}</p>
+                    <p class="font-medium text-[#2C2C2C] text-sm leading-tight">{{ ing.ah_product_name }}</p>
+                    <p class="text-xs text-[#6B6B6B] mt-0.5">{{ ing.ah_product_size }}</p>
                     <div class="flex items-center gap-2 mt-1">
                         {% if ing.ah_product_price %}
-                        <span class="text-sm font-semibold text-gray-900">€{{ ing.ah_product_price }}</span>
+                        <span class="text-sm font-semibold text-[#2C2C2C]">€{{ ing.ah_product_price }}</span>
                         {% endif %}
                         {% if ing.ah_product_bonus %}
-                        <span class="text-xs bg-yellow-400 text-yellow-900 font-bold px-1.5 py-0.5 rounded">BONUS</span>
+                        <span class="text-xs bg-[#C9A882] text-[#2C2C2C] font-bold px-1.5 py-0.5 rounded">BONUS</span>
                         {% endif %}
-                        <span class="text-xs text-gray-400">id: {{ ing.ah_product_id }}</span>
+                        <span class="text-xs text-[#6B6B6B]">id: {{ ing.ah_product_id }}</span>
                     </div>
                 </div>
                 <div class="flex flex-col gap-2 flex-shrink-0">
                     <button onclick="refreshIngredient({{ ing.id }})"
                             title="Ververs productinfo"
-                            class="text-xs text-gray-500 hover:text-blue-600 border border-gray-200 px-2 py-1 rounded hover:border-blue-300 transition-colors">
+                            class="text-xs text-[#6B6B6B] hover:text-[#8B4513] border border-[#E8E4DC] px-2 py-1 rounded hover:border-[#D4CEC4] transition-colors">
                         🔄
                     </button>
                     <button onclick="openSearch({{ ing.id }})"
-                            class="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50 transition-colors">
+                            class="text-xs text-[#8B4513] hover:text-[#8B4513] border border-[#E8E4DC] px-2 py-1 rounded hover:bg-[#FAF8F5] transition-colors">
                         Wijzig
                     </button>
                 </div>
@@ -88,26 +88,26 @@
             {% else %}
             <div class="px-4 py-3">
                 <button onclick="openSearch({{ ing.id }})"
-                        class="text-sm text-green-700 hover:text-green-900 font-medium">
+                        class="text-sm text-[#8B4513] hover:text-[#2C2C2C] font-medium">
                     + Zoek AH-product voor "{{ ing.name }}"
                 </button>
             </div>
             {% endif %}
 
             <!-- Zoekpaneel (verborgen) -->
-            <div id="search-{{ ing.id }}" class="hidden border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-3">
+            <div id="search-{{ ing.id }}" class="hidden border-t border-[#E8E4DC] bg-[#F5F2ED] px-4 py-3 space-y-3">
                 <div class="flex gap-2">
                     <input type="text" id="searchInput-{{ ing.id }}"
                            placeholder="Zoek op AH..."
                            value="{{ ing.name }}"
-                           class="flex-1 text-sm border-gray-300 rounded-md shadow-sm"
+                           class="flex-1 text-sm border-[#D4CEC4] rounded-md shadow-sm"
                            onkeydown="if(event.key==='Enter') doSearch({{ ing.id }})">
                     <button onclick="doSearch({{ ing.id }})"
-                            class="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">
+                            class="bg-[#2C2C2C] text-white px-3 py-1.5 rounded text-sm hover:bg-[#1a1a1a]">
                         Zoek
                     </button>
                     <button onclick="closeSearch({{ ing.id }})"
-                            class="text-gray-400 hover:text-gray-600 px-2 py-1.5 rounded text-sm">
+                            class="text-[#6B6B6B] hover:text-[#6B6B6B] px-2 py-1.5 rounded text-sm">
                         ✕
                     </button>
                 </div>
@@ -142,25 +142,25 @@ async function doSearch(id) {
     const q = document.getElementById('searchInput-' + id).value.trim();
     if (!q) return;
     const resultsEl = document.getElementById('searchResults-' + id);
-    resultsEl.innerHTML = '<p class="text-xs text-gray-400 col-span-2">Zoeken...</p>';
+    resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Zoeken...</p>';
     const resp = await fetch('/api/ah/product-search?q=' + encodeURIComponent(q));
     const products = await resp.json();
     if (!products.length) {
-        resultsEl.innerHTML = '<p class="text-xs text-gray-500 col-span-2">Geen resultaten gevonden.</p>';
+        resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Geen resultaten gevonden.</p>';
         return;
     }
     resultsEl.innerHTML = products.map(p => `
         <button onclick='selectProduct(${id}, ${JSON.stringify(p).replace(/'/g, "\\'")})'
-                class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-2 hover:border-green-400 hover:bg-green-50 transition-colors text-left">
+                class="flex items-center gap-2 bg-white border border-[#E8E4DC] rounded-lg p-2 hover:border-[#C9A882] hover:bg-[#FAF8F5] transition-colors text-left">
             ${p.image
                 ? `<img src="${p.image}" class="w-12 h-12 object-contain rounded flex-shrink-0">`
-                : `<div class="w-12 h-12 bg-gray-100 rounded flex-shrink-0"></div>`}
+                : `<div class="w-12 h-12 bg-[#F5F2ED] rounded flex-shrink-0"></div>`}
             <div class="min-w-0">
-                <p class="text-xs font-medium text-gray-800 leading-tight line-clamp-2">${p.title}</p>
-                <p class="text-xs text-gray-500">${p.size}</p>
+                <p class="text-xs font-medium text-[#2C2C2C] leading-tight line-clamp-2">${p.title}</p>
+                <p class="text-xs text-[#6B6B6B]">${p.size}</p>
                 <div class="flex items-center gap-1 mt-0.5">
                     ${p.price ? `<span class="text-xs font-semibold">€${p.price}</span>` : ''}
-                    ${p.isBonus ? '<span class="text-xs bg-yellow-400 text-yellow-900 font-bold px-1 rounded">BONUS</span>' : ''}
+                    ${p.isBonus ? '<span class="text-xs bg-[#C9A882] text-[#2C2C2C] font-bold px-1 rounded">BONUS</span>' : ''}
                 </div>
             </div>
         </button>

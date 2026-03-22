@@ -9,33 +9,33 @@
                  alt="{{ cookbook.name }}" 
                  class="w-16 h-20 object-cover rounded shadow">
             {% endif %}
-            <h1 class="text-2xl font-extrabold tracking-tight text-gray-900">{{ cookbook.name }}</h1>
+            <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ cookbook.name }}</h1>
         </div>
         <div class="space-x-2">
             <a href="{{ url_for('new_recipe') }}" 
-               class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+               class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded">
                 Nieuw Recept
             </a>
             <a href="{{ url_for('list_cookbooks') }}" 
-               class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">
+               class="border border-[#D4CEC4] text-[#2C2C2C] font-medium py-2 px-4 rounded hover:bg-[#F5F2ED]">
                 Terug naar Kookboeken
             </a>
         </div>
     </div>
 
     {% if recipes %}
-    <div class="bg-white shadow-md rounded overflow-hidden">
-        <div class="divide-y divide-gray-200">
+    <div class="bg-[#F5F2ED] border border-[#E8E4DC] rounded overflow-hidden">
+        <div class="divide-y divide-[#E8E4DC]">
             {% for recipe in recipes %}
-            <div class="p-4 hover:bg-gray-50 flex justify-between items-center">
+            <div class="p-4 hover:bg-[#F5F2ED] flex justify-between items-center">
                 <div class="flex items-center space-x-4">
                     {% if recipe.image_path %}
                     <img src="{{ url_for('static', filename=recipe.image_path.replace('static/', '')) }}" 
                          alt="{{ recipe.name }}" 
                          class="w-12 h-12 object-cover rounded">
                     {% else %}
-                    <div class="w-12 h-12 bg-gray-200 rounded flex items-center justify-center">
-                        <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-12 h-12 bg-[#E8E4DC] rounded flex items-center justify-center">
+                        <svg class="w-6 h-6 text-[#6B6B6B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 011 1v1a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1h4z"></path>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8"></path>
                         </svg>
@@ -43,29 +43,29 @@
                     {% endif %}
                     
                     <div>
-                        <h3 class="font-semibold text-gray-900">
-                            <a href="{{ url_for('edit_recipe', id=recipe.id) }}" class="hover:text-blue-600">{{ recipe.name }}</a>
+                        <h3 class="font-semibold text-[#2C2C2C]">
+                            <a href="{{ url_for('edit_recipe', id=recipe.id) }}" class="hover:text-[#8B4513]">{{ recipe.name }}</a>
                         </h3>
-                        <div class="flex items-center space-x-3 text-sm text-gray-500">
+                        <div class="flex items-center space-x-3 text-sm text-[#6B6B6B]">
                             {% if recipe.page %}
                             <span>p. {{ recipe.page }}</span>
                             {% elif recipe.url %}
                             <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer"
-                               class="text-blue-500 hover:text-blue-700 underline">Online recept ↗</a>
+                               class="text-[#8B4513] hover:text-[#8B4513] underline">Online recept ↗</a>
                             {% endif %}
-                            <span class="text-blue-600">• {{ recipe.serves or 4 }} pers.</span>
+                            <span class="text-[#8B4513]">• {{ recipe.serves or 4 }} pers.</span>
                         </div>
                     </div>
                 </div>
                 
                 <div class="flex space-x-2">
                     <button onclick="toggleFavorite({{ recipe.id }}, this)" 
-                            class="favorite-btn bg-yellow-500 hover:bg-yellow-600 text-white py-1 px-2 rounded text-sm"
+                            class="favorite-btn bg-[#8B4513] hover:bg-[#6B3410] text-white py-1 px-2 rounded text-sm"
                             data-is-favorite="{{ recipe.is_favorite|lower }}">
                         {{ '⭐' if recipe.is_favorite else '☆' }}
                     </button>
                     <a href="{{ url_for('edit_recipe', id=recipe.id) }}" 
-                       class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm">
+                       class="bg-[#2C2C2C] hover:bg-[#2C2C2C] text-white py-1 px-3 rounded text-sm">
                         Bewerken
                     </a>
                     <button onclick="deleteRecipe({{ recipe.id }})"
@@ -78,7 +78,7 @@
         </div>
     </div>
     {% else %}
-    <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
+    <div class="bg-[#F5F2ED] border-l-4 border-[#C9A882] text-[#8B4513] p-4 mb-4" role="alert">
         <p>Nog geen recepten toegevoegd voor dit kookboek.</p>
     </div>
     {% endif %}

@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="bg-white rounded-lg shadow p-6">
-    <h2 class="text-2xl font-extrabold tracking-tight text-gray-900 mb-6">Nieuw Recept</h2>
+<div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-6">Nieuw Recept</h2>
 
     <!-- URL Import -->
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <p class="text-sm font-medium text-blue-800 mb-2">Importeer via URL</p>
+    <div class="bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg p-4 mb-6">
+        <p class="text-sm font-medium text-[#8B4513] mb-2">Importeer via URL</p>
         <div class="flex gap-2">
             <input type="url" id="importUrl" placeholder="https://..."
-                   class="flex-1 rounded-md border-gray-300 shadow-sm text-sm">
+                   class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-sm">
             <button type="button" onclick="importFromUrl()"
                     id="importBtn"
-                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm shrink-0">
+                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm shrink-0">
                 Importeren
             </button>
         </div>
@@ -20,22 +20,22 @@
 
     <form method="POST" enctype="multipart/form-data" class="space-y-6">
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Naam</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Naam</label>
             <input type="text" name="name" id="fieldName" required
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Standaard aantal personen</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Standaard aantal personen</label>
             <input type="number" name="serves" id="fieldServes" min="1" max="12"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-            <p class="text-gray-400 text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
+            <p class="text-[#6B6B6B] text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Kookboek</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Kookboek</label>
             <select name="cookbook" id="fieldCookbook"
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 <option value="">Selecteer een kookboek</option>
                 {% for cookbook in cookbooks %}
                 <option value="{{ cookbook.id }}">{{ cookbook.name }}</option>
@@ -44,50 +44,50 @@
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Receptafbeelding</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Receptafbeelding</label>
             <input type="file" name="image" accept="image/*"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
             <input type="hidden" name="image_path_imported" id="fieldImagePath">
             <img id="importedImagePreview" src="" alt="Geïmporteerde afbeelding"
                  class="hidden mt-2 rounded max-h-40 object-cover">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Pagina</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Pagina</label>
             <input type="number" name="page"
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">URL (online recept)</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">URL (online recept)</label>
             <input type="url" name="url" id="fieldUrl" placeholder="https://..."
-                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-gray-700">Bereidingswijze</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Bereidingswijze</label>
             <textarea name="instructions" id="fieldInstructions" rows="6" placeholder="Beschrijf de bereidingsstappen..."
-                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
+                      class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm"></textarea>
         </div>
 
         <div>
-            <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-2">Ingrediënten</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h3>
             <div id="ingredients" class="space-y-2">
                 <div class="grid grid-cols-12 gap-2">
                     <div class="col-span-4">
                         <input type="text" name="ingredient[]" placeholder="Ingrediënt"
-                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                               class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-2">
                         <input type="number" step="0.1" name="amount[]" placeholder="Aantal"
-                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                               class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-2">
                         <input type="text" name="unit[]" placeholder="Eenheid"
-                               class="block w-full rounded-md border-gray-300 shadow-sm">
+                               class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-3">
-                        <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
+                        <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                             {% for cat in categories %}
                             <option value="{{ cat }}">{{ cat }}</option>
                             {% endfor %}
@@ -101,18 +101,18 @@
             </div>
 
             <button type="button" onclick="addIngredientRow()"
-                    class="mt-4 text-blue-500 hover:text-blue-700 text-sm">
+                    class="mt-4 text-[#8B4513] hover:text-[#8B4513] text-sm">
                 + Ingrediënt toevoegen
             </button>
         </div>
 
         <div class="flex justify-end space-x-4">
             <a href="{{ url_for('recipes') }}"
-               class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+               class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#F5F2ED]">
                 Annuleren
             </a>
             <button type="submit"
-                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
                 Opslaan
             </button>
         </div>
@@ -134,18 +134,18 @@ function addIngredientRow(name, amount, unit, category) {
     row.innerHTML = `
         <div class="col-span-4">
             <input type="text" name="ingredient[]" placeholder="Ingrediënt" value="${esc(name)}"
-                   class="block w-full rounded-md border-gray-300 shadow-sm">
+                   class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         <div class="col-span-2">
             <input type="number" step="0.1" name="amount[]" placeholder="Aantal" value="${esc(amount ?? '')}"
-                   class="block w-full rounded-md border-gray-300 shadow-sm">
+                   class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         <div class="col-span-2">
             <input type="text" name="unit[]" placeholder="Eenheid" value="${esc(unit)}"
-                   class="block w-full rounded-md border-gray-300 shadow-sm">
+                   class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         <div class="col-span-3">
-            <select name="category[]" class="block w-full rounded-md border-gray-300 shadow-sm">
+            <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 ${optionsHtml}
             </select>
         </div>
@@ -168,7 +168,7 @@ async function importFromUrl() {
     const statusDiv = document.getElementById('importStatus');
     btn.disabled = true;
     btn.textContent = 'Bezig...';
-    statusDiv.className = 'mt-2 text-sm text-gray-500';
+    statusDiv.className = 'mt-2 text-sm text-[#6B6B6B]';
     statusDiv.textContent = 'Recept ophalen...';
     statusDiv.classList.remove('hidden');
 
@@ -218,7 +218,7 @@ async function importFromUrl() {
             data.ingredients.forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit, ing.category));
         }
 
-        statusDiv.className = 'mt-2 text-sm text-green-700';
+        statusDiv.className = 'mt-2 text-sm text-[#8B4513]';
         statusDiv.textContent = `Geïmporteerd: ${data.ingredients.length} ingrediënten. Controleer de velden en sla op.`;
     } catch (error) {
         statusDiv.className = 'mt-2 text-sm text-red-600';

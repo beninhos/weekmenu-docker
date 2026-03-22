@@ -2,34 +2,34 @@
 
 {% block content %}
 <div class="mb-6">
-    <h1 class="text-2xl font-extrabold tracking-tight text-gray-900 mb-4">Kookboek Bewerken</h1>
+    <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-4">Kookboek Bewerken</h1>
     
-    <form method="POST" action="{{ url_for('edit_cookbook', id=cookbook.id) }}" enctype="multipart/form-data" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+    <form method="POST" action="{{ url_for('edit_cookbook', id=cookbook.id) }}" enctype="multipart/form-data" class="bg-[#F5F2ED] border border-[#E8E4DC] rounded px-8 pt-6 pb-8 mb-4">
         <div class="mb-4">
-            <label class="block text-sm font-semibold text-gray-700 mb-1" for="name">
+            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="name">
                 Naam
             </label>
             <input type="text" id="name" name="name" value="{{ cookbook.name }}" required
-                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                   class="shadow appearance-none border rounded w-full py-2 px-3 text-[#2C2C2C] leading-tight focus:outline-none focus:shadow-outline">
         </div>
         
         <div class="mb-4">
-            <label class="block text-sm font-semibold text-gray-700 mb-1" for="abbreviation">
+            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="abbreviation">
                 Afkorting (voor weekmenu)
             </label>
             <input type="text" id="abbreviation" name="abbreviation" value="{{ cookbook.abbreviation or '' }}" maxlength="10" placeholder="bijv. SWJ"
-                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            <p class="text-gray-400 text-xs mt-1">Kort (max 10 tekens) voor in weekmenu.</p>
+                   class="shadow appearance-none border rounded w-full py-2 px-3 text-[#2C2C2C] leading-tight focus:outline-none focus:shadow-outline">
+            <p class="text-[#6B6B6B] text-xs mt-1">Kort (max 10 tekens) voor in weekmenu.</p>
         </div>
         
         <div class="mb-6">
-            <label class="block text-sm font-semibold text-gray-700 mb-1" for="image">
+            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="image">
                 Kookboek Afbeelding
             </label>
             
             {% if cookbook.image_path %}
             <div class="mb-4">
-                <p class="text-sm text-gray-600 mb-2">Huidige afbeelding:</p>
+                <p class="text-sm text-[#6B6B6B] mb-2">Huidige afbeelding:</p>
                 <img src="{{ url_for('static', filename=cookbook.image_path.replace('static/', '')) }}" 
                      alt="{{ cookbook.name }}" 
                      class="w-32 h-40 object-cover rounded shadow">
@@ -37,8 +37,8 @@
             {% endif %}
             
             <input type="file" id="image" name="image" accept="image/*"
-                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            <p class="text-gray-400 text-xs mt-1">
+                   class="shadow appearance-none border rounded w-full py-2 px-3 text-[#2C2C2C] leading-tight focus:outline-none focus:shadow-outline">
+            <p class="text-[#6B6B6B] text-xs mt-1">
                 {% if cookbook.image_path %}
                 Kies een nieuwe afbeelding om de huidige te vervangen (optioneel)
                 {% else %}
@@ -49,11 +49,11 @@
         
         <div class="flex items-center justify-between">
             <button type="submit" 
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                    class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
                 Opslaan
             </button>
             <a href="{{ url_for('list_cookbooks') }}" 
-               class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+               class="border border-[#D4CEC4] text-[#2C2C2C] font-medium py-2 px-4 rounded hover:bg-[#F5F2ED]">
                 Annuleren
             </a>
         </div>
