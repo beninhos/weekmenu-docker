@@ -612,7 +612,7 @@ function openDetail(recipeId) {
       <input type="checkbox" id="ing-${ing.id}" value="${ing.id}" checked
              style="width:1rem;height:1rem;border-radius:0.25rem;accent-color:#8B4513;flex-shrink:0;cursor:pointer;">
       <label for="ing-${ing.id}" class="text-sm text-[#2C2C2C] cursor-pointer select-none">
-        ${formatAmt(ing.amount) ? formatAmt(ing.amount) + ' ' : ''}${escHtml(ing.unit)} ${escHtml(ing.name)}
+        ${formatAmt(ing.amount) ? formatAmt(ing.amount) + ' ' : ''}${escHtml(ing.unit)} ${escHtml(ing.name)}${ing.preparation ? ' <span class="text-[#6B6B6B] italic">(' + escHtml(ing.preparation) + ')</span>' : ''}
       </label>
     </div>
   `).join('') || '<p class="text-sm text-[#6B6B6B]">Geen ingrediënten.</p>';

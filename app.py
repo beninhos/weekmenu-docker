@@ -116,6 +116,7 @@ class Ingredient(db.Model):
     __tablename__ = 'ingredient'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
+    display_name = db.Column(db.String(100), nullable=False, default='')
     category = db.Column(db.String(50), nullable=False)
     ah_product_id      = db.Column(db.Integer, nullable=True)
     ah_product_name    = db.Column(db.String(200), nullable=True)
@@ -126,6 +127,17 @@ class Ingredient(db.Model):
     ah_product_updated = db.Column(db.Integer, nullable=True)
     ah_product_color   = db.Column(db.String(20), nullable=True)
 
+    @property
+    def display(self):
+        return self.display_name or self.name
+
+class IngredientAlias(db.Model):
+    __tablename__ = 'ingredient_alias'
+    id = db.Column(db.Integer, primary_key=True)
+    alias = db.Column(db.String(100), nullable=False, unique=True)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    ingredient = db.relationship('Ingredient', backref='aliases')
+
 class RecipeIngredient(db.Model):
     __tablename__ = 'recipe_ingredient'
     id = db.Column(db.Integer, primary_key=True)
@@ -133,6 +145,7 @@ class RecipeIngredient(db.Model):
     ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     unit = db.Column(db.String(20), nullable=False)
+    preparation = db.Column(db.String(100), nullable=True)
     ingredient = db.relationship('Ingredient', backref='recipe_ingredients')
 
 class MenuItem(db.Model):
@@ -405,10 +418,11 @@ def receptenplanner():
             'ingredients': [
                 {
                     'id': ri.id,
-                    'name': ri.ingredient.name,
+                    'name': ri.ingredient.display,
                     'amount': ri.amount,
                     'unit': ri.unit,
-                    'category': ri.ingredient.category
+                    'category': ri.ingredient.category,
+                    'preparation': ri.preparation or '',
                 }
                 for ri in r.ingredients
             ]
@@ -511,28 +525,36 @@ def new_recipe():
         db.session.add(recipe)
         db.session.commit()
         
-        ingredients = request.form.getlist('ingredient[]')
+        ingredient_ids = request.form.getlist('ingredient_id[]')
+        ingredient_names = request.form.getlist('ingredient[]')
         amounts = request.form.getlist('amount[]')
         units = request.form.getlist('unit[]')
         categories = request.form.getlist('category[]')
-        
-        for i in range(len(ingredients)):
-            if ingredients[i]:
-                ingredient = Ingredient.query.filter_by(name=ingredients[i]).first()
-                if not ingredient:
-                    ingredient = Ingredient(name=ingredients[i], category=categories[i])
-                    db.session.add(ingredient)
-                    db.session.commit()
-                else:
-                    ingredient.category = categories[i]
+        preparations = request.form.getlist('preparation[]')
 
-                recipe_ingredient = RecipeIngredient(
-                    recipe_id=recipe.id,
-                    ingredient_id=ingredient.id,
-                    amount=float(amounts[i]) if amounts[i] else 0,
-                    unit=units[i]
-                )
-                db.session.add(recipe_ingredient)
+        for i in range(len(ingredient_names)):
+            if not ingredient_names[i]:
+                continue
+
+            # Use resolved ID if available, otherwise resolve by name
+            if i < len(ingredient_ids) and ingredient_ids[i]:
+                ingredient = Ingredient.query.get(int(ingredient_ids[i]))
+            else:
+                ingredient = _resolve_or_create_ingredient(ingredient_names[i], categories[i] if i < len(categories) else None)
+
+            if not ingredient:
+                continue
+
+            prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
+
+            recipe_ingredient = RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=ingredient.id,
+                amount=float(amounts[i]) if amounts[i] else 0,
+                unit=units[i],
+                preparation=prep,
+            )
+            db.session.add(recipe_ingredient)
 
         db.session.commit()
         return redirect(url_for('recipes'))
@@ -799,12 +821,8 @@ def shopping_list(year, week):
         if item.recipe:
             multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
-                key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
-                adjusted_amount = ri.amount * multiplier
-                if key in shopping_dict:
-                    shopping_dict[key] += adjusted_amount
-                else:
-                    shopping_dict[key] = adjusted_amount
+                key = (ri.ingredient_id, ri.unit)
+                shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
 
     # Process saved quick-add items from database
     quick_items = QuickAddItem.query.filter_by(week_number=week, year=year).all()
@@ -813,12 +831,8 @@ def shopping_list(year, week):
         if item.recipe:
             multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
-                key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
-                adjusted_amount = ri.amount * multiplier
-                if key in shopping_dict:
-                    shopping_dict[key] += adjusted_amount
-                else:
-                    shopping_dict[key] = adjusted_amount
+                key = (ri.ingredient_id, ri.unit)
+                shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
 
     # Process temporary quick-add items from URL parameters
     recipe_ids = request.args.getlist('recipe_id')
@@ -830,20 +844,14 @@ def shopping_list(year, week):
             people_count = int(people_counts[i]) if i < len(people_counts) else None
             multiplier = calc_multiplier(recipe.serves, people_count)
             for ri in recipe.ingredients:
-                key = (ri.ingredient.name, ri.unit, ri.ingredient.category)
-                adjusted_amount = ri.amount * multiplier
-                if key in shopping_dict:
-                    shopping_dict[key] += adjusted_amount
-                else:
-                    shopping_dict[key] = adjusted_amount
+                key = (ri.ingredient_id, ri.unit)
+                shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
+
     # Process custom shopping ingredients (from Receptenplanner)
     custom_items = CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all()
     for ci in custom_items:
-        key = (ci.ingredient.name, ci.unit, ci.ingredient.category)
-        if key in shopping_dict:
-            shopping_dict[key] += ci.amount
-        else:
-            shopping_dict[key] = ci.amount
+        key = (ci.ingredient_id, ci.unit)
+        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
 
     overrides = {
         o.ingredient_id: o.qty
@@ -876,26 +884,27 @@ def shopping_list(year, week):
     }
 
     shopping_list = []
-    for k, v in shopping_dict.items():
-        ing = Ingredient.query.filter_by(name=k[0]).first()
-        default_qty = _calc_default_qty(v, k[1])
-        ing_id      = ing.id if ing else None
-        qty         = overrides.get(ing_id, default_qty) if ing_id else default_qty
-        api_color   = (ing.ah_product_color or '') if ing else ''
+    for (ing_id, unit), total_amount in shopping_dict.items():
+        ing = Ingredient.query.get(ing_id)
+        if not ing:
+            continue
+        default_qty = _calc_default_qty(total_amount, unit)
+        qty         = overrides.get(ing_id, default_qty)
+        api_color   = ing.ah_product_color or ''
         shopping_list.append({
-            'name':              k[0],
-            'amount':            v,
-            'amount_display':    format_amount(v),
-            'unit':              k[1],
-            'category':          k[2],
+            'name':              ing.display,
+            'amount':            total_amount,
+            'amount_display':    format_amount(total_amount),
+            'unit':              unit,
+            'category':          ing.category,
             'ingredient_id':     ing_id,
-            'ah_product_id':     ing.ah_product_id      if ing else None,
-            'ah_product_name':   ing.ah_product_name    if ing else None,
-            'ah_product_size':   ing.ah_product_size    if ing else None,
-            'ah_product_image':  ing.ah_product_image   if ing else None,
-            'ah_product_price':  ing.ah_product_price   if ing else None,
-            'ah_product_bonus':  ing.ah_product_bonus   if ing else False,
-            'ah_product_bg':     api_color or _CATEGORY_BG.get(k[2], '#f0ede8'),
+            'ah_product_id':     ing.ah_product_id,
+            'ah_product_name':   ing.ah_product_name,
+            'ah_product_size':   ing.ah_product_size,
+            'ah_product_image':  ing.ah_product_image,
+            'ah_product_price':  ing.ah_product_price,
+            'ah_product_bonus':  ing.ah_product_bonus or False,
+            'ah_product_bg':     api_color or _CATEGORY_BG.get(ing.category, '#f0ede8'),
             'default_qty':       default_qty,
             'qty':               qty,
         })
@@ -941,29 +950,36 @@ def edit_recipe(id):
             recipe.image_path = image_path
         
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
-        
-        ingredients = request.form.getlist('ingredient[]')
+
+        ingredient_ids = request.form.getlist('ingredient_id[]')
+        ingredient_names = request.form.getlist('ingredient[]')
         amounts = request.form.getlist('amount[]')
         units = request.form.getlist('unit[]')
         categories = request.form.getlist('category[]')
-        
-        for i in range(len(ingredients)):
-            if ingredients[i]:
-                ingredient = Ingredient.query.filter_by(name=ingredients[i]).first()
-                if not ingredient:
-                    ingredient = Ingredient(name=ingredients[i], category=categories[i])
-                    db.session.add(ingredient)
-                    db.session.commit()
-                else:
-                    ingredient.category = categories[i]
+        preparations = request.form.getlist('preparation[]')
 
-                recipe_ingredient = RecipeIngredient(
-                    recipe_id=recipe.id,
-                    ingredient_id=ingredient.id,
-                    amount=float(amounts[i]) if amounts[i] else 0,
-                    unit=units[i]
-                )
-                db.session.add(recipe_ingredient)
+        for i in range(len(ingredient_names)):
+            if not ingredient_names[i]:
+                continue
+
+            if i < len(ingredient_ids) and ingredient_ids[i]:
+                ingredient = Ingredient.query.get(int(ingredient_ids[i]))
+            else:
+                ingredient = _resolve_or_create_ingredient(ingredient_names[i], categories[i] if i < len(categories) else None)
+
+            if not ingredient:
+                continue
+
+            prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
+
+            recipe_ingredient = RecipeIngredient(
+                recipe_id=recipe.id,
+                ingredient_id=ingredient.id,
+                amount=float(amounts[i]) if amounts[i] else 0,
+                unit=units[i],
+                preparation=prep,
+            )
+            db.session.add(recipe_ingredient)
 
         db.session.commit()
         return redirect(url_for('recipes'))
@@ -1083,6 +1099,88 @@ def get_quick_access_recipes():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+@app.route('/api/ingredients/search')
+def ingredient_search():
+    """Autocomplete endpoint: returns matching ingredients from master list."""
+    q = request.args.get('q', '').strip()
+    if len(q) < 1:
+        return jsonify([])
+
+    q_norm = _normalize_ingredient(q)
+
+    # Search by alias prefix
+    results = db.session.query(Ingredient).join(
+        IngredientAlias, Ingredient.id == IngredientAlias.ingredient_id
+    ).filter(
+        IngredientAlias.alias.like(f'{q_norm}%')
+    ).distinct().limit(15).all()
+
+    # Also search by display_name substring
+    if len(results) < 10:
+        seen = {r.id for r in results}
+        more = Ingredient.query.filter(
+            Ingredient.display_name.ilike(f'%{q}%')
+        ).limit(15 - len(results)).all()
+        results.extend(r for r in more if r.id not in seen)
+
+    return jsonify([{
+        'id': ing.id,
+        'name': ing.display,
+        'category': ing.category,
+        'has_ah': bool(ing.ah_product_id),
+    } for ing in results[:15]])
+
+
+@app.route('/api/ingredients', methods=['POST'])
+def create_ingredient():
+    """Explicitly create a new master ingredient."""
+    data = request.get_json()
+    raw_name = (data.get('name') or '').strip()
+    category = data.get('category', 'Overig')
+
+    if not raw_name:
+        return jsonify({'status': 'error', 'message': 'Naam is verplicht'}), 400
+
+    canonical = _normalize_ingredient(raw_name.lower().strip())
+
+    # Check if already exists
+    existing = Ingredient.query.filter_by(name=canonical).first()
+    if existing:
+        return jsonify({
+            'status': 'exists',
+            'ingredient_id': existing.id,
+            'display_name': existing.display,
+            'category': existing.category,
+        })
+
+    # Check alias
+    alias = IngredientAlias.query.filter_by(alias=canonical).first()
+    if alias:
+        return jsonify({
+            'status': 'exists',
+            'ingredient_id': alias.ingredient_id,
+            'display_name': alias.ingredient.display,
+            'category': alias.ingredient.category,
+        })
+
+    if not category or category == 'Overig':
+        category = _guess_ingredient_category(canonical)
+
+    ing = Ingredient(name=canonical, display_name=raw_name.strip(), category=category)
+    db.session.add(ing)
+    db.session.flush()
+    db.session.add(IngredientAlias(alias=canonical, ingredient_id=ing.id))
+    db.session.commit()
+
+    return jsonify({
+        'status': 'success',
+        'ingredient_id': ing.id,
+        'display_name': ing.display,
+        'category': ing.category,
+    })
+
 
 @app.route('/copy_previous_week', methods=['POST'])
 def copy_previous_week():
@@ -1256,6 +1354,52 @@ def _normalize_ingredient(s):
         .replace('â', 'a').replace('ê', 'e').replace('î', 'i')
         .replace('ô', 'o').replace('û', 'u').replace('à', 'a')
     )
+
+
+def _resolve_or_create_ingredient(raw_name, category=None):
+    """Resolve an ingredient name via the alias system, or create a new one."""
+    normalized = _normalize_ingredient(raw_name.lower().strip())
+
+    # Try alias lookup
+    alias = IngredientAlias.query.filter(
+        IngredientAlias.alias.in_([normalized])
+    ).first()
+    if alias:
+        return alias.ingredient
+
+    # Try exact name match (fallback for pre-migration data)
+    existing = Ingredient.query.filter_by(name=normalized).first()
+    if existing:
+        return existing
+
+    # Try case-insensitive display_name match
+    existing = Ingredient.query.filter(
+        db.func.lower(Ingredient.display_name) == raw_name.strip().lower()
+    ).first()
+    if existing:
+        return existing
+
+    # Create new ingredient + alias
+    if not category or category == 'Overig':
+        category = _guess_ingredient_category(raw_name)
+
+    display_name = raw_name.strip()
+    canonical = normalized
+
+    ing = Ingredient(name=canonical, display_name=display_name, category=category)
+    db.session.add(ing)
+    db.session.flush()
+
+    # Create alias
+    try:
+        db.session.add(IngredientAlias(alias=canonical, ingredient_id=ing.id))
+        db.session.flush()
+    except Exception:
+        db.session.rollback()
+        db.session.add(ing)
+        db.session.flush()
+
+    return ing
 
 def _guess_ingredient_category(name):
     """Guess supermarket category by keyword-matching ingredient name.
@@ -1617,10 +1761,11 @@ def export_data():
                 'instructions': r.instructions,
                 'ingredients': [
                     {
-                        'name': ri.ingredient.name,
+                        'name': ri.ingredient.display,
                         'category': ri.ingredient.category,
                         'amount': ri.amount,
-                        'unit': ri.unit
+                        'unit': ri.unit,
+                        'preparation': ri.preparation or '',
                     }
                     for ri in r.ingredients
                 ]
@@ -1674,21 +1819,20 @@ def import_data():
             db.session.flush()
 
             for ing_data in r_data.get('ingredients', []):
-                ingredient = Ingredient.query.filter_by(name=ing_data['name']).first()
+                ingredient = _resolve_or_create_ingredient(
+                    ing_data['name'],
+                    ing_data.get('category', 'Overig')
+                )
                 if not ingredient:
-                    ingredient = Ingredient(
-                        name=ing_data['name'],
-                        category=ing_data.get('category', 'Overig')
-                    )
-                    db.session.add(ingredient)
-                    db.session.flush()
-                    counts['ingredients'] += 1
+                    continue
+                counts['ingredients'] += 1
 
                 db.session.add(RecipeIngredient(
                     recipe_id=recipe.id,
                     ingredient_id=ingredient.id,
                     amount=ing_data.get('amount', 0),
-                    unit=ing_data.get('unit', '')
+                    unit=ing_data.get('unit', ''),
+                    preparation=ing_data.get('preparation'),
                 ))
 
             counts['recipes'] += 1
@@ -2280,6 +2424,7 @@ def send_to_ah(year, week):
         if not ing or not ing.ah_product_id:
             continue
 
+        display = ing.display
         # Quantity-logica: gebruik override als beschikbaar, anders berekend default
         quantity = qty_overrides.get(ing_id, _calc_default_qty(amount, unit))
 
@@ -2295,9 +2440,9 @@ def send_to_ah(year, week):
             if resp.status_code in (200, 201, 204):
                 sent += 1
             else:
-                not_found.append(ing_name)
+                not_found.append(display)
         except Exception:
-            not_found.append(ing_name)
+            not_found.append(display)
 
     msg = f'{sent} item{"s" if sent != 1 else ""} toegevoegd aan AH'
     if not_found:
@@ -2347,12 +2492,31 @@ def migrate_db():
             ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
             ('ah_product_updated', 'INTEGER'),
             ('ah_product_color', 'VARCHAR(20)'),
+            ('display_name', "VARCHAR(100) NOT NULL DEFAULT ''"),
+            ('preparation', 'VARCHAR(100)'),
         ]:
             if col not in ingredient_cols:
                 try:
                     conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
                 except OperationalError:
                     pass
+
+        # Add preparation column to recipe_ingredient
+        ri_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_ingredient)')).fetchall()]
+        if 'preparation' not in ri_cols:
+            try:
+                conn.execute(text('ALTER TABLE recipe_ingredient ADD COLUMN preparation VARCHAR(100)'))
+            except OperationalError:
+                pass
+
+        # Create ingredient_alias table
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS ingredient_alias (
+                id INTEGER PRIMARY KEY,
+                alias VARCHAR(100) NOT NULL UNIQUE,
+                ingredient_id INTEGER NOT NULL REFERENCES ingredient(id)
+            )
+        '''))
 
         conn.execute(text('''
             CREATE TABLE IF NOT EXISTS settings (
@@ -2362,15 +2526,23 @@ def migrate_db():
             )
         '''))
 
-        # Herclassificeer ALLE ingrediënten met de verbeterde keyword-matcher.
-        # Dit garandeert dat bestaande recepten de nieuwe AH-categoriestructuur krijgen.
-        all_ingredients = conn.execute(text('SELECT id, name FROM ingredient')).fetchall()
-        for ing_id, ing_name in all_ingredients:
+        # Backfill display_name from name where empty
+        conn.execute(text("""
+            UPDATE ingredient SET display_name = name
+            WHERE display_name = '' OR display_name IS NULL
+        """))
+
+        # Herclassificeer alleen ingrediënten met categorie 'Overig'
+        overig_ingredients = conn.execute(
+            text("SELECT id, name FROM ingredient WHERE category = 'Overig' OR category IS NULL")
+        ).fetchall()
+        for ing_id, ing_name in overig_ingredients:
             new_cat = _guess_ingredient_category(ing_name)
-            conn.execute(
-                text('UPDATE ingredient SET category = :cat WHERE id = :id'),
-                {'cat': new_cat, 'id': ing_id}
-            )
+            if new_cat != 'Overig':
+                conn.execute(
+                    text('UPDATE ingredient SET category = :cat WHERE id = :id'),
+                    {'cat': new_cat, 'id': ing_id}
+                )
 
         # Qty-overrides worden niet meer persistent opgeslagen; tabel leegmaken.
         conn.execute(text('DELETE FROM shopping_list_override'))

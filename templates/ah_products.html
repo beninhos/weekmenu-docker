@@ -35,13 +35,13 @@
     <div id="ingredientList" class="space-y-3">
         {% for ing in ingredients %}
         <div class="ingredient-card bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] overflow-hidden"
-             data-name="{{ ing.name|lower }}"
+             data-name="{{ ing.display|lower }}"
              data-id="{{ ing.id }}">
 
             <!-- Ingredientnaam + categorie -->
             <div class="px-4 py-3 border-b border-[#E8E4DC] flex items-center justify-between">
                 <div>
-                    <span class="font-semibold text-[#2C2C2C]">{{ ing.name }}</span>
+                    <span class="font-semibold text-[#2C2C2C]">{{ ing.display }}</span>
                     <span class="ml-2 text-xs text-[#6B6B6B]">{{ ing.category }}</span>
                 </div>
                 {% if ing.ah_product_id %}
@@ -89,7 +89,7 @@
             <div class="px-4 py-3">
                 <button onclick="openSearch({{ ing.id }})"
                         class="text-sm text-[#8B4513] hover:text-[#2C2C2C] font-medium">
-                    + Zoek AH-product voor "{{ ing.name }}"
+                    + Zoek AH-product voor "{{ ing.display }}"
                 </button>
             </div>
             {% endif %}
@@ -99,7 +99,7 @@
                 <div class="flex gap-2">
                     <input type="text" id="searchInput-{{ ing.id }}"
                            placeholder="Zoek op AH..."
-                           value="{{ ing.name }}"
+                           value="{{ ing.display }}"
                            class="flex-1 text-sm border-[#D4CEC4] rounded-md shadow-sm"
                            onkeydown="if(event.key==='Enter') doSearch({{ ing.id }})">
                     <button onclick="doSearch({{ ing.id }})"

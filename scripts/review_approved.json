@@ -1,0 +1,25 @@
+{
+  "force_merges": [
+    {
+      "canonical": "paprika",
+      "winner_id": 1,
+      "winner_name": "Paprika",
+      "loser_ids": [37],
+      "loser_names": ["Paparika"]
+    },
+    {
+      "canonical": "lente-ui",
+      "winner_id": 6,
+      "winner_name": "lente-ui",
+      "loser_ids": [101],
+      "loser_names": ["lente ui"]
+    },
+    {
+      "canonical": "tomatenpuree",
+      "winner_id": 105,
+      "winner_name": "tomatenpuree",
+      "loser_ids": [43],
+      "loser_names": ["Tomatenpurree"]
+    }
+  ]
+}

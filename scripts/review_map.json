@@ -1,0 +1,276 @@
+{
+  "auto_merge": [
+    {
+      "canonical": "rundergehakt",
+      "winner_id": 2,
+      "winner_name": "Rundergehakt",
+      "loser_ids": [
+        18
+      ],
+      "loser_names": [
+        "rundergehakt"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "tomaat",
+      "winner_id": 86,
+      "winner_name": "tomaten",
+      "loser_ids": [
+        4
+      ],
+      "loser_names": [
+        "tomaat"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "rode peper",
+      "winner_id": 7,
+      "winner_name": "rode peper",
+      "loser_ids": [
+        42
+      ],
+      "loser_names": [
+        "Rode peper"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "diepvriesdoperwten",
+      "winner_id": 11,
+      "winner_name": "diepvriesdoperwten",
+      "loser_ids": [
+        75
+      ],
+      "loser_names": [
+        "Diepvriesdoperwten"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "yoghurt",
+      "winner_id": 21,
+      "winner_name": "yoghurt",
+      "loser_ids": [
+        79
+      ],
+      "loser_names": [
+        "Yoghurt"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "knoflook",
+      "winner_id": 24,
+      "winner_name": "knoflook",
+      "loser_ids": [
+        46,
+        102,
+        127
+      ],
+      "loser_names": [
+        "Knoflook",
+        "geperste knoflook",
+        "teentjes knoflook"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "rode paprika",
+      "winner_id": 26,
+      "winner_name": "rode paprika",
+      "loser_ids": [
+        129
+      ],
+      "loser_names": [
+        "rode paprika's"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "aardappel",
+      "winner_id": 31,
+      "winner_name": "aardappelen",
+      "loser_ids": [
+        66
+      ],
+      "loser_names": [
+        "Aardappelen"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "rode ui",
+      "winner_id": 40,
+      "winner_name": "Rode ui",
+      "loser_ids": [
+        111
+      ],
+      "loser_names": [
+        "rode ui"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "kipfilet",
+      "winner_id": 48,
+      "winner_name": "kipfilet",
+      "loser_ids": [
+        71
+      ],
+      "loser_names": [
+        "Kipfilet"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "ui",
+      "winner_id": 60,
+      "winner_name": "Ui",
+      "loser_ids": [
+        49,
+        124
+      ],
+      "loser_names": [
+        "ui",
+        "uien"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "chinese kool",
+      "winner_id": 130,
+      "winner_name": "Chinese kool",
+      "loser_ids": [
+        50
+      ],
+      "loser_names": [
+        "chinese kool"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "bosui",
+      "winner_id": 128,
+      "winner_name": "bosuitjes",
+      "loser_ids": [
+        56
+      ],
+      "loser_names": [
+        "bosui"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "kippendij",
+      "winner_id": 62,
+      "winner_name": "Kippendij",
+      "loser_ids": [
+        131
+      ],
+      "loser_names": [
+        "kippendijen zonder bot"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "maizena",
+      "winner_id": 65,
+      "winner_name": "maizena",
+      "loser_ids": [
+        109
+      ],
+      "loser_names": [
+        "maïzena"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "slagroom",
+      "winner_id": 90,
+      "winner_name": "slagroom",
+      "loser_ids": [
+        69
+      ],
+      "loser_names": [
+        "Slagroom"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "prei",
+      "winner_id": 73,
+      "winner_name": "Prei",
+      "loser_ids": [
+        98
+      ],
+      "loser_names": [
+        "prei"
+      ],
+      "reason": "case_duplicate"
+    },
+    {
+      "canonical": "wortel",
+      "winner_id": 81,
+      "winner_name": "Wortel",
+      "loser_ids": [
+        99
+      ],
+      "loser_names": [
+        "bospeen (wortel)"
+      ],
+      "reason": "plural_or_variant"
+    },
+    {
+      "canonical": "winterpeen",
+      "winner_id": 117,
+      "winner_name": "winterpeen",
+      "loser_ids": [
+        123
+      ],
+      "loser_names": [
+        "winterpenen"
+      ],
+      "reason": "plural_or_variant"
+    }
+  ],
+  "needs_review": [
+    {
+      "canonical": "paprika",
+      "ids": [
+        1,
+        37
+      ],
+      "names": [
+        "Paprika",
+        "Paparika"
+      ],
+      "suggestion": "Merge to 'paprika'? Winner would be id=37 ('Paparika')"
+    },
+    {
+      "canonical": "lente-ui",
+      "ids": [
+        6,
+        101
+      ],
+      "names": [
+        "lente-ui",
+        "lente ui"
+      ],
+      "suggestion": "Merge to 'lente-ui'? Winner would be id=6 ('lente-ui')"
+    },
+    {
+      "canonical": "tomatenpuree",
+      "ids": [
+        43,
+        105
+      ],
+      "names": [
+        "Tomatenpurree",
+        "tomatenpuree"
+      ],
+      "suggestion": "Merge to 'tomatenpuree'? Winner would be id=105 ('tomatenpuree')"
+    }
+  ]
+}
