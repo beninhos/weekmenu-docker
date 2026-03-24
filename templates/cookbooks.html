@@ -45,7 +45,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
         </a>
         <div class="px-4 pb-4 relative">
             <button onclick="toggleDropdown(event, 'dropdown-{{ cookbook.id }}')"
-                    class="border border-[#D4CEC4] text-[#2C2C2C] text-sm py-1 px-3 rounded inline-flex items-center gap-1 hover:bg-[#F5F2ED]">
+                    class="bg-[#F5F2ED] border border-[#D4CEC4] text-[#2C2C2C] text-sm py-1 px-3 rounded inline-flex items-center gap-1 hover:bg-[#E8E4DC]">
                 Opties
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -123,7 +123,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
         </select>
         <div class="flex justify-end gap-3">
             <button onclick="document.getElementById('migrateModal').close()"
-                    class="px-4 py-2 text-sm rounded border border-[#D4CEC4] hover:bg-[#F5F2ED]">
+                    class="px-4 py-2 text-sm rounded bg-[#F5F2ED] border border-[#D4CEC4] hover:bg-[#E8E4DC]">
                 Annuleren
             </button>
             <button onclick="confirmMigrate()"

@@ -10,7 +10,7 @@
             </button>
             <button onclick="sendToAH()" id="btnSendAH"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
-                🛒 Stuur naar AH
+                Naar AH
             </button>
             <button onclick="window.print()"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
@@ -145,7 +145,7 @@ function clearAll() {
 async function sendToAH() {
     const btn   = document.getElementById('btnSendAH');
     const toast = document.getElementById('ahToast');
-    btn.textContent = '⏳ Bezig...';
+    btn.textContent = 'Bezig...';
     btn.disabled = true;
     toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-[#F5F2ED] text-[#6B6B6B]';
     toast.textContent = 'Items worden verstuurd naar AH...';
@@ -173,7 +173,7 @@ async function sendToAH() {
         toast.className = 'mb-4 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-800 border border-red-200';
         toast.textContent = 'Fout: ' + e.message;
     }
-    btn.textContent = '🛒 Stuur naar AH';
+    btn.textContent = 'Naar AH';
     btn.disabled = false;
 }
 
