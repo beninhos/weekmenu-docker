@@ -20,6 +20,14 @@
     </div>
     <div id="ahToast" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"></div>
 
+    <!-- (+) Item toevoegen -->
+    <div class="relative mb-4">
+        <input type="text" id="addItemInput" autocomplete="off"
+               placeholder="+ Item toevoegen..."
+               class="w-full rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+        <div id="addItemDropdown" class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
+    </div>
+
     {% for group in grouped_shopping_list %}
         <h3 class="shopping-category text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mt-6 mb-0">{{ group.category }}</h3>
         <div class="shopping-group">
@@ -127,9 +135,36 @@
 
 <script>
 function toggleItem(cb) {
-    const text = cb.closest('.list-left').querySelector('.item-text');
-    text.style.textDecoration = cb.checked ? 'line-through' : '';
-    text.style.opacity        = cb.checked ? '0.4' : '';
+    if (cb.checked) {
+        const item = cb.closest('.shopping-item');
+        excludeItem(item);
+    }
+}
+
+async function excludeItem(item) {
+    const ingId = item.dataset.ingredientId;
+    if (ingId) {
+        try {
+            await fetch(`/api/shopping-list/{{ year }}/{{ week }}/item/${ingId}/exclude`, { method: 'POST' });
+        } catch (e) {
+            console.warn('Exclude mislukt:', e);
+        }
+    }
+    // Animatie: fade out + collapse
+    item.style.transition = 'opacity 0.25s, max-height 0.3s 0.1s';
+    item.style.opacity = '0';
+    item.style.maxHeight = item.offsetHeight + 'px';
+    item.style.overflow = 'hidden';
+    requestAnimationFrame(() => { item.style.maxHeight = '0'; });
+    setTimeout(() => {
+        const group = item.parentElement;
+        item.remove();
+        if (group && group.querySelectorAll('.shopping-item').length === 0) {
+            const h = group.previousElementSibling;
+            if (h && h.tagName === 'H3') h.style.display = 'none';
+            group.style.display = 'none';
+        }
+    }, 350);
 }
 
 function clearAll() {
@@ -178,14 +213,8 @@ async function sendToAH() {
 }
 
 function removeItem(btn) {
-    const item  = btn.closest('.shopping-item');
-    const group = item.parentElement;
-    item.remove();
-    if (group.querySelectorAll('.shopping-item').length === 0) {
-        const h = group.previousElementSibling;
-        if (h && h.tagName === 'H3') h.style.display = 'none';
-        group.style.display = 'none';
-    }
+    const item = btn.closest('.shopping-item');
+    excludeItem(item);
 }
 
 // ── Qty controls ──────────────────────────────────────────────────────────
@@ -195,9 +224,9 @@ async function changeQty(btn, delta) {
     const valEl   = control.querySelector('.qty-value');
     const current = parseInt(valEl.textContent, 10);
 
-    // Prullenbak: qty=1 en min geklikt → ontkoppelen
+    // Prullenbak: qty=1 en min geklikt → verwijderen van lijst
     if (delta === -1 && current <= 1) {
-        await unlinkProduct(item);
+        excludeItem(item);
         return;
     }
 
@@ -221,26 +250,6 @@ async function _saveQty(ingredientId, qty, isDefault) {
         });
     } catch (e) {
         console.warn('Qty opslaan mislukt:', e);
-    }
-}
-
-async function unlinkProduct(item) {
-    const ingId = item.dataset.ingredientId;
-    if (!ingId) return;
-    try {
-        await fetch(`/api/ah/ingredient/${ingId}/link`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({}),
-        });
-        // UI: rechterhelft terug naar "niet gekoppeld"
-        const right = item.querySelector('.list-right');
-        right.innerHTML = `
-            <button class="ah-badge text-sm text-[#6B6B6B] hover:text-[#8B4513] border border-dashed border-[#D4CEC4] hover:border-[#C9A882] rounded-lg px-3 py-2"
-                    onclick="toggleSearch(this)">+ Koppel AH product</button>
-            <button onclick="removeItem(this)" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-auto" style="font-size:0.75rem">✕</button>`;
-    } catch (e) {
-        console.error('Ontkoppelen mislukt:', e);
     }
 }
 
@@ -348,5 +357,86 @@ function updateBadge(item, product) {
     const ctrl = right.querySelector('.qty-control');
     _updateMinusIcon(ctrl, defQty);
 }
+
+// ── (+) Item toevoegen ───────────────────────────────────────────────────
+(function() {
+    const input    = document.getElementById('addItemInput');
+    const dropdown = document.getElementById('addItemDropdown');
+    let debounce   = null;
+    let activeIdx  = -1;
+
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+        clearTimeout(debounce);
+        if (q.length < 1) { dropdown.classList.add('hidden'); return; }
+        debounce = setTimeout(() => fetchAddResults(q), 200);
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (dropdown.classList.contains('hidden')) return;
+        const items = dropdown.querySelectorAll('.add-item-option');
+        if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); highlightAdd(items); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); highlightAdd(items); }
+        else if (e.key === 'Enter' && activeIdx >= 0 && items[activeIdx]) { e.preventDefault(); items[activeIdx].click(); }
+        else if (e.key === 'Escape') { dropdown.classList.add('hidden'); activeIdx = -1; }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden'); activeIdx = -1;
+        }
+    });
+
+    function highlightAdd(items) {
+        items.forEach((el, i) => el.classList.toggle('bg-[#FAF8F5]', i === activeIdx));
+    }
+
+    async function fetchAddResults(q) {
+        try {
+            const resp = await fetch('/api/ingredients/search?q=' + encodeURIComponent(q));
+            const results = await resp.json();
+            if (!results.length) {
+                dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">Geen ingrediënt gevonden</div>';
+                dropdown.classList.remove('hidden');
+                return;
+            }
+            dropdown.innerHTML = results.map(r => `
+                <div class="add-item-option flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm"
+                     data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category)}">
+                    <span class="text-[#2C2C2C]">${esc(r.name)}</span>
+                    <span class="text-xs text-[#6B6B6B]">${esc(r.category)}${r.has_ah ? ' · AH' : ''}</span>
+                </div>
+            `).join('');
+            dropdown.querySelectorAll('.add-item-option').forEach(opt => {
+                opt.addEventListener('click', () => addItemToList(opt.dataset.id, opt.dataset.name));
+            });
+            dropdown.classList.remove('hidden');
+            activeIdx = -1;
+        } catch (e) {
+            dropdown.classList.add('hidden');
+        }
+    }
+
+    function esc(str) { return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    async function addItemToList(ingredientId, name) {
+        dropdown.classList.add('hidden');
+        input.value = '';
+        try {
+            const resp = await fetch('/api/shopping-list/{{ year }}/{{ week }}/add-item', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ingredient_id: parseInt(ingredientId), amount: 1, unit: 'stuks'})
+            });
+            const data = await resp.json();
+            if (data.status === 'ok') {
+                // Herlaad de pagina om het item correct te tonen met AH-koppeling
+                location.reload();
+            }
+        } catch (e) {
+            console.error('Item toevoegen mislukt:', e);
+        }
+    }
+})();
 </script>
 {% endblock %}

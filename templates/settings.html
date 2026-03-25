@@ -48,6 +48,54 @@
         </div>
     </div>
 
+    <!-- Kookboeken -->
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-1">Kookboeken</h3>
+                <p class="text-sm text-[#6B6B6B]">Beheer je kookboeken: toevoegen, hernoemen, archiveren.</p>
+            </div>
+            <a href="{{ url_for('list_cookbooks') }}"
+               class="text-sm bg-[#2C2C2C] text-white px-3 py-1.5 rounded hover:bg-[#2C2C2C] shrink-0">
+                Kookboeken →
+            </a>
+        </div>
+    </div>
+
+    <!-- Gemini Vision -->
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">Foto herkenning (Gemini)</h3>
+        <p class="text-xs text-[#6B6B6B] mb-4">Maak foto's van kookboekpagina's en laat het recept automatisch herkennen via Google Gemini. Gratis tot 250 verzoeken per dag.</p>
+
+        <!-- Status: verbonden -->
+        <div id="geminiConnected" class="hidden">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="font-medium text-[#8B4513]">✓ API key geconfigureerd</p>
+                    <p class="text-xs text-[#6B6B6B] mt-1" id="geminiKeyHint"></p>
+                </div>
+                <button onclick="geminiRemoveKey()"
+                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50 shrink-0">
+                    Verwijderen
+                </button>
+            </div>
+        </div>
+
+        <!-- Status: niet verbonden -->
+        <div id="geminiDisconnected" class="hidden">
+            <p class="text-sm text-[#6B6B6B] mb-3">Voer je Gemini API key in. Je kunt er gratis een aanmaken via <a href="https://aistudio.google.com/apikey" target="_blank" class="text-[#8B4513] hover:underline">Google AI Studio</a>.</p>
+            <div class="flex gap-2">
+                <input type="password" id="geminiKeyInput" placeholder="API key..."
+                       class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-sm">
+                <button onclick="geminiSaveKey()"
+                        class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
+                    Opslaan
+                </button>
+            </div>
+            <div id="geminiSaveError" class="hidden mt-2 text-sm text-red-600"></div>
+        </div>
+    </div>
+
     <!-- AH Account -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6" id="ah-account">
         <div class="flex items-center justify-between mb-4">
@@ -246,6 +294,49 @@
 </div>
 
 <script>
+/* ── Gemini key management ────────────────────────────────── */
+async function geminiRefreshStatus() {
+    try {
+        const resp = await fetch('/api/gemini/status');
+        const data = await resp.json();
+        document.getElementById('geminiConnected').classList.toggle('hidden', !data.configured);
+        document.getElementById('geminiDisconnected').classList.toggle('hidden', data.configured);
+    } catch (e) {}
+}
+
+async function geminiSaveKey() {
+    const key = document.getElementById('geminiKeyInput').value.trim();
+    if (!key) return;
+    const errDiv = document.getElementById('geminiSaveError');
+    errDiv.classList.add('hidden');
+    try {
+        const resp = await fetch('/api/gemini/key', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key})
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            document.getElementById('geminiKeyInput').value = '';
+            geminiRefreshStatus();
+        } else {
+            errDiv.textContent = data.message || 'Opslaan mislukt';
+            errDiv.classList.remove('hidden');
+        }
+    } catch (e) {
+        errDiv.textContent = 'Netwerkfout: ' + e.message;
+        errDiv.classList.remove('hidden');
+    }
+}
+
+async function geminiRemoveKey() {
+    if (!confirm('Gemini API key verwijderen?')) return;
+    await fetch('/api/gemini/key', {method: 'DELETE'});
+    geminiRefreshStatus();
+}
+
+geminiRefreshStatus();
+
 let _ahPollInterval = null;
 
 async function ahStartLogin() {

@@ -162,18 +162,13 @@
             </a>
 
             <div class="hidden md:flex items-center gap-6">
-                <a href="{{ url_for('index') }}"
-                   class="text-sm {% if request.endpoint == 'index' %}nav-active{% else %}nav-link{% endif %}">Home</a>
                 <a href="{{ url_for('receptenplanner') }}"
-                   class="text-sm {% if request.endpoint == 'receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Planner</a>
-                <a href="{{ url_for('list_cookbooks') }}"
-                   class="text-sm {% if request.endpoint == 'list_cookbooks' %}nav-active{% else %}nav-link{% endif %}">Kookboeken</a>
+                   class="text-sm {% if request.endpoint == 'receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
                 <a href="{{ url_for('boodschappenlijst_redirect') }}"
                    class="text-sm {% if request.endpoint == 'boodschappenlijst' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
             </div>
 
             <div class="flex items-center gap-4">
-                <span class="text-xs" style="color: var(--color-pencil);">week {{ current_week }}</span>
                 <a href="{{ url_for('settings') }}"
                    class="w-8 h-8 flex items-center justify-center rounded-md border"
                    style="border-color: var(--color-linen); text-decoration:none;">

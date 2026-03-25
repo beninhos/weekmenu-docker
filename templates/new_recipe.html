@@ -3,19 +3,51 @@
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-6">Nieuw Recept</h2>
 
-    <!-- URL Import -->
+    <!-- Import opties: Foto / URL -->
     <div class="bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg p-4 mb-6">
-        <p class="text-sm font-medium text-[#8B4513] mb-2">Importeer via URL</p>
-        <div class="flex gap-2">
-            <input type="url" id="importUrl" placeholder="https://..."
-                   class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-sm">
-            <button type="button" onclick="importFromUrl()"
-                    id="importBtn"
-                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm shrink-0">
-                Importeren
+        <div class="flex gap-3 mb-4">
+            <button type="button" onclick="showImportMode('photo')" id="tabPhoto"
+                    class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#8B4513] bg-[#8B4513] text-white">
+                Foto van kookboek
+            </button>
+            <button type="button" onclick="showImportMode('url')" id="tabUrl"
+                    class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#D4CEC4] text-[#6B6B6B] hover:border-[#8B4513]">
+                Importeer via URL
             </button>
         </div>
-        <div id="importStatus" class="hidden mt-2 text-sm"></div>
+
+        <!-- Foto import -->
+        <div id="importPhoto" class="space-y-3">
+            <div>
+                <input type="file" id="photoInput" accept="image/*" multiple capture="environment"
+                       class="hidden" onchange="handlePhotoSelect(this)">
+                <button type="button" onclick="document.getElementById('photoInput').click()"
+                        id="photoSelectBtn"
+                        class="w-full py-3 border-2 border-dashed border-[#D4CEC4] rounded-lg text-[#6B6B6B] hover:border-[#8B4513] hover:text-[#8B4513] text-sm">
+                    Kies foto's (max 3)
+                </button>
+            </div>
+            <div id="photoPreview" class="hidden grid grid-cols-3 gap-2"></div>
+            <button type="button" onclick="importFromPhoto()" id="photoImportBtn"
+                    class="hidden w-full bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
+                Lees recept
+            </button>
+            <div id="photoStatus" class="hidden text-sm"></div>
+        </div>
+
+        <!-- URL import -->
+        <div id="importUrl" class="hidden">
+            <div class="flex gap-2">
+                <input type="url" id="importUrlInput" placeholder="https://..."
+                       class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-sm">
+                <button type="button" onclick="importFromUrl()"
+                        id="importBtn"
+                        class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
+                    Importeren
+                </button>
+            </div>
+            <div id="importStatus" class="hidden mt-2 text-sm"></div>
+        </div>
     </div>
 
     <form method="POST" enctype="multipart/form-data" class="space-y-6">
@@ -249,9 +281,136 @@ async function fetchResults(q, dropdown, input, hiddenId) {
 // Initialize autocomplete on all existing rows
 document.querySelectorAll('.ingredient-ac').forEach(initAutocomplete);
 
+/* ── Import mode switching ────────────────────────────────── */
+function showImportMode(mode) {
+    const photoTab = document.getElementById('tabPhoto');
+    const urlTab = document.getElementById('tabUrl');
+    const photoDiv = document.getElementById('importPhoto');
+    const urlDiv = document.getElementById('importUrl');
+
+    if (mode === 'photo') {
+        photoTab.className = 'flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#8B4513] bg-[#8B4513] text-white';
+        urlTab.className = 'flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#D4CEC4] text-[#6B6B6B] hover:border-[#8B4513]';
+        photoDiv.classList.remove('hidden');
+        urlDiv.classList.add('hidden');
+    } else {
+        urlTab.className = 'flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#8B4513] bg-[#8B4513] text-white';
+        photoTab.className = 'flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#D4CEC4] text-[#6B6B6B] hover:border-[#8B4513]';
+        urlDiv.classList.remove('hidden');
+        photoDiv.classList.add('hidden');
+    }
+}
+
+/* ── Photo import ────────────────────────────────────────── */
+let selectedPhotos = [];
+
+function handlePhotoSelect(input) {
+    const files = Array.from(input.files).slice(0, 3);
+    selectedPhotos = files;
+
+    const preview = document.getElementById('photoPreview');
+    const importBtn = document.getElementById('photoImportBtn');
+
+    if (files.length === 0) {
+        preview.classList.add('hidden');
+        importBtn.classList.add('hidden');
+        return;
+    }
+
+    preview.innerHTML = '';
+    files.forEach((file, i) => {
+        const div = document.createElement('div');
+        div.className = 'relative';
+        const img = document.createElement('img');
+        img.className = 'w-full h-24 object-cover rounded';
+        img.src = URL.createObjectURL(file);
+        const badge = document.createElement('span');
+        badge.className = 'absolute top-1 left-1 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded';
+        badge.textContent = i + 1;
+        div.appendChild(img);
+        div.appendChild(badge);
+        preview.appendChild(div);
+    });
+
+    preview.classList.remove('hidden');
+    importBtn.classList.remove('hidden');
+}
+
+async function importFromPhoto() {
+    if (selectedPhotos.length === 0) return;
+
+    const btn = document.getElementById('photoImportBtn');
+    const statusDiv = document.getElementById('photoStatus');
+
+    btn.disabled = true;
+    btn.textContent = 'Bezig met lezen...';
+    statusDiv.className = 'text-sm text-[#6B6B6B]';
+    statusDiv.textContent = 'Recept wordt herkend...';
+    statusDiv.classList.remove('hidden');
+
+    const formData = new FormData();
+    selectedPhotos.forEach(file => formData.append('photos', file));
+
+    try {
+        const response = await fetch('/recipe/from-photo', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+
+        if (data.status !== 'success') {
+            statusDiv.className = 'text-sm text-red-600';
+            statusDiv.textContent = 'Fout: ' + data.message;
+            return;
+        }
+
+        // Pre-fill formulier (zelfde als URL import)
+        if (data.name) document.getElementById('fieldName').value = data.name;
+        if (data.serves) document.getElementById('fieldServes').value = data.serves;
+        if (data.instructions) document.getElementById('fieldInstructions').value = data.instructions;
+
+        const preview = document.getElementById('importedImagePreview');
+        const pathField = document.getElementById('fieldImagePath');
+        if (data.image_path) {
+            pathField.value = data.image_path;
+            preview.src = '/' + data.image_path;
+            preview.classList.remove('hidden');
+        }
+
+        if (data.ingredients && data.ingredients.length > 0) {
+            document.getElementById('ingredients').innerHTML = '';
+            data.ingredients.forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit, ing.category));
+        }
+
+        statusDiv.className = 'text-sm text-[#8B4513]';
+        statusDiv.textContent = `Herkend: ${data.ingredients?.length || 0} ingrediënten. Controleer en sla op.`;
+
+    } catch (error) {
+        statusDiv.className = 'text-sm text-red-600';
+        statusDiv.textContent = 'Fout: ' + error.message;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Lees recept';
+    }
+}
+
+/* ── Check Gemini API status on load ─────────────────────── */
+(async function() {
+    try {
+        const resp = await fetch('/api/gemini/status');
+        const data = await resp.json();
+        if (!data.configured) {
+            const btn = document.getElementById('photoSelectBtn');
+            btn.disabled = true;
+            btn.textContent = 'Foto import niet beschikbaar (API key ontbreekt)';
+            btn.className = 'w-full py-3 border-2 border-dashed border-[#E8E4DC] rounded-lg text-[#9CA3AF] cursor-not-allowed text-sm';
+        }
+    } catch (e) {}
+})();
+
 /* ── URL Import ──────────────────────────────────────────── */
 async function importFromUrl() {
-    const url = document.getElementById('importUrl').value.trim();
+    const url = document.getElementById('importUrlInput').value.trim();
     if (!url) return;
 
     const btn = document.getElementById('importBtn');

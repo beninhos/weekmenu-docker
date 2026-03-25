@@ -209,6 +209,18 @@ class ShoppingListOverride(db.Model):
     qty           = db.Column(db.Integer, nullable=False)
 
 
+class ShoppingListExclusion(db.Model):
+    __tablename__ = 'shopping_list_exclusion'
+    __table_args__ = (
+        db.UniqueConstraint('year', 'week_number', 'ingredient_id',
+                            name='uq_exclusion_week_ingredient'),
+    )
+    id            = db.Column(db.Integer, primary_key=True)
+    year          = db.Column(db.Integer, nullable=False)
+    week_number   = db.Column(db.Integer, nullable=False)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+
+
 # ── AH API helpers ──────────────────────────────────────────────────────────
 
 _VOLUME_WEIGHT = {
@@ -450,45 +462,41 @@ def planner_plan():
 
         recipe = Recipe.query.get_or_404(recipe_id)
 
-        # Upsert the MenuItem with skip_shopping_list=True
+        # Upsert the MenuItem (ingrediënten komen via regulier MenuItem.recipe pad)
         existing = MenuItem.query.filter_by(
             week_number=week, year=year, day_of_week=day, meal_type=meal_type
         ).first()
         if existing:
             existing.recipe_id = recipe_id
             existing.people_count = people_count
-            existing.skip_shopping_list = True
+            existing.skip_shopping_list = False
         else:
             db.session.add(MenuItem(
                 day_of_week=day, meal_type=meal_type,
                 recipe_id=recipe_id, people_count=people_count,
                 week_number=week, year=year,
-                skip_shopping_list=True
+                skip_shopping_list=False
             ))
 
         # Update usage stats
         recipe.usage_count = (recipe.usage_count or 0) + 1
         recipe.last_used = datetime.now()
 
-        # Replace CustomShoppingIngredients for this recipe's ingredients in this week
-        own_ingredient_ids = [ri.ingredient_id for ri in recipe.ingredients]
-        if own_ingredient_ids:
-            CustomShoppingIngredient.query.filter(
-                CustomShoppingIngredient.week_number == week,
-                CustomShoppingIngredient.year == year,
-                CustomShoppingIngredient.ingredient_id.in_(own_ingredient_ids)
-            ).delete(synchronize_session='fetch')
-
-        # Add checked ingredients as CustomShoppingIngredients
-        multiplier = (people_count / recipe.serves) if recipe.serves else 1.0
+        # Exclude unchecked ingredients via ShoppingListExclusion
         for ri in recipe.ingredients:
-            if ri.id in ingredient_ids:
-                db.session.add(CustomShoppingIngredient(
-                    week_number=week, year=year,
-                    ingredient_id=ri.ingredient_id,
-                    amount=round(ri.amount * multiplier, 4),
-                    unit=ri.unit
-                ))
+            if ri.id not in ingredient_ids:
+                excl_exists = ShoppingListExclusion.query.filter_by(
+                    year=year, week_number=week, ingredient_id=ri.ingredient_id
+                ).first()
+                if not excl_exists:
+                    db.session.add(ShoppingListExclusion(
+                        year=year, week_number=week, ingredient_id=ri.ingredient_id
+                    ))
+            else:
+                # Remove exclusion if ingredient was re-checked
+                ShoppingListExclusion.query.filter_by(
+                    year=year, week_number=week, ingredient_id=ri.ingredient_id
+                ).delete()
 
         db.session.commit()
         return jsonify({'status': 'success'})
@@ -852,6 +860,13 @@ def shopping_list(year, week):
     for ci in custom_items:
         key = (ci.ingredient_id, ci.unit)
         shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
+
+    # Filter out excluded ingredients (afgevinkte items)
+    excluded_ids = {
+        e.ingredient_id
+        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
+    }
+    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
 
     overrides = {
         o.ingredient_id: o.qty
@@ -1702,6 +1717,162 @@ def scrape_recipe():
     })
 
 
+def _get_gemini_api_key():
+    """Get Gemini API key from database, falling back to environment variable."""
+    try:
+        setting = Settings.query.filter_by(key='gemini_api_key').first()
+        if setting and setting.value:
+            return setting.value
+    except Exception:
+        pass
+    return os.environ.get('GEMINI_API_KEY')
+
+
+@app.route('/recipe/from-photo', methods=['POST'])
+def recipe_from_photo():
+    """Extract recipe from cookbook photo(s) using Gemini Vision."""
+    import google.generativeai as genai
+    import base64
+    import hashlib
+    import json as _json
+
+    api_key = _get_gemini_api_key()
+    if not api_key:
+        return jsonify({'status': 'error', 'message': 'Gemini API key niet geconfigureerd'}), 400
+
+    if 'photos' not in request.files:
+        return jsonify({'status': 'error', 'message': 'Geen foto\'s ontvangen'}), 400
+
+    photos = request.files.getlist('photos')
+    if not photos or len(photos) == 0 or photos[0].filename == '':
+        return jsonify({'status': 'error', 'message': 'Geen foto\'s geselecteerd'}), 400
+
+    if len(photos) > 3:
+        return jsonify({'status': 'error', 'message': 'Maximaal 3 foto\'s toegestaan'}), 400
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+
+    image_parts = []
+    first_image_path = None
+
+    for i, photo in enumerate(photos):
+        if photo.filename == '':
+            continue
+
+        image_bytes = photo.read()
+
+        # Eerste foto opslaan als receptafbeelding
+        if i == 0:
+            ext = '.jpg'
+            if photo.content_type == 'image/png':
+                ext = '.png'
+            elif photo.content_type == 'image/webp':
+                ext = '.webp'
+            fname = hashlib.md5(image_bytes).hexdigest() + ext
+            save_path = os.path.join(app.root_path, 'static/uploads', fname)
+            with open(save_path, 'wb') as f:
+                f.write(image_bytes)
+            first_image_path = os.path.join('static/uploads', fname)
+
+        image_parts.append({
+            'mime_type': photo.content_type or 'image/jpeg',
+            'data': image_bytes,
+        })
+
+    prompt = """Dit is een foto van een kookboekpagina. Extraheer het recept volledig.
+
+Geef ALLEEN geldige JSON terug, zonder uitleg of markdown:
+{
+  "naam": "Recept naam",
+  "personen": 4,
+  "ingredienten": [
+    "200 gram bloem",
+    "3 eieren",
+    "1 ui, gesnipperd"
+  ],
+  "bereiding": "Stap 1. Verwarm de oven op 180°C.\\nStap 2. Meng de bloem...",
+  "opmerkingen": "Optionele tips of notities uit het recept"
+}
+
+Regels:
+- ingredienten als array van strings in natuurlijk Nederlands formaat
+- bereiding als enkele string met stappen gescheiden door newlines
+- Als er geen recept zichtbaar is: {"error": "Geen recept gevonden"}
+- Bij meerdere foto's: combineer ingrediënten en bereiding van alle pagina's"""
+
+    try:
+        content = [prompt]
+        for img in image_parts:
+            content.append({'mime_type': img['mime_type'], 'data': img['data']})
+
+        response = model.generate_content(content)
+        result_text = response.text.strip()
+
+        # Strip markdown code blocks indien aanwezig
+        if result_text.startswith('```'):
+            result_text = result_text.split('\n', 1)[1]
+            if result_text.endswith('```'):
+                result_text = result_text.rsplit('```', 1)[0]
+            result_text = result_text.strip()
+
+        result = _json.loads(result_text)
+
+        if 'error' in result:
+            return jsonify({'status': 'error', 'message': result['error']}), 400
+
+        parsed_ingredients = parse_ingredients_from_list(result.get('ingredienten', []))
+
+        return jsonify({
+            'status': 'success',
+            'name': result.get('naam', ''),
+            'serves': result.get('personen'),
+            'url': None,
+            'instructions': result.get('bereiding', ''),
+            'ingredients': parsed_ingredients,
+            'image_path': first_image_path,
+            'cookbook_id': None,
+            'cookbook_name': None,
+        })
+
+    except _json.JSONDecodeError as e:
+        return jsonify({'status': 'error', 'message': f'Kon recept niet parsen: {e}'}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Fout bij verwerken: {str(e)}'}), 400
+
+
+@app.route('/api/gemini/key', methods=['POST', 'DELETE'])
+def gemini_key():
+    """Save or delete Gemini API key in database."""
+    if request.method == 'DELETE':
+        setting = Settings.query.filter_by(key='gemini_api_key').first()
+        if setting:
+            db.session.delete(setting)
+            db.session.commit()
+        return jsonify({'status': 'ok'})
+
+    data = request.get_json() or {}
+    api_key = data.get('key', '').strip()
+    if not api_key:
+        return jsonify({'status': 'error', 'message': 'Geen API key opgegeven'}), 400
+
+    setting = Settings.query.filter_by(key='gemini_api_key').first()
+    if setting:
+        setting.value = api_key
+    else:
+        setting = Settings(key='gemini_api_key', value=api_key)
+        db.session.add(setting)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/gemini/status')
+def gemini_status():
+    """Check if Gemini API key is configured."""
+    configured = bool(_get_gemini_api_key())
+    return jsonify({'configured': configured})
+
+
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     if request.method == 'POST':
@@ -2368,6 +2539,74 @@ def update_shopping_qty(year, week, ingredient_id):
     return jsonify({'ok': True, 'qty': new_qty})
 
 
+@app.route('/api/shopping-list/<int:year>/<int:week>/item/<int:ingredient_id>/exclude',
+           methods=['POST'])
+def exclude_shopping_item(year, week, ingredient_id):
+    """Mark an ingredient as excluded from this week's shopping list."""
+    existing = ShoppingListExclusion.query.filter_by(
+        year=year, week_number=week, ingredient_id=ingredient_id
+    ).first()
+    if not existing:
+        db.session.add(ShoppingListExclusion(
+            year=year, week_number=week, ingredient_id=ingredient_id
+        ))
+        db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/shopping-list/<int:year>/<int:week>/add-item', methods=['POST'])
+def add_shopping_item(year, week):
+    """Add a custom ingredient to this week's shopping list."""
+    data = request.get_json(force=True) or {}
+    ingredient_id = data.get('ingredient_id')
+    if not ingredient_id:
+        return jsonify({'status': 'error', 'message': 'ingredient_id is verplicht'}), 400
+
+    ing = Ingredient.query.get(ingredient_id)
+    if not ing:
+        return jsonify({'status': 'error', 'message': 'Ingrediënt niet gevonden'}), 404
+
+    amount = float(data.get('amount', 1))
+    unit = data.get('unit', 'stuks')
+
+    # Remove any exclusion for this ingredient (user wants it back)
+    ShoppingListExclusion.query.filter_by(
+        year=year, week_number=week, ingredient_id=ingredient_id
+    ).delete()
+
+    # Check if custom item already exists for this week
+    existing = CustomShoppingIngredient.query.filter_by(
+        year=year, week_number=week, ingredient_id=ingredient_id
+    ).first()
+    if existing:
+        existing.amount = existing.amount + amount
+    else:
+        db.session.add(CustomShoppingIngredient(
+            year=year, week_number=week,
+            ingredient_id=ingredient_id,
+            amount=amount, unit=unit
+        ))
+    db.session.commit()
+
+    return jsonify({
+        'status': 'ok',
+        'item': {
+            'ingredient_id': ing.id,
+            'name': ing.display,
+            'category': ing.category,
+            'amount': amount,
+            'unit': unit,
+            'ah_product_id': ing.ah_product_id,
+            'ah_product_name': ing.ah_product_name or '',
+            'ah_product_size': ing.ah_product_size or '',
+            'ah_product_price': ing.ah_product_price or '',
+            'ah_product_image': ing.ah_product_image or '',
+            'ah_product_bonus': ing.ah_product_bonus or False,
+            'ah_product_color': ing.ah_product_color or '',
+        }
+    })
+
+
 @app.route('/api/shopping-list/<int:year>/<int:week>/send-to-ah', methods=['POST'])
 def send_to_ah(year, week):
     import requests as _req
@@ -2406,6 +2645,13 @@ def send_to_ah(year, week):
     for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
         key = (ci.ingredient_id, ci.ingredient.name, ci.unit)
         shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
+
+    # Filter out excluded ingredients
+    excluded_ids = {
+        e.ingredient_id
+        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
+    }
+    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
 
     if not shopping_dict:
         return jsonify({'status': 'ok', 'sent': 0, 'not_found': [], 'message': 'Boodschappenlijst is leeg'})
@@ -2546,6 +2792,17 @@ def migrate_db():
 
         # Qty-overrides worden niet meer persistent opgeslagen; tabel leegmaken.
         conn.execute(text('DELETE FROM shopping_list_override'))
+
+        # Shopping list exclusions (afgevinkte items per week)
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS shopping_list_exclusion (
+                id INTEGER PRIMARY KEY,
+                year INTEGER NOT NULL,
+                week_number INTEGER NOT NULL,
+                ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
+                UNIQUE(year, week_number, ingredient_id)
+            )
+        '''))
 
         conn.commit()
 
