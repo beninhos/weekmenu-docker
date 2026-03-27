@@ -85,6 +85,33 @@
                     </button>
                 </div>
             </div>
+            <!-- Verpakking instellen (inklapbaar) -->
+            <div class="border-t border-[#E8E4DC] px-4 py-3">
+                <button onclick="togglePkg({{ ing.id }})" id="pkgToggle-{{ ing.id }}"
+                        class="text-xs text-[#6B6B6B] hover:text-[#8B4513]">
+                    ▸ Verpakking instellen
+                </button>
+                <div id="pkg-{{ ing.id }}" class="hidden mt-3 space-y-2">
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-[#6B6B6B] shrink-0">Pak bevat:</span>
+                        <input type="number" step="0.1" value="{{ ing.ah_pkg_qty or '' }}"
+                               id="pkgQty-{{ ing.id }}" class="w-20 text-sm border-[#D4CEC4] rounded">
+                        <input type="text" value="{{ ing.ah_pkg_unit or '' }}"
+                               id="pkgUnit-{{ ing.id }}" class="w-24 text-sm border-[#D4CEC4] rounded"
+                               placeholder="eenheid">
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-[#6B6B6B] shrink-0">Conversie: 1 {{ ing.ah_pkg_unit or 'pak' }} =</span>
+                        <input type="number" step="0.1" value="{{ ing.ah_conv_factor or '' }}"
+                               id="convFactor-{{ ing.id }}" class="w-20 text-sm border-[#D4CEC4] rounded">
+                        <input type="text" value="{{ ing.ah_conv_unit or '' }}"
+                               id="convUnit-{{ ing.id }}" class="w-24 text-sm border-[#D4CEC4] rounded"
+                               placeholder="recept-eenheid">
+                    </div>
+                    <button onclick="savePkg({{ ing.id }})"
+                            class="text-xs bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">Opslaan</button>
+                </div>
+            </div>
             {% else %}
             <div class="px-4 py-3">
                 <button onclick="openSearch({{ ing.id }})"
@@ -174,6 +201,31 @@ async function selectProduct(ingId, product) {
         body: JSON.stringify(product),
     });
     location.reload();
+}
+
+function togglePkg(id) {
+    const panel = document.getElementById('pkg-' + id);
+    const btn = document.getElementById('pkgToggle-' + id);
+    const wasHidden = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden');
+    btn.textContent = wasHidden ? '▾ Verpakking instellen' : '▸ Verpakking instellen';
+}
+
+async function savePkg(id) {
+    const btn = event.target;
+    const data = {
+        ah_pkg_qty:     parseFloat(document.getElementById('pkgQty-' + id).value) || null,
+        ah_pkg_unit:    document.getElementById('pkgUnit-' + id).value.trim() || null,
+        ah_conv_factor: parseFloat(document.getElementById('convFactor-' + id).value) || null,
+        ah_conv_unit:   document.getElementById('convUnit-' + id).value.trim() || null,
+    };
+    await fetch(`/api/ah/ingredient/${id}/pkg-config`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data),
+    });
+    btn.textContent = '✓ Opgeslagen';
+    setTimeout(() => btn.textContent = 'Opslaan', 1500);
 }
 
 async function refreshIngredient(ingId) {

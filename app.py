@@ -126,6 +126,10 @@ class Ingredient(db.Model):
     ah_product_bonus   = db.Column(db.Boolean, default=False)
     ah_product_updated = db.Column(db.Integer, nullable=True)
     ah_product_color   = db.Column(db.String(20), nullable=True)
+    ah_pkg_qty         = db.Column(db.Float, nullable=True)
+    ah_pkg_unit        = db.Column(db.String(20), nullable=True)
+    ah_conv_factor     = db.Column(db.Float, nullable=True)
+    ah_conv_unit       = db.Column(db.String(20), nullable=True)
 
     @property
     def display(self):
@@ -223,23 +227,161 @@ class ShoppingListExclusion(db.Model):
 
 # ── AH API helpers ──────────────────────────────────────────────────────────
 
-_VOLUME_WEIGHT = {
+import math
+import re as _re
+
+# ── AH verpakkings-eenheden ────────────────────────────────────────────────
+
+_SIZE_UNIT_MAP = {
+    'gram': 'g', 'gr': 'g', 'g': 'g',
+    'kilogram': 'kg', 'kilo': 'kg', 'kg': 'kg',
+    'liter': 'l', 'litre': 'l', 'l': 'l',
+    'milliliter': 'ml', 'ml': 'ml',
+    'cl': 'cl', 'dl': 'dl',
+    'stuks': 'stuks', 'stuk': 'stuks', 'st': 'stuks',
+    'bollen': 'bol', 'bol': 'bol',
+    'teen': 'teen', 'tenen': 'teen',
+    'bosje': 'bosje', 'bos': 'bosje',
+    'plak': 'plak', 'plakken': 'plak',
+    'pakje': 'pakje', 'pak': 'pak',
+}
+
+def _parse_product_size(size_str):
+    """Parse AH product size string naar (qty, unit) tuple.
+
+    Voorbeelden:
+        "500 g"      → (500.0, "g")
+        "3 stuks"    → (3.0, "stuks")
+        "6 x 125 g"  → (750.0, "g")
+        "Ca. 600 g"  → (600.0, "g")
+        "per stuk"   → (1.0, "stuks")
+        ""           → None
+    """
+    if not size_str or not size_str.strip():
+        return None
+    s = size_str.strip().lower()
+    s = _re.sub(r'^ca\.?\s*', '', s)  # strip "ca." prefix
+
+    # "per stuk", "per bosje"
+    if s in ('per stuk', 'per st', 'stuk'):
+        return (1.0, 'stuks')
+    if s in ('per bosje', 'per bos', 'bosje'):
+        return (1.0, 'bosje')
+
+    # Multipack: "6 x 125 g" of "6x125g"
+    m = _re.match(r'(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z]+)', s)
+    if m:
+        count = float(m.group(1).replace(',', '.'))
+        per   = float(m.group(2).replace(',', '.'))
+        unit_raw = m.group(3).strip()
+        unit = _SIZE_UNIT_MAP.get(unit_raw, unit_raw)
+        return (count * per, unit)
+
+    # Standaard: "500 g", "3 stuks", "1 liter"
+    m = _re.match(r'(\d+(?:[.,]\d+)?)\s*([a-zA-Z]+)', s)
+    if m:
+        qty = float(m.group(1).replace(',', '.'))
+        unit_raw = m.group(2).strip()
+        unit = _SIZE_UNIT_MAP.get(unit_raw, unit_raw)
+        return (qty, unit)
+
+    return None
+
+
+_UNIT_NORMALIZE = {
+    # Gewicht
+    'gram': 'g', 'gr': 'g',
+    'kilogram': 'kg', 'kilo': 'kg',
+    # Volume
+    'liter': 'l', 'litre': 'l',
+    'milliliter': 'ml',
+    # Lepels
+    'eetlepel': 'el', 'eetlepels': 'el',
+    'theelepel': 'tl', 'theelepels': 'tl',
+    # Stuks
+    'stuk': 'stuks', 'st': 'stuks',
+    # Knoflook
+    'bollen': 'bol', 'tenen': 'teen', 'teentjes': 'teen', 'teentje': 'teen',
+    # Bosje/bos/tros
+    'bos': 'bosje', 'tros': 'bosje',
+    # Plakken
+    'plakken': 'plak', 'plakje': 'plak', 'plakjes': 'plak',
+    # Kruidtakjes
+    'takjes': 'takje', 'takken': 'takje',
+    # Stengels/stelen
+    'stengels': 'stengel', 'stelen': 'steel',
+    # Bladeren
+    'blad': 'blad', 'blaadjes': 'blad', 'blaadje': 'blad', 'bladeren': 'blad',
+    # Blikken/dozen
+    'blikje': 'blik', 'blikjes': 'blik',
+    # Blokjes (bouillon)
+    'blokjes': 'blokje',
+}
+
+_UNIT_CONVERSIONS = {
+    ('g', 'kg'): 0.001, ('kg', 'g'): 1000,
+    ('ml', 'l'): 0.001, ('l', 'ml'): 1000,
+    ('cl', 'l'): 0.01,  ('dl', 'l'): 0.1,
+    ('cl', 'ml'): 10,   ('dl', 'ml'): 100,
+}
+
+# Eenheden waarbij je altijd 1 verpakking koopt:
+# - gewicht/volume: je koopt 1 pak
+# - lengte (cm): je koopt 1 heel stuk, niet "3 cm gember"
+# - kruidfragmenten (takje/stengel/blad/handvol): je koopt 1 bosje/potje
+_UNIT_BUY_ONE = {
     'g', 'gr', 'gram',
-    'kg', 'kilogram',
+    'kg', 'kilogram', 'kilo',
     'ml', 'cl', 'dl', 'l', 'liter', 'litre',
     'el', 'eetlepel', 'eetlepels',
     'tl', 'theelepel', 'theelepels',
-    'mespunt', 'snuf', 'snufje', 'scheutje',
+    'mespunt', 'snuf', 'snufje', 'scheutje', 'scheut', 'toef',
+    'cm', 'mm',
+    'takje', 'stengel', 'steel', 'blad', 'handvol',
 }
+
+
+def _calc_ah_qty(ing, amount, unit):
+    """Bereken AH qty op basis van verpakkingsinhoud."""
+    if not ing or not ing.ah_pkg_qty or not ing.ah_pkg_unit:
+        return _calc_default_qty(amount, unit)
+
+    pkg_qty = ing.ah_pkg_qty
+    if pkg_qty <= 0:
+        return _calc_default_qty(amount, unit)
+
+    norm_recipe = _UNIT_NORMALIZE.get((unit or '').lower().strip(), (unit or '').lower().strip())
+    norm_pkg    = _UNIT_NORMALIZE.get(ing.ah_pkg_unit.lower().strip(), ing.ah_pkg_unit.lower().strip())
+
+    # 1. Handmatige conversie (bijv. teen → bol)
+    if ing.ah_conv_factor and ing.ah_conv_factor > 0 and ing.ah_conv_unit:
+        norm_conv = _UNIT_NORMALIZE.get(ing.ah_conv_unit.lower().strip(), ing.ah_conv_unit.lower().strip())
+        if norm_recipe == norm_conv:
+            amount_in_pkg_unit = amount / ing.ah_conv_factor
+            return max(1, math.ceil(amount_in_pkg_unit / pkg_qty))
+
+    # 2. Directe match (stuks→stuks, g→g)
+    if norm_recipe == norm_pkg:
+        return max(1, math.ceil(amount / pkg_qty))
+
+    # 3. Converteerbare eenheden (g→kg, ml→l, etc.)
+    factor = _UNIT_CONVERSIONS.get((norm_recipe, norm_pkg))
+    if factor:
+        return max(1, math.ceil(amount * factor / pkg_qty))
+
+    # 4. Fallback
+    return _calc_default_qty(amount, unit)
 
 
 def _calc_default_qty(amount: float, unit: str) -> int:
     """Bereken standaard AH-winkelwagenaantal voor een ingredient.
-    Gewicht/volume-eenheden → 1 (één pak); stuks → max(1, round(amount)).
+    - Gewicht/volume/lengte/kruidfragmenten → 1 (koop 1 heel product)
+    - Telbare eenheden → ceil(amount), max 20
     """
-    if (unit or '').lower().strip() in _VOLUME_WEIGHT:
+    norm = _UNIT_NORMALIZE.get((unit or '').lower().strip(), (unit or '').lower().strip())
+    if norm in _UNIT_BUY_ONE:
         return 1
-    qty = max(1, round(amount or 1))
+    qty = max(1, math.ceil(amount or 1))
     return 1 if qty > 20 else qty  # >20 is bijna altijd gewicht/volume, geen stuks
 
 _AH_LOGIN_BASE       = 'https://login.ah.nl'
@@ -813,7 +955,10 @@ def clear_week_menu():
 def shopping_list(year, week):
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     shopping_dict = {}
-    
+
+    def _norm_unit(u):
+        return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
+
     def calc_multiplier(recipe_serves, people_count):
         if recipe_serves and people_count:
             try:
@@ -829,7 +974,7 @@ def shopping_list(year, week):
         if item.recipe:
             multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
-                key = (ri.ingredient_id, ri.unit)
+                key = (ri.ingredient_id, _norm_unit(ri.unit))
                 shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
 
     # Process saved quick-add items from database
@@ -839,7 +984,7 @@ def shopping_list(year, week):
         if item.recipe:
             multiplier = calc_multiplier(item.recipe.serves, item.people_count)
             for ri in item.recipe.ingredients:
-                key = (ri.ingredient_id, ri.unit)
+                key = (ri.ingredient_id, _norm_unit(ri.unit))
                 shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
 
     # Process temporary quick-add items from URL parameters
@@ -852,13 +997,13 @@ def shopping_list(year, week):
             people_count = int(people_counts[i]) if i < len(people_counts) else None
             multiplier = calc_multiplier(recipe.serves, people_count)
             for ri in recipe.ingredients:
-                key = (ri.ingredient_id, ri.unit)
+                key = (ri.ingredient_id, _norm_unit(ri.unit))
                 shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
 
     # Process custom shopping ingredients (from Receptenplanner)
     custom_items = CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all()
     for ci in custom_items:
-        key = (ci.ingredient_id, ci.unit)
+        key = (ci.ingredient_id, _norm_unit(ci.unit))
         shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
 
     # Filter out excluded ingredients (afgevinkte items)
@@ -903,7 +1048,7 @@ def shopping_list(year, week):
         ing = Ingredient.query.get(ing_id)
         if not ing:
             continue
-        default_qty = _calc_default_qty(total_amount, unit)
+        default_qty = _calc_ah_qty(ing, total_amount, unit)
         qty         = overrides.get(ing_id, default_qty)
         api_color   = ing.ah_product_color or ''
         shopping_list.append({
@@ -2469,6 +2614,7 @@ def ah_link_ingredient(ingredient_id):
     import time
     data = request.json or {}
     ing = Ingredient.query.get_or_404(ingredient_id)
+    old_product_id = ing.ah_product_id
     ing.ah_product_id      = data.get('productId')
     ing.ah_product_name    = data.get('title', '')
     ing.ah_product_size    = data.get('size', '')
@@ -2477,6 +2623,17 @@ def ah_link_ingredient(ingredient_id):
     ing.ah_product_bonus   = bool(data.get('isBonus', False))
     ing.ah_product_color   = data.get('bgColor', '')
     ing.ah_product_updated = int(time.time())
+    # Auto-parse verpakkingsinhoud
+    parsed = _parse_product_size(data.get('size', ''))
+    if parsed:
+        ing.ah_pkg_qty, ing.ah_pkg_unit = parsed
+    else:
+        ing.ah_pkg_qty = None
+        ing.ah_pkg_unit = None
+    # Reset handmatige conversie als het een ander product is
+    if ing.ah_product_id != old_product_id:
+        ing.ah_conv_factor = None
+        ing.ah_conv_unit = None
     db.session.commit()
     return jsonify({'status': 'ok'})
 
@@ -2497,8 +2654,24 @@ def ah_refresh_ingredient(ingredient_id):
     ing.ah_product_image   = p['image']
     ing.ah_product_bonus   = p['isBonus']
     ing.ah_product_updated = int(time.time())
+    # Auto-parse verpakkingsinhoud (behoud handmatige conversie)
+    parsed = _parse_product_size(p['size'])
+    if parsed:
+        ing.ah_pkg_qty, ing.ah_pkg_unit = parsed
     db.session.commit()
     return jsonify({'status': 'ok', 'product': p})
+
+
+@app.route('/api/ah/ingredient/<int:ingredient_id>/pkg-config', methods=['POST'])
+def ah_pkg_config(ingredient_id):
+    data = request.get_json(force=True) or {}
+    ing = Ingredient.query.get_or_404(ingredient_id)
+    ing.ah_pkg_qty     = data.get('ah_pkg_qty') or None
+    ing.ah_pkg_unit    = data.get('ah_pkg_unit') or None
+    ing.ah_conv_factor = data.get('ah_conv_factor') or None
+    ing.ah_conv_unit   = data.get('ah_conv_unit') or None
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
 
 @app.route('/ah-producten')
@@ -2626,12 +2799,15 @@ def send_to_ah(year, week):
         except ZeroDivisionError:
             return 1
 
+    def _norm_unit(u):
+        return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
+
     for item in menu_items:
         if item.skip_shopping_list or not item.recipe:
             continue
         m = _multiplier(item.recipe.serves, item.people_count)
         for ri in item.recipe.ingredients:
-            key = (ri.ingredient_id, ri.ingredient.name, ri.unit)
+            key = (ri.ingredient_id, ri.ingredient.name, _norm_unit(ri.unit))
             shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
 
     for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
@@ -2639,11 +2815,11 @@ def send_to_ah(year, week):
             continue
         m = _multiplier(qi.recipe.serves, qi.people_count)
         for ri in qi.recipe.ingredients:
-            key = (ri.ingredient_id, ri.ingredient.name, ri.unit)
+            key = (ri.ingredient_id, ri.ingredient.name, _norm_unit(ri.unit))
             shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
 
     for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
-        key = (ci.ingredient_id, ci.ingredient.name, ci.unit)
+        key = (ci.ingredient_id, ci.ingredient.name, _norm_unit(ci.unit))
         shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
 
     # Filter out excluded ingredients
@@ -2672,7 +2848,7 @@ def send_to_ah(year, week):
 
         display = ing.display
         # Quantity-logica: gebruik override als beschikbaar, anders berekend default
-        quantity = qty_overrides.get(ing_id, _calc_default_qty(amount, unit))
+        quantity = qty_overrides.get(ing_id, _calc_ah_qty(ing, amount, unit))
 
         # Stuur naar AH shopping list
         try:
@@ -2740,6 +2916,10 @@ def migrate_db():
             ('ah_product_color', 'VARCHAR(20)'),
             ('display_name', "VARCHAR(100) NOT NULL DEFAULT ''"),
             ('preparation', 'VARCHAR(100)'),
+            ('ah_pkg_qty', 'REAL'),
+            ('ah_pkg_unit', 'VARCHAR(20)'),
+            ('ah_conv_factor', 'REAL'),
+            ('ah_conv_unit', 'VARCHAR(20)'),
         ]:
             if col not in ingredient_cols:
                 try:
@@ -2777,6 +2957,20 @@ def migrate_db():
             UPDATE ingredient SET display_name = name
             WHERE display_name = '' OR display_name IS NULL
         """))
+
+        # Backfill ah_pkg_qty/ah_pkg_unit voor bestaande gekoppelde producten
+        unparsed = conn.execute(text("""
+            SELECT id, ah_product_size FROM ingredient
+            WHERE ah_product_size IS NOT NULL AND ah_product_size != ''
+              AND ah_pkg_qty IS NULL
+        """)).fetchall()
+        for ing_id, size_str in unparsed:
+            parsed = _parse_product_size(size_str)
+            if parsed:
+                conn.execute(
+                    text('UPDATE ingredient SET ah_pkg_qty = :qty, ah_pkg_unit = :unit WHERE id = :id'),
+                    {'qty': parsed[0], 'unit': parsed[1], 'id': ing_id}
+                )
 
         # Herclassificeer alleen ingrediënten met categorie 'Overig'
         overig_ingredients = conn.execute(
