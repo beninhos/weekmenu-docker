@@ -133,6 +133,7 @@
 }
 </style>
 
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script>
 function toggleItem(cb) {
     if (cb.checked) {
@@ -416,8 +417,6 @@ function updateBadge(item, product) {
             dropdown.classList.add('hidden');
         }
     }
-
-    function esc(str) { return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
     async function addItemToList(ingredientId, name) {
         dropdown.classList.add('hidden');

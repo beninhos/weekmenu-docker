@@ -341,6 +341,7 @@
 <!-- ── TOAST ──────────────────────────────────────────────── -->
 <div id="toast"></div>
 
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script>
 // ── Data ──────────────────────────────────────────────────
 const RECIPES         = {{ recipes_json | safe }};
@@ -355,15 +356,6 @@ let filteredRecipes  = [...RECIPES];
 let cfIndex          = 0;   // coverflow center index
 let activeRecipe     = null;
 
-// ── Utilities ─────────────────────────────────────────────
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function formatAmt(amount) {
   if (amount === null || amount === undefined || amount === 0) return '';
   const r = Math.round(amount * 100) / 100;
@@ -372,11 +364,11 @@ function formatAmt(amount) {
 
 function cardImage(r, w, h) {
   if (r.image_path) {
-    return `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy"
+    return `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy"
                  style="width:${w};height:${h};object-fit:cover;display:block;">`;
   }
   return `<div style="width:${w};height:${h};display:flex;align-items:center;justify-content:center;">
-    <span style="font-size:2.5rem;font-weight:800;color:#D4CEC4;">${escHtml(r.name[0].toUpperCase())}</span>
+    <span style="font-size:2.5rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span>
   </div>`;
 }
 
@@ -450,13 +442,13 @@ function renderGrid() {
   container.innerHTML = filteredRecipes.map(r => `
     <div class="recipe-card-grid" onclick="openDetail(${r.id})">
       ${r.image_path
-        ? `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy">`
-        : `<div class="card-placeholder"><span style="font-size:3rem;font-weight:800;color:#D4CEC4;">${escHtml(r.name[0].toUpperCase())}</span></div>`
+        ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy">`
+        : `<div class="card-placeholder"><span style="font-size:3rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span></div>`
       }
       <div class="card-overlay">
         <span style="color:white;font-weight:600;font-size:0.8rem;line-height:1.25;
                      overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
-          ${escHtml(r.name)}
+          ${esc(r.name)}
         </span>
         <span style="display:inline-block;margin-top:0.3rem;font-size:0.7rem;color:white;
                      background:rgba(139,69,19,0.85);border-radius:9999px;padding:0.1rem 0.5rem;width:max-content;">
@@ -479,11 +471,11 @@ function renderCoverflow() {
     div.className = 'coverflow-card';
     div.dataset.idx = i;
     div.innerHTML = r.image_path
-      ? `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy">`
+      ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy">`
       : `<div class="cf-placeholder" style="background:#F5F2ED;">
-           <span style="font-size:4rem;font-weight:800;color:#D4CEC4;">${escHtml(r.name[0].toUpperCase())}</span>
+           <span style="font-size:4rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span>
          </div>`;
-    div.innerHTML += `<div class="cf-label">${escHtml(r.name)}</div>`;
+    div.innerHTML += `<div class="cf-label">${esc(r.name)}</div>`;
     div.addEventListener('click', () => {
       const offset = i - cfIndex;
       if (offset === 0) openDetail(r.id);
@@ -548,16 +540,16 @@ function renderList() {
          onclick="openDetail(${r.id})">
       <div class="flex-shrink-0 rounded-lg overflow-hidden" style="width:56px;height:56px;background:#F5F2ED;">
         ${r.image_path
-          ? `<img src="/${escHtml(r.image_path)}" alt="${escHtml(r.name)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;">`
+          ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;">`
           : `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;">
-               <span style="font-size:1.4rem;font-weight:800;color:#D4CEC4;">${escHtml(r.name[0].toUpperCase())}</span>
+               <span style="font-size:1.4rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span>
              </div>`
         }
       </div>
       <div class="flex-1 min-w-0">
-        <p class="font-semibold text-[#2C2C2C] truncate text-sm">${escHtml(r.name)}</p>
+        <p class="font-semibold text-[#2C2C2C] truncate text-sm">${esc(r.name)}</p>
         <p class="text-xs text-[#6B6B6B] truncate">
-          ${r.cookbook ? escHtml(r.cookbook) : ''}${r.page ? ' p. ' + r.page : ''}${(r.cookbook || r.page) ? ' · ' : ''}${r.serves} pers.
+          ${r.cookbook ? esc(r.cookbook) : ''}${r.page ? ' p. ' + r.page : ''}${(r.cookbook || r.page) ? ' · ' : ''}${r.serves} pers.
         </p>
       </div>
       ${r.is_favorite ? '<span class="text-[#C9A882] text-base ml-1 flex-shrink-0">⭐</span>' : ''}
@@ -612,7 +604,7 @@ function openDetail(recipeId) {
       <input type="checkbox" id="ing-${ing.id}" value="${ing.id}" checked
              style="width:1rem;height:1rem;border-radius:0.25rem;accent-color:#8B4513;flex-shrink:0;cursor:pointer;">
       <label for="ing-${ing.id}" class="text-sm text-[#2C2C2C] cursor-pointer select-none">
-        ${formatAmt(ing.amount) ? formatAmt(ing.amount) + ' ' : ''}${escHtml(ing.unit)} ${escHtml(ing.name)}${ing.preparation ? ' <span class="text-[#6B6B6B] italic">(' + escHtml(ing.preparation) + ')</span>' : ''}
+        ${formatAmt(ing.amount) ? formatAmt(ing.amount) + ' ' : ''}${esc(ing.unit)} ${esc(ing.name)}${ing.preparation ? ' <span class="text-[#6B6B6B] italic">(' + esc(ing.preparation) + ')</span>' : ''}
       </label>
     </div>
   `).join('') || '<p class="text-sm text-[#6B6B6B]">Geen ingrediënten.</p>';

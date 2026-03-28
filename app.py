@@ -384,6 +384,60 @@ def _calc_default_qty(amount: float, unit: str) -> int:
     qty = max(1, math.ceil(amount or 1))
     return 1 if qty > 20 else qty  # >20 is bijna altijd gewicht/volume, geen stuks
 
+
+def _norm_unit(u):
+    """Normaliseer unit string via _UNIT_NORMALIZE lookup."""
+    return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
+
+
+def _calc_multiplier(recipe_serves, people_count):
+    """Bereken portie-multiplier."""
+    if recipe_serves and people_count:
+        try:
+            return people_count / recipe_serves
+        except ZeroDivisionError:
+            return 1
+    return 1
+
+
+def _build_shopping_dict(year, week):
+    """Bouw geaggregeerde boodschappendict voor een week.
+
+    Returns dict met key (ingredient_id, normalized_unit) -> totaal_hoeveelheid.
+    Bevat: MenuItems, QuickAddItems, CustomShoppingIngredients.
+    Exclusies (afgevinkte items) zijn al gefilterd.
+    Overrides worden NIET toegepast (verschilt per caller).
+    URL-params worden NIET meegenomen (alleen relevant voor shopping_list GET).
+    """
+    shopping_dict = {}
+
+    for item in MenuItem.query.filter_by(week_number=week, year=year).all():
+        if item.skip_shopping_list or not item.recipe:
+            continue
+        m = _calc_multiplier(item.recipe.serves, item.people_count)
+        for ri in item.recipe.ingredients:
+            key = (ri.ingredient_id, _norm_unit(ri.unit))
+            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+
+    for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
+        if not qi.recipe:
+            continue
+        m = _calc_multiplier(qi.recipe.serves, qi.people_count)
+        for ri in qi.recipe.ingredients:
+            key = (ri.ingredient_id, _norm_unit(ri.unit))
+            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+
+    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
+        key = (ci.ingredient_id, _norm_unit(ci.unit))
+        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
+
+    excluded_ids = {
+        e.ingredient_id
+        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
+    }
+    return {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
+
+
 _AH_LOGIN_BASE       = 'https://login.ah.nl'
 _AH_AUTHORIZE_PATH   = '/secure/oauth/authorize?client_id=appie&redirect_uri=appie%3A%2F%2Flogin-exit&response_type=code'
 _AH_ANON_TOKEN_URL   = 'https://api.ah.nl/mobile-auth/v1/auth/token/anonymous'
@@ -953,65 +1007,19 @@ def clear_week_menu():
 
 @app.route('/shopping-list/<int:year>/<int:week>')
 def shopping_list(year, week):
-    menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
-    shopping_dict = {}
+    shopping_dict = _build_shopping_dict(year, week)
 
-    def _norm_unit(u):
-        return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
-
-    def calc_multiplier(recipe_serves, people_count):
-        if recipe_serves and people_count:
-            try:
-                return people_count / recipe_serves
-            except ZeroDivisionError:
-                return 1
-        return 1
-
-    # Process regular menu items (skip planner-sourced items)
-    for item in menu_items:
-        if item.skip_shopping_list:
-            continue
-        if item.recipe:
-            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
-            for ri in item.recipe.ingredients:
-                key = (ri.ingredient_id, _norm_unit(ri.unit))
-                shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
-
-    # Process saved quick-add items from database
-    quick_items = QuickAddItem.query.filter_by(week_number=week, year=year).all()
-
-    for item in quick_items:
-        if item.recipe:
-            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
-            for ri in item.recipe.ingredients:
-                key = (ri.ingredient_id, _norm_unit(ri.unit))
-                shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
-
-    # Process temporary quick-add items from URL parameters
+    # Tijdelijke quick-add items uit URL-parameters (sessie-only)
     recipe_ids = request.args.getlist('recipe_id')
     people_counts = request.args.getlist('people_count')
-
     for i, recipe_id in enumerate(recipe_ids):
         recipe = Recipe.query.get(recipe_id)
         if recipe:
             people_count = int(people_counts[i]) if i < len(people_counts) else None
-            multiplier = calc_multiplier(recipe.serves, people_count)
+            multiplier = _calc_multiplier(recipe.serves, people_count)
             for ri in recipe.ingredients:
                 key = (ri.ingredient_id, _norm_unit(ri.unit))
                 shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
-
-    # Process custom shopping ingredients (from Receptenplanner)
-    custom_items = CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all()
-    for ci in custom_items:
-        key = (ci.ingredient_id, _norm_unit(ci.unit))
-        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
-
-    # Filter out excluded ingredients (afgevinkte items)
-    excluded_ids = {
-        e.ingredient_id
-        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
-    }
-    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
 
     overrides = {
         o.ingredient_id: o.qty
@@ -2789,45 +2797,7 @@ def send_to_ah(year, week):
     if not access_token:
         return jsonify({'status': 'error', 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}), 401
 
-    # Bouw boodschappenlijst (zelfde logica als shopping_list route)
-    menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
-    shopping_dict = {}
-
-    def _multiplier(serves, count):
-        try:
-            return count / serves if serves and count else 1
-        except ZeroDivisionError:
-            return 1
-
-    def _norm_unit(u):
-        return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
-
-    for item in menu_items:
-        if item.skip_shopping_list or not item.recipe:
-            continue
-        m = _multiplier(item.recipe.serves, item.people_count)
-        for ri in item.recipe.ingredients:
-            key = (ri.ingredient_id, ri.ingredient.name, _norm_unit(ri.unit))
-            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
-
-    for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
-        if not qi.recipe:
-            continue
-        m = _multiplier(qi.recipe.serves, qi.people_count)
-        for ri in qi.recipe.ingredients:
-            key = (ri.ingredient_id, ri.ingredient.name, _norm_unit(ri.unit))
-            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
-
-    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
-        key = (ci.ingredient_id, ci.ingredient.name, _norm_unit(ci.unit))
-        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
-
-    # Filter out excluded ingredients
-    excluded_ids = {
-        e.ingredient_id
-        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
-    }
-    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
+    shopping_dict = _build_shopping_dict(year, week)
 
     if not shopping_dict:
         return jsonify({'status': 'ok', 'sent': 0, 'not_found': [], 'message': 'Boodschappenlijst is leeg'})
@@ -2841,7 +2811,7 @@ def send_to_ah(year, week):
 
     headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
 
-    for (ing_id, ing_name, unit), amount in shopping_dict.items():
+    for (ing_id, unit), amount in shopping_dict.items():
         ing = Ingredient.query.get(ing_id)
         if not ing or not ing.ah_product_id:
             continue
@@ -2875,75 +2845,117 @@ def send_to_ah(year, week):
 # ── End AH routes ────────────────────────────────────────────────────────────
 
 
+def _migrate_v1(conn):
+    """Alle historische migraties, geconsolideerd. Idempotent via PRAGMA-checks."""
+    recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
+    for col, col_def in [('url', 'TEXT'), ('instructions', 'TEXT'), ('serves', 'INTEGER')]:
+        if col not in recipe_cols:
+            try:
+                conn.execute(text(f'ALTER TABLE recipe ADD COLUMN {col} {col_def}'))
+            except OperationalError:
+                pass
+
+    menu_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(menu_item)')).fetchall()]
+    if 'people_count' not in menu_cols:
+        try:
+            conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
+        except OperationalError:
+            pass
+    if 'skip_shopping_list' not in menu_cols:
+        try:
+            conn.execute(text('ALTER TABLE menu_item ADD COLUMN skip_shopping_list BOOLEAN NOT NULL DEFAULT 0'))
+        except OperationalError:
+            pass
+
+    cookbook_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(cookbook)')).fetchall()]
+    if 'is_archived' not in cookbook_cols:
+        try:
+            conn.execute(text('ALTER TABLE cookbook ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0'))
+        except OperationalError:
+            pass
+
+    ingredient_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
+    for col, col_def in [
+        ('ah_product_id', 'INTEGER'),
+        ('ah_product_name', 'VARCHAR(200)'),
+        ('ah_product_size', 'VARCHAR(50)'),
+        ('ah_product_price', 'VARCHAR(20)'),
+        ('ah_product_image', 'VARCHAR(500)'),
+        ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
+        ('ah_product_updated', 'INTEGER'),
+        ('ah_product_color', 'VARCHAR(20)'),
+        ('display_name', "VARCHAR(100) NOT NULL DEFAULT ''"),
+        ('preparation', 'VARCHAR(100)'),
+        ('ah_pkg_qty', 'REAL'),
+        ('ah_pkg_unit', 'VARCHAR(20)'),
+        ('ah_conv_factor', 'REAL'),
+        ('ah_conv_unit', 'VARCHAR(20)'),
+    ]:
+        if col not in ingredient_cols:
+            try:
+                conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+            except OperationalError:
+                pass
+
+    ri_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_ingredient)')).fetchall()]
+    if 'preparation' not in ri_cols:
+        try:
+            conn.execute(text('ALTER TABLE recipe_ingredient ADD COLUMN preparation VARCHAR(100)'))
+        except OperationalError:
+            pass
+
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS ingredient_alias (
+            id INTEGER PRIMARY KEY,
+            alias VARCHAR(100) NOT NULL UNIQUE,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id)
+        )
+    '''))
+
+    conn.execute(text("""
+        UPDATE ingredient SET display_name = name
+        WHERE display_name = '' OR display_name IS NULL
+    """))
+
+    unparsed = conn.execute(text("""
+        SELECT id, ah_product_size FROM ingredient
+        WHERE ah_product_size IS NOT NULL AND ah_product_size != ''
+          AND ah_pkg_qty IS NULL
+    """)).fetchall()
+    for ing_id, size_str in unparsed:
+        parsed = _parse_product_size(size_str)
+        if parsed:
+            conn.execute(
+                text('UPDATE ingredient SET ah_pkg_qty = :qty, ah_pkg_unit = :unit WHERE id = :id'),
+                {'qty': parsed[0], 'unit': parsed[1], 'id': ing_id}
+            )
+
+    overig_ingredients = conn.execute(
+        text("SELECT id, name FROM ingredient WHERE category = 'Overig' OR category IS NULL")
+    ).fetchall()
+    for ing_id, ing_name in overig_ingredients:
+        new_cat = _guess_ingredient_category(ing_name)
+        if new_cat != 'Overig':
+            conn.execute(
+                text('UPDATE ingredient SET category = :cat WHERE id = :id'),
+                {'cat': new_cat, 'id': ing_id}
+            )
+
+    conn.execute(text('DELETE FROM shopping_list_override'))
+
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS shopping_list_exclusion (
+            id INTEGER PRIMARY KEY,
+            year INTEGER NOT NULL,
+            week_number INTEGER NOT NULL,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
+            UNIQUE(year, week_number, ingredient_id)
+        )
+    '''))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
-        recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
-        for col, col_def in [('url', 'TEXT'), ('instructions', 'TEXT'), ('serves', 'INTEGER')]:
-            if col not in recipe_cols:
-                try:
-                    conn.execute(text(f'ALTER TABLE recipe ADD COLUMN {col} {col_def}'))
-                except OperationalError:
-                    pass
-
-        menu_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(menu_item)')).fetchall()]
-        if 'people_count' not in menu_cols:
-            try:
-                conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
-            except OperationalError:
-                pass
-        if 'skip_shopping_list' not in menu_cols:
-            try:
-                conn.execute(text('ALTER TABLE menu_item ADD COLUMN skip_shopping_list BOOLEAN NOT NULL DEFAULT 0'))
-            except OperationalError:
-                pass
-
-        cookbook_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(cookbook)')).fetchall()]
-        if 'is_archived' not in cookbook_cols:
-            try:
-                conn.execute(text('ALTER TABLE cookbook ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0'))
-            except OperationalError:
-                pass
-
-        ingredient_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
-        for col, col_def in [
-            ('ah_product_id', 'INTEGER'),
-            ('ah_product_name', 'VARCHAR(200)'),
-            ('ah_product_size', 'VARCHAR(50)'),
-            ('ah_product_price', 'VARCHAR(20)'),
-            ('ah_product_image', 'VARCHAR(500)'),
-            ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
-            ('ah_product_updated', 'INTEGER'),
-            ('ah_product_color', 'VARCHAR(20)'),
-            ('display_name', "VARCHAR(100) NOT NULL DEFAULT ''"),
-            ('preparation', 'VARCHAR(100)'),
-            ('ah_pkg_qty', 'REAL'),
-            ('ah_pkg_unit', 'VARCHAR(20)'),
-            ('ah_conv_factor', 'REAL'),
-            ('ah_conv_unit', 'VARCHAR(20)'),
-        ]:
-            if col not in ingredient_cols:
-                try:
-                    conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
-                except OperationalError:
-                    pass
-
-        # Add preparation column to recipe_ingredient
-        ri_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_ingredient)')).fetchall()]
-        if 'preparation' not in ri_cols:
-            try:
-                conn.execute(text('ALTER TABLE recipe_ingredient ADD COLUMN preparation VARCHAR(100)'))
-            except OperationalError:
-                pass
-
-        # Create ingredient_alias table
-        conn.execute(text('''
-            CREATE TABLE IF NOT EXISTS ingredient_alias (
-                id INTEGER PRIMARY KEY,
-                alias VARCHAR(100) NOT NULL UNIQUE,
-                ingredient_id INTEGER NOT NULL REFERENCES ingredient(id)
-            )
-        '''))
-
         conn.execute(text('''
             CREATE TABLE IF NOT EXISTS settings (
                 id INTEGER PRIMARY KEY,
@@ -2952,51 +2964,28 @@ def migrate_db():
             )
         '''))
 
-        # Backfill display_name from name where empty
-        conn.execute(text("""
-            UPDATE ingredient SET display_name = name
-            WHERE display_name = '' OR display_name IS NULL
-        """))
+        row = conn.execute(
+            text("SELECT value FROM settings WHERE key = 'schema_version'")
+        ).fetchone()
+        current = int(row[0]) if row else 0
 
-        # Backfill ah_pkg_qty/ah_pkg_unit voor bestaande gekoppelde producten
-        unparsed = conn.execute(text("""
-            SELECT id, ah_product_size FROM ingredient
-            WHERE ah_product_size IS NOT NULL AND ah_product_size != ''
-              AND ah_pkg_qty IS NULL
-        """)).fetchall()
-        for ing_id, size_str in unparsed:
-            parsed = _parse_product_size(size_str)
-            if parsed:
+        if current < 1:
+            _migrate_v1(conn)
+
+        # Toekomstig: if current < 2: _migrate_v2(conn)
+
+        target = 1
+        if current < target:
+            if row:
                 conn.execute(
-                    text('UPDATE ingredient SET ah_pkg_qty = :qty, ah_pkg_unit = :unit WHERE id = :id'),
-                    {'qty': parsed[0], 'unit': parsed[1], 'id': ing_id}
+                    text("UPDATE settings SET value = :v WHERE key = 'schema_version'"),
+                    {'v': str(target)}
                 )
-
-        # Herclassificeer alleen ingrediënten met categorie 'Overig'
-        overig_ingredients = conn.execute(
-            text("SELECT id, name FROM ingredient WHERE category = 'Overig' OR category IS NULL")
-        ).fetchall()
-        for ing_id, ing_name in overig_ingredients:
-            new_cat = _guess_ingredient_category(ing_name)
-            if new_cat != 'Overig':
+            else:
                 conn.execute(
-                    text('UPDATE ingredient SET category = :cat WHERE id = :id'),
-                    {'cat': new_cat, 'id': ing_id}
+                    text("INSERT INTO settings (key, value) VALUES ('schema_version', :v)"),
+                    {'v': str(target)}
                 )
-
-        # Qty-overrides worden niet meer persistent opgeslagen; tabel leegmaken.
-        conn.execute(text('DELETE FROM shopping_list_override'))
-
-        # Shopping list exclusions (afgevinkte items per week)
-        conn.execute(text('''
-            CREATE TABLE IF NOT EXISTS shopping_list_exclusion (
-                id INTEGER PRIMARY KEY,
-                year INTEGER NOT NULL,
-                week_number INTEGER NOT NULL,
-                ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
-                UNIQUE(year, week_number, ingredient_id)
-            )
-        '''))
 
         conn.commit()
 
