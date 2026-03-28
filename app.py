@@ -143,8 +143,9 @@ class IngredientUnitConversion(db.Model):
     from_unit     = db.Column(db.String(20), nullable=False)
     to_unit       = db.Column(db.String(20), nullable=False)
     factor        = db.Column(db.Float, nullable=False)
+    confidence    = db.Column(db.Float, nullable=True)
+    reasoning     = db.Column(db.Text, nullable=True)
     ingredient    = db.relationship('Ingredient', backref='unit_conversions')
-    __table_args__ = (db.UniqueConstraint('ingredient_id', 'from_unit', name='uq_ing_from_unit'),)
 
 class IngredientAlias(db.Model):
     __tablename__ = 'ingredient_alias'
@@ -402,22 +403,24 @@ def _norm_unit(u):
 
 
 def _normalize_ri_unit(ingredient, unit, amount):
-    """Normaliseer unit + amount bij opslaan van RecipeIngredient/CustomShoppingIngredient.
-
-    Stap 1: Spelling-normalisatie via _norm_unit() (altijd)
-    Stap 2: Conversie naar preferred_unit via conversietabel (als beschikbaar)
-    Returns (normalized_unit, converted_amount)
-    """
+    """Normaliseer unit + amount bij opslaan van RecipeIngredient/CustomShoppingIngredient."""
     norm = _norm_unit(unit)
+
+    # Auto-set preferred_unit op eerste gebruik
+    if not ingredient.preferred_unit and norm:
+        ingredient.preferred_unit = norm
+
     if not ingredient.preferred_unit or norm == ingredient.preferred_unit:
         return norm, amount
 
+    # Per-ingredient conversie (handmatig beheerd, bijv. knoflook stuks->teen)
     conv = IngredientUnitConversion.query.filter_by(
         ingredient_id=ingredient.id, from_unit=norm
     ).first()
     if conv:
         return conv.to_unit, amount * conv.factor
 
+    # Globale conversie (g<->kg, ml<->l)
     gfactor = _UNIT_CONVERSIONS.get((norm, ingredient.preferred_unit))
     if gfactor:
         return ingredient.preferred_unit, amount * gfactor
@@ -3070,6 +3073,28 @@ def _migrate_v2(conn):
     '''))
 
 
+def _migrate_v3(conn):
+    """unit_type + display_unit kolommen, confidence/reasoning op conversietabel."""
+    ing_cols = [row[1] for row in conn.execute(
+        text('PRAGMA table_info(ingredient)')).fetchall()]
+    for col, col_def in [
+        ('unit_type',    'VARCHAR(20)'),
+        ('display_unit', 'VARCHAR(20)'),
+    ]:
+        if col not in ing_cols:
+            conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+
+    conv_cols = [row[1] for row in conn.execute(
+        text('PRAGMA table_info(ingredient_unit_conversion)')).fetchall()]
+    for col, col_def in [
+        ('confidence', 'REAL'),
+        ('reasoning',  'TEXT'),
+    ]:
+        if col not in conv_cols:
+            conn.execute(text(
+                f'ALTER TABLE ingredient_unit_conversion ADD COLUMN {col} {col_def}'))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -3089,8 +3114,10 @@ def migrate_db():
             _migrate_v1(conn)
         if current < 2:
             _migrate_v2(conn)
+        if current < 3:
+            _migrate_v3(conn)
 
-        target = 2
+        target = 3
         if current < target:
             if row:
                 conn.execute(
