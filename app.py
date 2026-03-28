@@ -130,10 +130,21 @@ class Ingredient(db.Model):
     ah_pkg_unit        = db.Column(db.String(20), nullable=True)
     ah_conv_factor     = db.Column(db.Float, nullable=True)
     ah_conv_unit       = db.Column(db.String(20), nullable=True)
+    preferred_unit     = db.Column(db.String(20), nullable=True)
 
     @property
     def display(self):
         return self.display_name or self.name
+
+class IngredientUnitConversion(db.Model):
+    __tablename__ = 'ingredient_unit_conversion'
+    id            = db.Column(db.Integer, primary_key=True)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    from_unit     = db.Column(db.String(20), nullable=False)
+    to_unit       = db.Column(db.String(20), nullable=False)
+    factor        = db.Column(db.Float, nullable=False)
+    ingredient    = db.relationship('Ingredient', backref='unit_conversions')
+    __table_args__ = (db.UniqueConstraint('ingredient_id', 'from_unit', name='uq_ing_from_unit'),)
 
 class IngredientAlias(db.Model):
     __tablename__ = 'ingredient_alias'
@@ -390,6 +401,30 @@ def _norm_unit(u):
     return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
 
 
+def _normalize_ri_unit(ingredient, unit, amount):
+    """Normaliseer unit + amount bij opslaan van RecipeIngredient/CustomShoppingIngredient.
+
+    Stap 1: Spelling-normalisatie via _norm_unit() (altijd)
+    Stap 2: Conversie naar preferred_unit via conversietabel (als beschikbaar)
+    Returns (normalized_unit, converted_amount)
+    """
+    norm = _norm_unit(unit)
+    if not ingredient.preferred_unit or norm == ingredient.preferred_unit:
+        return norm, amount
+
+    conv = IngredientUnitConversion.query.filter_by(
+        ingredient_id=ingredient.id, from_unit=norm
+    ).first()
+    if conv:
+        return conv.to_unit, amount * conv.factor
+
+    gfactor = _UNIT_CONVERSIONS.get((norm, ingredient.preferred_unit))
+    if gfactor:
+        return ingredient.preferred_unit, amount * gfactor
+
+    return norm, amount
+
+
 def _calc_multiplier(recipe_serves, people_count):
     """Bereken portie-multiplier."""
     if recipe_serves and people_count:
@@ -400,15 +435,37 @@ def _calc_multiplier(recipe_serves, people_count):
     return 1
 
 
+def _convert_unit_for_agg(ing_id, norm, amount, conversions, preferred_units):
+    """Pas unit-conversie toe voor aggregatie (vangnet voor historische data)."""
+    conv_key = (ing_id, norm)
+    if conv_key in conversions:
+        to_unit, factor = conversions[conv_key]
+        return to_unit, amount * factor
+    if ing_id in preferred_units:
+        pref = preferred_units[ing_id]
+        if norm != pref:
+            gfactor = _UNIT_CONVERSIONS.get((norm, pref))
+            if gfactor:
+                return pref, amount * gfactor
+    return norm, amount
+
+
 def _build_shopping_dict(year, week):
     """Bouw geaggregeerde boodschappendict voor een week.
 
     Returns dict met key (ingredient_id, normalized_unit) -> totaal_hoeveelheid.
-    Bevat: MenuItems, QuickAddItems, CustomShoppingIngredients.
-    Exclusies (afgevinkte items) zijn al gefilterd.
+    Past unit-conversies toe als vangnet voor historische data.
     Overrides worden NIET toegepast (verschilt per caller).
     URL-params worden NIET meegenomen (alleen relevant voor shopping_list GET).
     """
+    conversions = {}
+    for conv in IngredientUnitConversion.query.all():
+        conversions[(conv.ingredient_id, conv.from_unit)] = (conv.to_unit, conv.factor)
+    preferred_units = {
+        ing.id: ing.preferred_unit
+        for ing in Ingredient.query.filter(Ingredient.preferred_unit.isnot(None)).all()
+    }
+
     shopping_dict = {}
 
     for item in MenuItem.query.filter_by(week_number=week, year=year).all():
@@ -416,26 +473,57 @@ def _build_shopping_dict(year, week):
             continue
         m = _calc_multiplier(item.recipe.serves, item.people_count)
         for ri in item.recipe.ingredients:
-            key = (ri.ingredient_id, _norm_unit(ri.unit))
-            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+            norm = _norm_unit(ri.unit)
+            amount = ri.amount * m
+            norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
+            shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
 
     for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
         if not qi.recipe:
             continue
         m = _calc_multiplier(qi.recipe.serves, qi.people_count)
         for ri in qi.recipe.ingredients:
-            key = (ri.ingredient_id, _norm_unit(ri.unit))
-            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
+            norm = _norm_unit(ri.unit)
+            amount = ri.amount * m
+            norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
+            shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
 
     for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
-        key = (ci.ingredient_id, _norm_unit(ci.unit))
-        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
+        norm = _norm_unit(ci.unit)
+        amount = ci.amount
+        norm, amount = _convert_unit_for_agg(ci.ingredient_id, norm, amount, conversions, preferred_units)
+        shopping_dict[(ci.ingredient_id, norm)] = shopping_dict.get((ci.ingredient_id, norm), 0) + amount
 
     excluded_ids = {
         e.ingredient_id
         for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
     }
-    return {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
+    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
+
+    # Merge buy-one entries: als een ingrediënt meerdere units heeft die allemaal
+    # buy-one zijn (el, tl, g, ml, cm, etc.), merge ze tot 1 regel.
+    # Je koopt toch 1 fles/pot/tube — de exacte hoeveelheid doet er niet toe.
+    from collections import defaultdict
+    by_ing = defaultdict(list)
+    for (ing_id, unit), amount in shopping_dict.items():
+        by_ing[ing_id].append((unit, amount))
+
+    merged = {}
+    for ing_id, entries in by_ing.items():
+        if len(entries) == 1:
+            unit, amount = entries[0]
+            merged[(ing_id, unit)] = amount
+        elif all(u in _UNIT_BUY_ONE for u, _ in entries):
+            # Alle units zijn buy-one → merge naar de unit met de hoogste hoeveelheid
+            best_unit, best_amount = max(entries, key=lambda e: e[1])
+            total = sum(a for _, a in entries)
+            merged[(ing_id, best_unit)] = total
+        else:
+            # Mix van buy-one en telbare units → bewaar apart
+            for unit, amount in entries:
+                merged[(ing_id, unit)] = amount
+
+    return merged
 
 
 _AH_LOGIN_BASE       = 'https://login.ah.nl'
@@ -751,11 +839,13 @@ def new_recipe():
 
             prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
 
+            raw_amount = float(amounts[i]) if amounts[i] else 0
+            norm_unit, norm_amount = _normalize_ri_unit(ingredient, units[i], raw_amount)
             recipe_ingredient = RecipeIngredient(
                 recipe_id=recipe.id,
                 ingredient_id=ingredient.id,
-                amount=float(amounts[i]) if amounts[i] else 0,
-                unit=units[i],
+                amount=norm_amount,
+                unit=norm_unit,
                 preparation=prep,
             )
             db.session.add(recipe_ingredient)
@@ -1140,11 +1230,13 @@ def edit_recipe(id):
 
             prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
 
+            raw_amount = float(amounts[i]) if amounts[i] else 0
+            norm_unit, norm_amount = _normalize_ri_unit(ingredient, units[i], raw_amount)
             recipe_ingredient = RecipeIngredient(
                 recipe_id=recipe.id,
                 ingredient_id=ingredient.id,
-                amount=float(amounts[i]) if amounts[i] else 0,
-                unit=units[i],
+                amount=norm_amount,
+                unit=norm_unit,
                 preparation=prep,
             )
             db.session.add(recipe_ingredient)
@@ -1298,6 +1390,7 @@ def ingredient_search():
         'name': ing.display,
         'category': ing.category,
         'has_ah': bool(ing.ah_product_id),
+        'preferred_unit': ing.preferred_unit,
     } for ing in results[:15]])
 
 
@@ -2151,11 +2244,13 @@ def import_data():
                     continue
                 counts['ingredients'] += 1
 
+                raw_amount = ing_data.get('amount', 0)
+                norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
                 db.session.add(RecipeIngredient(
                     recipe_id=recipe.id,
                     ingredient_id=ingredient.id,
-                    amount=ing_data.get('amount', 0),
-                    unit=ing_data.get('unit', ''),
+                    amount=norm_amount,
+                    unit=norm_unit,
                     preparation=ing_data.get('preparation'),
                 ))
 
@@ -2320,11 +2415,13 @@ def import_zip():
                         db.session.add(ingredient)
                         db.session.flush()
                         counts['ingredients'] += 1
+                    raw_amount = ing_data.get('amount') or 0
+                    norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
                     db.session.add(RecipeIngredient(
                         recipe_id=recipe.id,
                         ingredient_id=ingredient.id,
-                        amount=ing_data.get('amount') or 0,
-                        unit=ing_data.get('unit', ''),
+                        amount=norm_amount,
+                        unit=norm_unit,
                     ))
                 counts['recipes'] += 1
 
@@ -2747,8 +2844,9 @@ def add_shopping_item(year, week):
     if not ing:
         return jsonify({'status': 'error', 'message': 'Ingrediënt niet gevonden'}), 404
 
-    amount = float(data.get('amount', 1))
-    unit = data.get('unit', 'stuks')
+    raw_amount = float(data.get('amount', 1))
+    raw_unit = data.get('unit', 'stuks')
+    unit, amount = _normalize_ri_unit(ing, raw_unit, raw_amount)
 
     # Remove any exclusion for this ingredient (user wants it back)
     ShoppingListExclusion.query.filter_by(
@@ -2954,6 +3052,24 @@ def _migrate_v1(conn):
     '''))
 
 
+def _migrate_v2(conn):
+    """Ingrediënt unit-normalisatie: preferred_unit kolom + conversietabel."""
+    ing_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
+    if 'preferred_unit' not in ing_cols:
+        conn.execute(text('ALTER TABLE ingredient ADD COLUMN preferred_unit VARCHAR(20)'))
+
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS ingredient_unit_conversion (
+            id INTEGER PRIMARY KEY,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
+            from_unit VARCHAR(20) NOT NULL,
+            to_unit VARCHAR(20) NOT NULL,
+            factor REAL NOT NULL,
+            UNIQUE(ingredient_id, from_unit)
+        )
+    '''))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -2971,10 +3087,10 @@ def migrate_db():
 
         if current < 1:
             _migrate_v1(conn)
+        if current < 2:
+            _migrate_v2(conn)
 
-        # Toekomstig: if current < 2: _migrate_v2(conn)
-
-        target = 1
+        target = 2
         if current < target:
             if row:
                 conn.execute(
