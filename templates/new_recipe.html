@@ -98,8 +98,8 @@
 
         <div>
             <label class="block text-sm font-semibold text-[#2C2C2C]">Bereidingswijze</label>
-            <textarea name="instructions" id="fieldInstructions" rows="6" placeholder="Beschrijf de bereidingsstappen..."
-                      class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm"></textarea>
+            <div id="quill-editor" class="mt-1 bg-white rounded-md" style="min-height:160px;"></div>
+            <textarea name="instructions" id="fieldInstructions" class="hidden"></textarea>
         </div>
 
         <datalist id="unit-list">
@@ -150,7 +150,7 @@
         </div>
 
         <div class="flex justify-end space-x-4">
-            <a href="{{ url_for('recipes') }}"
+            <a href="{{ url_for('receptenplanner') }}"
                class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#F5F2ED]">
                 Annuleren
             </a>
@@ -162,9 +162,30 @@
     </form>
 </div>
 
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ingredient-autocomplete.js') }}"></script>
 <script>
+const quill = new Quill('#quill-editor', {
+  modules: {
+    toolbar: [
+      [{ 'header': [1, 2, false] }],
+      ['bold', 'italic'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'color': [] }],
+      ['clean']
+    ]
+  },
+  theme: 'snow',
+  placeholder: 'Beschrijf de bereidingsstappen...'
+});
+
+// Sync Quill content to hidden textarea on form submit
+document.querySelector('form').addEventListener('submit', function() {
+  document.getElementById('fieldInstructions').value = quill.root.innerHTML;
+});
+
 const categories = {{ categories | tojson }};
 
 function addIngredientRow(name, amount, unit, category, ingId, preparation) {
@@ -292,7 +313,7 @@ async function importFromPhoto() {
         // Pre-fill formulier (zelfde als URL import)
         if (data.name) document.getElementById('fieldName').value = data.name;
         if (data.serves) document.getElementById('fieldServes').value = data.serves;
-        if (data.instructions) document.getElementById('fieldInstructions').value = data.instructions;
+        if (data.instructions) quill.root.innerHTML = data.instructions;
 
         const preview = document.getElementById('importedImagePreview');
         const pathField = document.getElementById('fieldImagePath');
@@ -363,7 +384,7 @@ async function importFromUrl() {
         if (data.name)         document.getElementById('fieldName').value = data.name;
         if (data.serves)       document.getElementById('fieldServes').value = data.serves;
         if (data.url)          document.getElementById('fieldUrl').value = data.url;
-        if (data.instructions) document.getElementById('fieldInstructions').value = data.instructions;
+        if (data.instructions) quill.root.innerHTML = data.instructions;
 
         if (data.cookbook_id) {
             const sel = document.getElementById('fieldCookbook');

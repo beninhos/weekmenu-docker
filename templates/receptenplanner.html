@@ -180,8 +180,8 @@
   </div>
 </div>
 
-<!-- ── Search bar + kookboekfilter ────────────────────────── -->
-<div class="filter-row flex flex-wrap gap-2 mb-5">
+<!-- ── Search bar + kookboekfilter + nieuw recept ─────────── -->
+<div class="filter-row flex flex-wrap gap-2 mb-5 items-center">
   <input type="text" id="recipe-search"
          placeholder="Zoek op naam of kookboek..."
          oninput="applyFilters()"
@@ -191,6 +191,12 @@
           class="border border-[#D4CEC4] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A882] bg-white">
     <option value="">Alle kookboeken</option>
   </select>
+  <a href="{{ url_for('new_recipe') }}"
+     class="inline-flex items-center gap-1.5 bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors ml-auto"
+     style="text-decoration:none;">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    Nieuw recept
+  </a>
 </div>
 
 <!-- ── VIEW: GRID ─────────────────────────────────────────── -->
@@ -245,7 +251,22 @@
 
   <!-- Content -->
   <div class="p-5 flex flex-col flex-1">
-    <h2 id="dp-name" class="text-xl font-extrabold text-[#2C2C2C] mb-2 leading-tight"></h2>
+    <h2 id="dp-name" class="text-xl font-extrabold text-[#2C2C2C] mb-1 leading-tight"></h2>
+
+    <!-- Action icons -->
+    <div class="flex gap-2 mb-3">
+      <button id="dp-fav-btn" onclick="toggleDetailFavorite()" title="Favoriet"
+              class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-[#F5F2ED] text-base transition-colors">
+      </button>
+      <a id="dp-edit-btn" href="#" title="Bewerken"
+         class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-[#F5F2ED] transition-colors" style="text-decoration:none;">
+        <svg class="w-4 h-4" fill="none" stroke="#6B6B6B" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      </a>
+      <button id="dp-del-btn" onclick="deleteFromDetail()" title="Verwijderen"
+              class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-red-50 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="#6B6B6B" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      </button>
+    </div>
 
     <div class="flex flex-wrap gap-x-3 gap-y-1 items-center mb-4 text-sm text-[#6B6B6B]">
       <span id="dp-cookbook"></span>
@@ -258,7 +279,7 @@
     <!-- Instructions -->
     <div id="dp-instr-wrap" class="mb-4" style="display:none;">
       <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Bereidingswijze</h3>
-      <div id="dp-instr" class="text-sm text-[#2C2C2C] leading-relaxed whitespace-pre-wrap overflow-y-auto pr-1" style="max-height:9rem;"></div>
+      <div id="dp-instr" class="text-sm text-[#2C2C2C] leading-relaxed overflow-y-auto pr-1" style="max-height:9rem;"></div>
     </div>
 
     <!-- Ingredients checklist -->
@@ -455,7 +476,9 @@ function renderGrid() {
           ${r.serves} pers.
         </span>
       </div>
-      ${r.is_favorite ? '<span style="position:absolute;top:0.4rem;right:0.5rem;font-size:1.1rem;">⭐</span>' : ''}
+      <button onclick="event.stopPropagation();toggleCardFavorite(${r.id},this)"
+              style="position:absolute;top:0.4rem;right:0.5rem;font-size:1.1rem;background:none;border:none;cursor:pointer;padding:0;line-height:1;"
+              title="Favoriet">${r.is_favorite ? '\u2B50' : '\u2606'}</button>
     </div>
   `).join('');
 }
@@ -552,7 +575,9 @@ function renderList() {
           ${r.cookbook ? esc(r.cookbook) : ''}${r.page ? ' p. ' + r.page : ''}${(r.cookbook || r.page) ? ' · ' : ''}${r.serves} pers.
         </p>
       </div>
-      ${r.is_favorite ? '<span class="text-[#C9A882] text-base ml-1 flex-shrink-0">⭐</span>' : ''}
+      <button onclick="event.stopPropagation();toggleCardFavorite(${r.id},this)"
+              class="text-base ml-1 flex-shrink-0" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;"
+              title="Favoriet">${r.is_favorite ? '\u2B50' : '\u2606'}</button>
     </div>
   `).join('');
 }
@@ -592,7 +617,7 @@ function openDetail(recipeId) {
 
   const instrWrap = document.getElementById('dp-instr-wrap');
   if (r.instructions) {
-    document.getElementById('dp-instr').textContent = r.instructions;
+    document.getElementById('dp-instr').innerHTML = r.instructions;
     instrWrap.style.display = 'block';
   } else {
     instrWrap.style.display = 'none';
@@ -609,12 +634,79 @@ function openDetail(recipeId) {
     </div>
   `).join('') || '<p class="text-sm text-[#6B6B6B]">Geen ingrediënten.</p>';
 
+  // Action buttons
+  const favBtn = document.getElementById('dp-fav-btn');
+  favBtn.textContent = r.is_favorite ? '\u2B50' : '\u2606';
+  document.getElementById('dp-edit-btn').href = '/recipe/' + r.id + '/edit';
+
   // Pre-fill popup persons: recipe serves, or fall back to household default
   document.getElementById('popup-persons').value = DEFAULT_SERVES || r.serves;
 
   // Open
   document.getElementById('detail-overlay').style.display = 'block';
   document.getElementById('detail-panel').classList.add('open');
+}
+
+async function toggleDetailFavorite() {
+  if (!activeRecipe) return;
+  try {
+    const resp = await fetch('/recipe/' + activeRecipe.id + '/toggle_favorite', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await resp.json();
+    if (data.status === 'success') {
+      activeRecipe.is_favorite = data.is_favorite;
+      // Update in master list
+      const master = RECIPES.find(x => x.id === activeRecipe.id);
+      if (master) master.is_favorite = data.is_favorite;
+      // Update button
+      document.getElementById('dp-fav-btn').textContent = data.is_favorite ? '\u2B50' : '\u2606';
+      // Re-render current view to update stars on cards
+      if (currentView === 'grid') renderGrid();
+      else if (currentView === 'list') renderList();
+      else if (currentView === 'coverflow') updateCoverflowCaption();
+    }
+  } catch(e) {
+    console.error('Fout bij favoriet toggle:', e);
+  }
+}
+
+async function toggleCardFavorite(recipeId, btn) {
+  try {
+    const resp = await fetch('/recipe/' + recipeId + '/toggle_favorite', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await resp.json();
+    if (data.status === 'success') {
+      const master = RECIPES.find(x => x.id === recipeId);
+      if (master) master.is_favorite = data.is_favorite;
+      btn.textContent = data.is_favorite ? '\u2B50' : '\u2606';
+      // If detail panel is open for this recipe, update its button too
+      if (activeRecipe && activeRecipe.id === recipeId) {
+        activeRecipe.is_favorite = data.is_favorite;
+        document.getElementById('dp-fav-btn').textContent = data.is_favorite ? '\u2B50' : '\u2606';
+      }
+    }
+  } catch(e) {
+    console.error('Fout bij favoriet toggle:', e);
+  }
+}
+
+async function deleteFromDetail() {
+  if (!activeRecipe) return;
+  if (!confirm('Weet je zeker dat je "' + activeRecipe.name + '" wilt verwijderen?')) return;
+  try {
+    const resp = await fetch('/recipe/' + activeRecipe.id, { method: 'DELETE' });
+    if (resp.ok) {
+      const idx = RECIPES.findIndex(x => x.id === activeRecipe.id);
+      if (idx !== -1) RECIPES.splice(idx, 1);
+      closeDetail();
+      applyFilters();
+      showToast('Recept verwijderd');
+    }
+  } catch(e) {
+    console.error('Fout bij verwijderen:', e);
+  }
 }
 
 function closeDetail() {
