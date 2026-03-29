@@ -39,52 +39,54 @@ MEAL_TYPES = [
 
 # NIEUW: Uitgebreide categorieën die aansluiten bij supermarktindeling
 PRODUCT_CATEGORIES = [
-    'Groente & Aardappelen',
-    'Fruit',
-    'Vlees',
-    'Vis',
-    'Vegetarisch & Vegan',
-    'Vleeswaren',
-    'Kaas',
-    'Zuivel & Eieren',
-    'Bakkerij',
-    'Pasta, Rijst & Wereldkeuken',
-    'Blikken & Potten',
-    'Soepen, Sauzen & Kruiden',
-    'Bakken',
-    'Ontbijt & Beleg',
-    'Snacks & Noten',
-    'Koek, Snoep & Chocolade',
-    'Koffie & Thee',
-    'Frisdrank & Water',
-    'Bier, Wijn & Aperitieven',
+    # 1. De Basis & Vers
+    'Groente, Fruit & Aardappelen',
+    'Vlees & Gevogelte',
+    'Vis & Schaaldieren',
+    'Vegetarisch & Plantaardig',
+    'Zuivel, Plantaardige Zuivel & Eieren',
+    'Kaas & Vleeswaren',
+    # 2. Voorraadkast (Pantry) & Smaakmakers
+    'Kruiden & Specerijen',
+    'Oliën, Sauzen & Smaakmakers',
+    'Pasta, Rijst & Granen',
+    'Conserven & Peulvruchten',
+    'Noten, Zaden & Gedroogd Fruit',
+    # 3. Overig Eten & Drinken
+    'Brood & Bakkerij',
+    'Ontbijt, Bakken & Desserts',
     'Diepvries',
-    'Overig'
+    'Dranken',
+    'Snacks & Zoetwaren',
+    # 4. Systeem
+    'Non-Food & Huishouden',
+    'Overig',
 ]
 
-# Sorteervolgorde boodschappenlijst — AH looproute
+# Sorteervolgorde boodschappenlijst — looproute supermarkt
 CATEGORY_ORDER_SUPERMARKET = [
-    'Groente & Aardappelen',        # Vers, bij binnenkomst
-    'Fruit',                        # Vers, bij binnenkomst
-    'Vlees',                        # Versafdeling
-    'Vis',                          # Versafdeling
-    'Vegetarisch & Vegan',          # Versafdeling
-    'Vleeswaren',                   # Versafdeling
-    'Kaas',                         # Versafdeling
-    'Zuivel & Eieren',              # Koeling
-    'Bakkerij',                     # Broodafdeling
-    'Pasta, Rijst & Wereldkeuken',  # Droog middenpad
-    'Blikken & Potten',             # Droog middenpad
-    'Soepen, Sauzen & Kruiden',     # Droog middenpad
-    'Bakken',                       # Droog middenpad
-    'Ontbijt & Beleg',              # Droog middenpad
-    'Snacks & Noten',               # Snackafdeling
-    'Koek, Snoep & Chocolade',      # Snoepgang
-    'Koffie & Thee',                # Drankengang
-    'Frisdrank & Water',            # Drankengang
-    'Bier, Wijn & Aperitieven',     # Drankengang
-    'Diepvries',                    # Achteraan
-    'Overig'
+    # 1. De Basis & Vers
+    'Groente, Fruit & Aardappelen',             # Vers, bij binnenkomst
+    'Vlees & Gevogelte',                         # Versafdeling
+    'Vis & Schaaldieren',                        # Versafdeling
+    'Vegetarisch & Plantaardig',                 # Versafdeling / koeling
+    'Kaas & Vleeswaren',                         # Versafdeling
+    'Zuivel, Plantaardige Zuivel & Eieren',      # Koeling
+    # 2. Voorraadkast (Pantry) & Smaakmakers
+    'Kruiden & Specerijen',                      # Droog middenpad
+    'Oliën, Sauzen & Smaakmakers',              # Droog middenpad
+    'Pasta, Rijst & Granen',                     # Droog middenpad
+    'Conserven & Peulvruchten',                  # Droog middenpad
+    'Noten, Zaden & Gedroogd Fruit',             # Droog middenpad
+    # 3. Overig Eten & Drinken
+    'Brood & Bakkerij',                          # Broodafdeling
+    'Ontbijt, Bakken & Desserts',                # Droog middenpad
+    'Snacks & Zoetwaren',                        # Snackafdeling
+    'Dranken',                                   # Drankengang
+    'Diepvries',                                 # Achteraan
+    # 4. Systeem
+    'Non-Food & Huishouden',
+    'Overig',
 ]
 
 # App setup
@@ -130,10 +132,22 @@ class Ingredient(db.Model):
     ah_pkg_unit        = db.Column(db.String(20), nullable=True)
     ah_conv_factor     = db.Column(db.Float, nullable=True)
     ah_conv_unit       = db.Column(db.String(20), nullable=True)
+    preferred_unit     = db.Column(db.String(20), nullable=True)
 
     @property
     def display(self):
         return self.display_name or self.name
+
+class IngredientUnitConversion(db.Model):
+    __tablename__ = 'ingredient_unit_conversion'
+    id            = db.Column(db.Integer, primary_key=True)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    from_unit     = db.Column(db.String(20), nullable=False)
+    to_unit       = db.Column(db.String(20), nullable=False)
+    factor        = db.Column(db.Float, nullable=False)
+    confidence    = db.Column(db.Float, nullable=True)
+    reasoning     = db.Column(db.Text, nullable=True)
+    ingredient    = db.relationship('Ingredient', backref='unit_conversions')
 
 class IngredientAlias(db.Model):
     __tablename__ = 'ingredient_alias'
@@ -384,6 +398,139 @@ def _calc_default_qty(amount: float, unit: str) -> int:
     qty = max(1, math.ceil(amount or 1))
     return 1 if qty > 20 else qty  # >20 is bijna altijd gewicht/volume, geen stuks
 
+
+def _norm_unit(u):
+    """Normaliseer unit string via _UNIT_NORMALIZE lookup."""
+    return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
+
+
+def _normalize_ri_unit(ingredient, unit, amount):
+    """Normaliseer unit + amount bij opslaan van RecipeIngredient/CustomShoppingIngredient."""
+    norm = _norm_unit(unit)
+
+    # Auto-set preferred_unit op eerste gebruik
+    if not ingredient.preferred_unit and norm:
+        ingredient.preferred_unit = norm
+
+    if not ingredient.preferred_unit or norm == ingredient.preferred_unit:
+        return norm, amount
+
+    # Per-ingredient conversie (handmatig beheerd, bijv. knoflook stuks->teen)
+    conv = IngredientUnitConversion.query.filter_by(
+        ingredient_id=ingredient.id, from_unit=norm
+    ).first()
+    if conv:
+        return conv.to_unit, amount * conv.factor
+
+    # Globale conversie (g<->kg, ml<->l)
+    gfactor = _UNIT_CONVERSIONS.get((norm, ingredient.preferred_unit))
+    if gfactor:
+        return ingredient.preferred_unit, amount * gfactor
+
+    return norm, amount
+
+
+def _calc_multiplier(recipe_serves, people_count):
+    """Bereken portie-multiplier."""
+    if recipe_serves and people_count:
+        try:
+            return people_count / recipe_serves
+        except ZeroDivisionError:
+            return 1
+    return 1
+
+
+def _convert_unit_for_agg(ing_id, norm, amount, conversions, preferred_units):
+    """Pas unit-conversie toe voor aggregatie (vangnet voor historische data)."""
+    conv_key = (ing_id, norm)
+    if conv_key in conversions:
+        to_unit, factor = conversions[conv_key]
+        return to_unit, amount * factor
+    if ing_id in preferred_units:
+        pref = preferred_units[ing_id]
+        if norm != pref:
+            gfactor = _UNIT_CONVERSIONS.get((norm, pref))
+            if gfactor:
+                return pref, amount * gfactor
+    return norm, amount
+
+
+def _build_shopping_dict(year, week):
+    """Bouw geaggregeerde boodschappendict voor een week.
+
+    Returns dict met key (ingredient_id, normalized_unit) -> totaal_hoeveelheid.
+    Past unit-conversies toe als vangnet voor historische data.
+    Overrides worden NIET toegepast (verschilt per caller).
+    URL-params worden NIET meegenomen (alleen relevant voor shopping_list GET).
+    """
+    conversions = {}
+    for conv in IngredientUnitConversion.query.all():
+        conversions[(conv.ingredient_id, conv.from_unit)] = (conv.to_unit, conv.factor)
+    preferred_units = {
+        ing.id: ing.preferred_unit
+        for ing in Ingredient.query.filter(Ingredient.preferred_unit.isnot(None)).all()
+    }
+
+    shopping_dict = {}
+
+    for item in MenuItem.query.filter_by(week_number=week, year=year).all():
+        if item.skip_shopping_list or not item.recipe:
+            continue
+        m = _calc_multiplier(item.recipe.serves, item.people_count)
+        for ri in item.recipe.ingredients:
+            norm = _norm_unit(ri.unit)
+            amount = ri.amount * m
+            norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
+            shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
+
+    for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
+        if not qi.recipe:
+            continue
+        m = _calc_multiplier(qi.recipe.serves, qi.people_count)
+        for ri in qi.recipe.ingredients:
+            norm = _norm_unit(ri.unit)
+            amount = ri.amount * m
+            norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
+            shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
+
+    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
+        norm = _norm_unit(ci.unit)
+        amount = ci.amount
+        norm, amount = _convert_unit_for_agg(ci.ingredient_id, norm, amount, conversions, preferred_units)
+        shopping_dict[(ci.ingredient_id, norm)] = shopping_dict.get((ci.ingredient_id, norm), 0) + amount
+
+    excluded_ids = {
+        e.ingredient_id
+        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
+    }
+    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
+
+    # Merge buy-one entries: als een ingrediënt meerdere units heeft die allemaal
+    # buy-one zijn (el, tl, g, ml, cm, etc.), merge ze tot 1 regel.
+    # Je koopt toch 1 fles/pot/tube — de exacte hoeveelheid doet er niet toe.
+    from collections import defaultdict
+    by_ing = defaultdict(list)
+    for (ing_id, unit), amount in shopping_dict.items():
+        by_ing[ing_id].append((unit, amount))
+
+    merged = {}
+    for ing_id, entries in by_ing.items():
+        if len(entries) == 1:
+            unit, amount = entries[0]
+            merged[(ing_id, unit)] = amount
+        elif all(u in _UNIT_BUY_ONE for u, _ in entries):
+            # Alle units zijn buy-one → merge naar de unit met de hoogste hoeveelheid
+            best_unit, best_amount = max(entries, key=lambda e: e[1])
+            total = sum(a for _, a in entries)
+            merged[(ing_id, best_unit)] = total
+        else:
+            # Mix van buy-one en telbare units → bewaar apart
+            for unit, amount in entries:
+                merged[(ing_id, unit)] = amount
+
+    return merged
+
+
 _AH_LOGIN_BASE       = 'https://login.ah.nl'
 _AH_AUTHORIZE_PATH   = '/secure/oauth/authorize?client_id=appie&redirect_uri=appie%3A%2F%2Flogin-exit&response_type=code'
 _AH_ANON_TOKEN_URL   = 'https://api.ah.nl/mobile-auth/v1/auth/token/anonymous'
@@ -544,8 +691,7 @@ def list_cookbook_recipes(id):
 
 @app.route('/recipes')
 def recipes():
-    recipes = Recipe.query.all()
-    return render_template('recipes.html', recipes=recipes, categories=PRODUCT_CATEGORIES)
+    return redirect(url_for('receptenplanner'))
 
 @app.route('/receptenplanner')
 def receptenplanner():
@@ -697,17 +843,19 @@ def new_recipe():
 
             prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
 
+            raw_amount = float(amounts[i]) if amounts[i] else 0
+            norm_unit, norm_amount = _normalize_ri_unit(ingredient, units[i], raw_amount)
             recipe_ingredient = RecipeIngredient(
                 recipe_id=recipe.id,
                 ingredient_id=ingredient.id,
-                amount=float(amounts[i]) if amounts[i] else 0,
-                unit=units[i],
+                amount=norm_amount,
+                unit=norm_unit,
                 preparation=prep,
             )
             db.session.add(recipe_ingredient)
 
         db.session.commit()
-        return redirect(url_for('recipes'))
+        return redirect(url_for('receptenplanner'))
 
     return render_template('new_recipe.html', cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
 
@@ -953,65 +1101,19 @@ def clear_week_menu():
 
 @app.route('/shopping-list/<int:year>/<int:week>')
 def shopping_list(year, week):
-    menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
-    shopping_dict = {}
+    shopping_dict = _build_shopping_dict(year, week)
 
-    def _norm_unit(u):
-        return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
-
-    def calc_multiplier(recipe_serves, people_count):
-        if recipe_serves and people_count:
-            try:
-                return people_count / recipe_serves
-            except ZeroDivisionError:
-                return 1
-        return 1
-
-    # Process regular menu items (skip planner-sourced items)
-    for item in menu_items:
-        if item.skip_shopping_list:
-            continue
-        if item.recipe:
-            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
-            for ri in item.recipe.ingredients:
-                key = (ri.ingredient_id, _norm_unit(ri.unit))
-                shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
-
-    # Process saved quick-add items from database
-    quick_items = QuickAddItem.query.filter_by(week_number=week, year=year).all()
-
-    for item in quick_items:
-        if item.recipe:
-            multiplier = calc_multiplier(item.recipe.serves, item.people_count)
-            for ri in item.recipe.ingredients:
-                key = (ri.ingredient_id, _norm_unit(ri.unit))
-                shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
-
-    # Process temporary quick-add items from URL parameters
+    # Tijdelijke quick-add items uit URL-parameters (sessie-only)
     recipe_ids = request.args.getlist('recipe_id')
     people_counts = request.args.getlist('people_count')
-
     for i, recipe_id in enumerate(recipe_ids):
         recipe = Recipe.query.get(recipe_id)
         if recipe:
             people_count = int(people_counts[i]) if i < len(people_counts) else None
-            multiplier = calc_multiplier(recipe.serves, people_count)
+            multiplier = _calc_multiplier(recipe.serves, people_count)
             for ri in recipe.ingredients:
                 key = (ri.ingredient_id, _norm_unit(ri.unit))
                 shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * multiplier
-
-    # Process custom shopping ingredients (from Receptenplanner)
-    custom_items = CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all()
-    for ci in custom_items:
-        key = (ci.ingredient_id, _norm_unit(ci.unit))
-        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
-
-    # Filter out excluded ingredients (afgevinkte items)
-    excluded_ids = {
-        e.ingredient_id
-        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
-    }
-    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
 
     overrides = {
         o.ingredient_id: o.qty
@@ -1019,28 +1121,28 @@ def shopping_list(year, week):
     }
 
     _CATEGORY_BG = {
-        'Groente & Aardappelen':       '#fef9f5',
-        'Fruit':                       '#fdf6f0',
-        'Vlees':                       '#f5f0eb',
-        'Vis':                         '#f0ede8',
-        'Vegetarisch & Vegan':         '#fef9f5',
-        'Vleeswaren':                  '#f5f0eb',
-        'Kaas':                        '#fdf6f0',
-        'Zuivel & Eieren':             '#fef9f5',
-        'Bakkerij':                    '#fdf6f0',
-        'Snacks & Noten':              '#f0ede8',
-        'Diepvries':                   '#ede9e3',
-        'Pasta, Rijst & Wereldkeuken': '#fdf6f0',
-        'Blikken & Potten':            '#f0ede8',
-        'Soepen, Sauzen & Kruiden':    '#fef9f5',
-        'Bakken':                      '#f5f0eb',
-        'Ontbijt & Beleg':             '#fdf6f0',
-        'Koek, Snoep & Chocolade':     '#fef9f5',
-        'Frisdrank & Water':           '#f0ede8',
-        'Bier, Wijn & Aperitieven':    '#f5f0eb',
-        'Koffie & Thee':               '#fdf6f0',
-        'Salades & Maaltijdsalades':   '#fef9f5',
-        'Overig':                      '#f0ede8',
+        # 1. De Basis & Vers
+        'Groente, Fruit & Aardappelen':           '#fef9f5',
+        'Vlees & Gevogelte':                       '#f5f0eb',
+        'Vis & Schaaldieren':                      '#f0ede8',
+        'Vegetarisch & Plantaardig':               '#fef9f5',
+        'Zuivel, Plantaardige Zuivel & Eieren':    '#fdf6f0',
+        'Kaas & Vleeswaren':                       '#f5f0eb',
+        # 2. Voorraadkast & Smaakmakers
+        'Kruiden & Specerijen':                    '#fef9f5',
+        'Oliën, Sauzen & Smaakmakers':            '#fdf6f0',
+        'Pasta, Rijst & Granen':                   '#f0ede8',
+        'Conserven & Peulvruchten':                '#f5f0eb',
+        'Noten, Zaden & Gedroogd Fruit':           '#fdf6f0',
+        # 3. Overig Eten & Drinken
+        'Brood & Bakkerij':                        '#fef9f5',
+        'Ontbijt, Bakken & Desserts':              '#f5f0eb',
+        'Diepvries':                               '#ede9e3',
+        'Dranken':                                 '#f0ede8',
+        'Snacks & Zoetwaren':                      '#fdf6f0',
+        # 4. Systeem
+        'Non-Food & Huishouden':                   '#ede9e3',
+        'Overig':                                  '#f0ede8',
     }
 
     shopping_list = []
@@ -1132,17 +1234,19 @@ def edit_recipe(id):
 
             prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
 
+            raw_amount = float(amounts[i]) if amounts[i] else 0
+            norm_unit, norm_amount = _normalize_ri_unit(ingredient, units[i], raw_amount)
             recipe_ingredient = RecipeIngredient(
                 recipe_id=recipe.id,
                 ingredient_id=ingredient.id,
-                amount=float(amounts[i]) if amounts[i] else 0,
-                unit=units[i],
+                amount=norm_amount,
+                unit=norm_unit,
                 preparation=prep,
             )
             db.session.add(recipe_ingredient)
 
         db.session.commit()
-        return redirect(url_for('recipes'))
+        return redirect(url_for('receptenplanner'))
 
     return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
 
@@ -1290,6 +1394,7 @@ def ingredient_search():
         'name': ing.display,
         'category': ing.category,
         'has_ah': bool(ing.ah_product_id),
+        'preferred_unit': ing.preferred_unit,
     } for ing in results[:15]])
 
 
@@ -1456,54 +1561,62 @@ _AMOUNT_ONLY_RE = re.compile(
 # Category guessing: ordered list checked in sequence (most specific first)
 _CATEGORY_KEYWORDS = [
     # ── Specifieke overrides ── (worden vóór generieke entries gecheckt)
-    ('Groente & Aardappelen', ['vleestomaat', 'vleestomaten', 'bladspinazie', 'sperziebonen', 'sperzieboon', 'winterpeen', 'winterpenen', 'puntpaprika', 'bosui', 'bosuitje', 'bleekselderij', 'augurk']),
-    ('Soepen, Sauzen & Kruiden', ['satésaus', 'sesamolie', 'ahornsiroop', 'boemboe', 'garam', 'massala', 'jus', 'saus']),
-    ('Bakken', ['maizena', 'maïzena', 'zelfrijzend']),
-    ('Bakkerij', ['volkoren bolletje', 'bolletje', 'papadum', 'chapati', 'wraps']),
-    ('Vleeswaren', ['ontbijtspek', 'ontbijtspekje']),
-    ('Kaas', ['burrata']),
-    ('Pasta, Rijst & Wereldkeuken', ['basmatirijst', 'zilvervliesrijst', 'zilvervlies', 'conchiglie', 'bami goreng', 'nasi goreng', 'papadums']),
-    ('Frisdrank & Water', ['bronwater', 'kraanwater']),
-    # ── Vlees — gevogelte, rund, varken, lam, wild
-    ('Vlees', ['kipfilet', 'kippendij', 'kip', 'gehakt', 'varkensvlees', 'varken', 'rundvlees', 'rund', 'lamsrack', 'lam', 'biefstuk', 'tartaar', 'ossenhaas', 'entrecote', 'speklap', 'kalkoen', 'eend', 'konijn', 'wild', 'hert', 'klapstuk', 'riblap', 'cordon bleu', 'saté ajam', 'saté', 'vlees']),
-    # Vleeswaren — verwerkt vlees, beleg
-    ('Vleeswaren', ['ham', 'salami', 'rookworst', 'cervelaat', 'leverworst', 'worst', 'chorizo', 'pancetta', 'prosciutto', 'spek', 'bacon', 'rookvlees', 'pastrami']),
-    # Vis & zeevruchten
-    ('Vis', ['zalm', 'tonijn', 'vis', 'garnaal', 'mossel', 'inktvis', 'forel', 'haring', 'makreel', 'ansjovis', 'kabeljauw', 'tilapia', 'kreeft', 'krab', 'schol', 'sardine', 'zeebaars', 'dorade', 'paling', 'sint-jakobsschelp']),
-    # Vegetarisch & vegan producten (niet groente)
-    ('Vegetarisch & Vegan', ['tofu', 'tempeh', 'tahoe', 'seitan', 'quorn', 'soja', 'lupine']),
-    # Kaas
-    ('Kaas', ['kaas', 'parmezaan', 'mozzarella', 'feta', 'ricotta', 'mascarpone', 'grana', 'pecorino', 'emmentaler', 'gorgonzola', 'brie', 'camembert', 'cheddar', 'gouda', 'edam', 'gruyère']),
-    # Zuivel & eieren
-    ('Zuivel & Eieren', ['slagroom', 'karnemelk', 'volle melk', 'melk', 'yoghurt', 'kwark', 'boter', 'margarine', 'crème fraîche', 'fromage frais', 'zure room', 'room', 'ei', 'quark']),
-    # Bakkerij — vers brood
-    ('Bakkerij', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'focaccia', 'brioche', 'tortilla', 'pitabrood', 'naan', 'brood']),
-    # Pasta, rijst & granen — droge pasta en granen
-    ('Pasta, Rijst & Wereldkeuken', ['spaghetti', 'penne', 'rigatoni', 'fusilli', 'lasagne', 'tagliatelle', 'fettuccine', 'noodle', 'noedel', 'couscous', 'bulgur', 'quinoa', 'polenta', 'gnocchi', 'tortellini', 'ravioli', 'macaroni', 'pasta', 'rijst', 'risotto', 'mie', 'orzo']),
-    # Blikken & potten — conserven, peulvruchten in blik
-    ('Blikken & Potten', ['tomatenblokje', 'tomatenstukje', 'passata', 'kikkererwt', 'linzen', 'bruine bonen', 'witte bonen', 'kidneybonen', 'bonen', 'maïs', 'artisjok', 'olijf']),
-    # Soepen, sauzen, kruiden & olie
-    ('Soepen, Sauzen & Kruiden', ['tomatenpuree', 'olijfolie', 'zonnebloemolie', 'koolzaadolie', 'bouillon', 'fond', 'soep', 'ketchup', 'mosterd', 'mayonaise', 'sojasaus', 'worcester', 'tabasco', 'pesto', 'sambal', 'harissa', 'hoisin', 'misopasta', 'tahini', 'paprikapoeder', 'komijn', 'kaneel', 'kurkuma', 'oregano', 'laurier', 'honing', 'siroop', 'stroop', 'azijn', 'olie', 'zout', 'peper', 'nootmuskaat', 'kardemom', 'kruidnagel', 'steranijs', 'kerrie', 'curry', 'ras el hanout', 'five spice', 'za\'atar', 'sumak']),
-    # Bakken — droge bak-ingrediënten
-    ('Bakken', ['bloem', 'zelfrijzend', 'bakpoeder', 'maizena', 'gist', 'baksoda', 'vanille', 'vanillesuiker', 'amandelpoeder', 'amandelmeel', 'suiker', 'poedersuiker', 'basterdsuiker', 'rietsuiker', 'cacaopoeder', 'cacao']),
-    # Chocolade (apart van bakken, voor gebruik als ingredient/snack)
-    ('Koek, Snoep & Chocolade', ['chocolade', 'pure chocolade', 'melkchocolade', 'witte chocolade', 'koek', 'stroopwafel', 'biscuit', 'marshmallow']),
-    # Ontbijt & beleg
-    ('Ontbijt & Beleg', ['jam', 'marmelade', 'pindakaas', 'notenpasta', 'hagelslag', 'vlokken', 'muesli', 'havermout', 'granola', 'cornflakes', 'honing op brood']),
-    # Snacks & noten
-    ('Snacks & Noten', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'vijg', 'abrikoos', 'pinda']),
-    # Koffie & thee
-    ('Koffie & Thee', ['koffie', 'espresso', 'thee', 'groene thee', 'cacao poeder']),
-    # Alcoholische dranken — relevant als kookvloeistof
-    ('Bier, Wijn & Aperitieven', ['wijn', 'rode wijn', 'witte wijn', 'rosé', 'bier', 'cognac', 'rum', 'wodka', 'gin', 'whisky', 'port', 'marsala', 'sherry', 'champagne', 'prosecco', 'likeur', 'calvados', 'armagnac']),
-    # Frisdrank & water
-    ('Frisdrank & Water', ['limonade', 'cola', 'spa', 'mineraalwater', 'appelsap', 'sinaasappelsap', 'tomatensap', 'kokosmelk', 'amandelmelk', 'havermelk', 'sojamelk', 'water']),
-    # Groente & aardappelen — breed spectrum
-    ('Groente & Aardappelen', ['ui', 'rode ui', 'sjalot', 'knoflook', 'wortel', 'aardappel', 'zoete aardappel', 'bataat', 'prei', 'courgette', 'paprika', 'paparika', 'champignon', 'paddenstoel', 'shiitake', 'broccoli', 'bloemkool', 'romanesco', 'spinazie', 'komkommer', 'tomaat', 'tomaten', 'tomat', 'venkel', 'asperge', 'doperwt', 'erwt', 'biet', 'radijs', 'spruitje', 'kool', 'rode kool', 'witlof', 'paksoi', 'aubergine', 'chilipeper', 'gember', 'andijvie', 'sla', 'ijsbergsla', 'peterselie', 'basilicum', 'rozemarijn', 'tijm', 'bieslook', 'selderij', 'dragon', 'koriander', 'munt', 'salie', 'dille', 'mais', 'maïs', 'artisjok', 'palmhart', 'radicchio', 'rucola', 'rucolo', 'waterkers', 'knolselderij', 'pastinaak', 'rettich', 'raap', 'avocado', 'peen', 'groente']),
-    # Fruit — los van groente
-    ('Fruit', ['appel', 'peer', 'citroen', 'limoen', 'sinaasappel', 'mandarijn', 'grapefruit', 'banaan', 'banan', 'aardbei', 'framboos', 'blauwe bes', 'bosbes', 'braambes', 'kiwi', 'mango', 'ananas', 'papaja', 'passievrucht', 'granaatappel', 'pruim', 'kers', 'abrikoos', 'perzik', 'nectarine', 'vijg', 'meloen', 'watermeloen', 'lychee', 'kokos']),
+    ('Groente, Fruit & Aardappelen', ['vleestomaat', 'vleestomaten', 'bladspinazie', 'sperziebonen', 'sperzieboon', 'winterpeen', 'winterpenen', 'puntpaprika', 'bosui', 'bosuitje', 'bleekselderij', 'augurk', 'casave', 'cassave']),
+    ('Oliën, Sauzen & Smaakmakers', ['satésaus', 'sesamolie', 'ahornsiroop', 'boemboe', 'jus', 'saus']),
+    ('Ontbijt, Bakken & Desserts', ['maizena', 'maïzena', 'zelfrijzend']),
+    ('Brood & Bakkerij', ['volkoren bolletje', 'bolletje', 'papadum', 'chapati', 'wraps']),
+    ('Kaas & Vleeswaren', ['ontbijtspek', 'ontbijtspekje', 'burrata']),
+    ('Pasta, Rijst & Granen', ['basmatirijst', 'zilvervliesrijst', 'zilvervlies', 'conchiglie', 'bami goreng', 'nasi goreng', 'papadums']),
+    ('Dranken', ['bronwater', 'kraanwater']),
+
+    # ── 1. De Basis & Vers ──
+
+    # Vlees & Gevogelte
+    ('Vlees & Gevogelte', ['kipfilet', 'kippendij', 'kip', 'gehakt', 'varkensvlees', 'varken', 'rundvlees', 'rund', 'lamsrack', 'lam', 'biefstuk', 'tartaar', 'ossenhaas', 'entrecote', 'speklap', 'kalkoen', 'eend', 'konijn', 'wild', 'hert', 'klapstuk', 'riblap', 'cordon bleu', 'saté ajam', 'saté', 'vlees']),
+    # Vis & Schaaldieren
+    ('Vis & Schaaldieren', ['zalm', 'tonijn', 'vis', 'garnaal', 'mossel', 'inktvis', 'forel', 'haring', 'makreel', 'ansjovis', 'kabeljauw', 'tilapia', 'kreeft', 'krab', 'schol', 'sardine', 'zeebaars', 'dorade', 'paling', 'sint-jakobsschelp']),
+    # Vegetarisch & Plantaardig
+    ('Vegetarisch & Plantaardig', ['tofu', 'tempeh', 'tahoe', 'seitan', 'quorn', 'soja', 'lupine']),
+    # Kaas & Vleeswaren
+    ('Kaas & Vleeswaren', ['kaas', 'parmezaan', 'mozzarella', 'feta', 'ricotta', 'mascarpone', 'grana', 'pecorino', 'emmentaler', 'gorgonzola', 'brie', 'camembert', 'cheddar', 'gouda', 'edam', 'gruyère',
+                           'ham', 'salami', 'rookworst', 'cervelaat', 'leverworst', 'worst', 'chorizo', 'pancetta', 'prosciutto', 'spek', 'bacon', 'rookvlees', 'pastrami']),
+    # Zuivel, Plantaardige Zuivel & Eieren
+    ('Zuivel, Plantaardige Zuivel & Eieren', ['slagroom', 'karnemelk', 'volle melk', 'melk', 'yoghurt', 'kwark', 'boter', 'margarine', 'crème fraîche', 'fromage frais', 'zure room', 'room', 'ei', 'quark',
+                                               'kokosmelk', 'amandelmelk', 'havermelk', 'sojamelk']),
+
+    # ── 2. Voorraadkast (Pantry) & Smaakmakers ──
+
+    # Kruiden & Specerijen (droge kruiden + verse kruiden)
+    ('Kruiden & Specerijen', ['paprikapoeder', 'chilipoeder', 'komijn', 'kaneel', 'kurkuma', 'oregano', 'laurier', 'nootmuskaat', 'kardemom', 'kruidnagel', 'steranijs', 'kerrie', 'curry', 'ras el hanout', 'five spice', 'za\'atar', 'sumak', 'garam', 'massala', 'zout', 'peper', 'italiaanse kruiden', 'kruiden',
+                              'peterselie', 'basilicum', 'rozemarijn', 'tijm', 'bieslook', 'dragon', 'koriander', 'munt', 'salie', 'dille']),
+    # Oliën, Sauzen & Smaakmakers
+    ('Oliën, Sauzen & Smaakmakers', ['tomatenpuree', 'olijfolie', 'zonnebloemolie', 'koolzaadolie', 'bouillon', 'fond', 'soep', 'ketchup', 'mosterd', 'mayonaise', 'sojasaus', 'ketjap', 'worcester', 'tabasco', 'pesto', 'sambal', 'harissa', 'hoisin', 'misopasta', 'tahini', 'honing', 'siroop', 'stroop', 'azijn', 'olie']),
+    # Pasta, Rijst & Granen
+    ('Pasta, Rijst & Granen', ['spaghetti', 'penne', 'rigatoni', 'fusilli', 'lasagne', 'tagliatelle', 'fettuccine', 'noodle', 'noedel', 'couscous', 'bulgur', 'quinoa', 'polenta', 'gnocchi', 'tortellini', 'ravioli', 'macaroni', 'pasta', 'rijst', 'risotto', 'mie', 'orzo']),
+    # Conserven & Peulvruchten
+    ('Conserven & Peulvruchten', ['tomatenblokje', 'tomatenstukje', 'passata', 'kikkererwt', 'linzen', 'linze', 'bruine bonen', 'witte bonen', 'kidneybonen', 'kidney', 'zwarte bonen', 'chili boon', 'bonen', 'olijf']),
+    # Noten, Zaden & Gedroogd Fruit
+    ('Noten, Zaden & Gedroogd Fruit', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'pinda']),
+
+    # ── 3. Overig Eten & Drinken ──
+
+    # Brood & Bakkerij
+    ('Brood & Bakkerij', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'focaccia', 'brioche', 'tortilla', 'pitabrood', 'naan', 'brood']),
+    # Ontbijt, Bakken & Desserts
+    ('Ontbijt, Bakken & Desserts', ['bloem', 'zelfrijzend', 'bakpoeder', 'maizena', 'gist', 'baksoda', 'vanille', 'vanillesuiker', 'amandelpoeder', 'amandelmeel', 'suiker', 'poedersuiker', 'basterdsuiker', 'rietsuiker', 'cacaopoeder', 'cacao', 'paneermeel',
+                                    'jam', 'marmelade', 'pindakaas', 'notenpasta', 'hagelslag', 'vlokken', 'muesli', 'havermout', 'granola', 'cornflakes']),
+    # Snacks & Zoetwaren
+    ('Snacks & Zoetwaren', ['chocolade', 'pure chocolade', 'melkchocolade', 'witte chocolade', 'koek', 'stroopwafel', 'biscuit', 'marshmallow', 'chips', 'popcorn', 'snoep', 'kroepoek']),
+    # Dranken (alles: koffie, thee, fris, alcohol, sap)
+    ('Dranken', ['koffie', 'espresso', 'thee', 'groene thee',
+                 'limonade', 'cola', 'spa', 'mineraalwater', 'appelsap', 'sinaasappelsap', 'tomatensap', 'water',
+                 'wijn', 'rode wijn', 'witte wijn', 'rosé', 'bier', 'cognac', 'rum', 'wodka', 'gin', 'whisky', 'port', 'marsala', 'sherry', 'champagne', 'prosecco', 'likeur', 'calvados', 'armagnac']),
     # Diepvries
     ('Diepvries', ['diepvries', 'ingevroren', 'bevroren']),
+
+    # Groente, Fruit & Aardappelen — breed spectrum (onderaan: vangnet)
+    ('Groente, Fruit & Aardappelen', ['ui', 'rode ui', 'sjalot', 'knoflook', 'wortel', 'aardappel', 'zoete aardappel', 'bataat', 'prei', 'courgette', 'paprika', 'paparika', 'champignon', 'paddenstoel', 'shiitake', 'broccoli', 'bloemkool', 'romanesco', 'spinazie', 'komkommer', 'tomaat', 'tomaten', 'tomat', 'venkel', 'asperge', 'doperwt', 'erwt', 'biet', 'radijs', 'spruitje', 'kool', 'rode kool', 'witlof', 'paksoi', 'aubergine', 'chilipeper', 'gember', 'andijvie', 'sla', 'ijsbergsla', 'selderij', 'knolselderij', 'pastinaak', 'rettich', 'raap', 'avocado', 'peen', 'groente', 'mais', 'maïs', 'palmhart', 'radicchio', 'rucola', 'rucolo', 'waterkers',
+                                      'appel', 'peer', 'citroen', 'limoen', 'sinaasappel', 'mandarijn', 'grapefruit', 'banaan', 'banan', 'aardbei', 'framboos', 'blauwe bes', 'bosbes', 'braambes', 'kiwi', 'mango', 'ananas', 'papaja', 'passievrucht', 'granaatappel', 'pruim', 'kers', 'abrikoos', 'perzik', 'nectarine', 'vijg', 'meloen', 'watermeloen', 'lychee', 'kokos', 'artisjok']),
 ]
 
 def _normalize_ingredient(s):
@@ -2143,11 +2256,13 @@ def import_data():
                     continue
                 counts['ingredients'] += 1
 
+                raw_amount = ing_data.get('amount', 0)
+                norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
                 db.session.add(RecipeIngredient(
                     recipe_id=recipe.id,
                     ingredient_id=ingredient.id,
-                    amount=ing_data.get('amount', 0),
-                    unit=ing_data.get('unit', ''),
+                    amount=norm_amount,
+                    unit=norm_unit,
                     preparation=ing_data.get('preparation'),
                 ))
 
@@ -2312,11 +2427,13 @@ def import_zip():
                         db.session.add(ingredient)
                         db.session.flush()
                         counts['ingredients'] += 1
+                    raw_amount = ing_data.get('amount') or 0
+                    norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
                     db.session.add(RecipeIngredient(
                         recipe_id=recipe.id,
                         ingredient_id=ingredient.id,
-                        amount=ing_data.get('amount') or 0,
-                        unit=ing_data.get('unit', ''),
+                        amount=norm_amount,
+                        unit=norm_unit,
                     ))
                 counts['recipes'] += 1
 
@@ -2739,8 +2856,9 @@ def add_shopping_item(year, week):
     if not ing:
         return jsonify({'status': 'error', 'message': 'Ingrediënt niet gevonden'}), 404
 
-    amount = float(data.get('amount', 1))
-    unit = data.get('unit', 'stuks')
+    raw_amount = float(data.get('amount', 1))
+    raw_unit = data.get('unit', 'stuks')
+    unit, amount = _normalize_ri_unit(ing, raw_unit, raw_amount)
 
     # Remove any exclusion for this ingredient (user wants it back)
     ShoppingListExclusion.query.filter_by(
@@ -2789,45 +2907,7 @@ def send_to_ah(year, week):
     if not access_token:
         return jsonify({'status': 'error', 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}), 401
 
-    # Bouw boodschappenlijst (zelfde logica als shopping_list route)
-    menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
-    shopping_dict = {}
-
-    def _multiplier(serves, count):
-        try:
-            return count / serves if serves and count else 1
-        except ZeroDivisionError:
-            return 1
-
-    def _norm_unit(u):
-        return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())
-
-    for item in menu_items:
-        if item.skip_shopping_list or not item.recipe:
-            continue
-        m = _multiplier(item.recipe.serves, item.people_count)
-        for ri in item.recipe.ingredients:
-            key = (ri.ingredient_id, ri.ingredient.name, _norm_unit(ri.unit))
-            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
-
-    for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
-        if not qi.recipe:
-            continue
-        m = _multiplier(qi.recipe.serves, qi.people_count)
-        for ri in qi.recipe.ingredients:
-            key = (ri.ingredient_id, ri.ingredient.name, _norm_unit(ri.unit))
-            shopping_dict[key] = shopping_dict.get(key, 0) + ri.amount * m
-
-    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
-        key = (ci.ingredient_id, ci.ingredient.name, _norm_unit(ci.unit))
-        shopping_dict[key] = shopping_dict.get(key, 0) + ci.amount
-
-    # Filter out excluded ingredients
-    excluded_ids = {
-        e.ingredient_id
-        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
-    }
-    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
+    shopping_dict = _build_shopping_dict(year, week)
 
     if not shopping_dict:
         return jsonify({'status': 'ok', 'sent': 0, 'not_found': [], 'message': 'Boodschappenlijst is leeg'})
@@ -2841,7 +2921,7 @@ def send_to_ah(year, week):
 
     headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
 
-    for (ing_id, ing_name, unit), amount in shopping_dict.items():
+    for (ing_id, unit), amount in shopping_dict.items():
         ing = Ingredient.query.get(ing_id)
         if not ing or not ing.ah_product_id:
             continue
@@ -2875,75 +2955,196 @@ def send_to_ah(year, week):
 # ── End AH routes ────────────────────────────────────────────────────────────
 
 
+def _migrate_v1(conn):
+    """Alle historische migraties, geconsolideerd. Idempotent via PRAGMA-checks."""
+    recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
+    for col, col_def in [('url', 'TEXT'), ('instructions', 'TEXT'), ('serves', 'INTEGER')]:
+        if col not in recipe_cols:
+            try:
+                conn.execute(text(f'ALTER TABLE recipe ADD COLUMN {col} {col_def}'))
+            except OperationalError:
+                pass
+
+    menu_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(menu_item)')).fetchall()]
+    if 'people_count' not in menu_cols:
+        try:
+            conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
+        except OperationalError:
+            pass
+    if 'skip_shopping_list' not in menu_cols:
+        try:
+            conn.execute(text('ALTER TABLE menu_item ADD COLUMN skip_shopping_list BOOLEAN NOT NULL DEFAULT 0'))
+        except OperationalError:
+            pass
+
+    cookbook_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(cookbook)')).fetchall()]
+    if 'is_archived' not in cookbook_cols:
+        try:
+            conn.execute(text('ALTER TABLE cookbook ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0'))
+        except OperationalError:
+            pass
+
+    ingredient_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
+    for col, col_def in [
+        ('ah_product_id', 'INTEGER'),
+        ('ah_product_name', 'VARCHAR(200)'),
+        ('ah_product_size', 'VARCHAR(50)'),
+        ('ah_product_price', 'VARCHAR(20)'),
+        ('ah_product_image', 'VARCHAR(500)'),
+        ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
+        ('ah_product_updated', 'INTEGER'),
+        ('ah_product_color', 'VARCHAR(20)'),
+        ('display_name', "VARCHAR(100) NOT NULL DEFAULT ''"),
+        ('preparation', 'VARCHAR(100)'),
+        ('ah_pkg_qty', 'REAL'),
+        ('ah_pkg_unit', 'VARCHAR(20)'),
+        ('ah_conv_factor', 'REAL'),
+        ('ah_conv_unit', 'VARCHAR(20)'),
+    ]:
+        if col not in ingredient_cols:
+            try:
+                conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+            except OperationalError:
+                pass
+
+    ri_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_ingredient)')).fetchall()]
+    if 'preparation' not in ri_cols:
+        try:
+            conn.execute(text('ALTER TABLE recipe_ingredient ADD COLUMN preparation VARCHAR(100)'))
+        except OperationalError:
+            pass
+
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS ingredient_alias (
+            id INTEGER PRIMARY KEY,
+            alias VARCHAR(100) NOT NULL UNIQUE,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id)
+        )
+    '''))
+
+    conn.execute(text("""
+        UPDATE ingredient SET display_name = name
+        WHERE display_name = '' OR display_name IS NULL
+    """))
+
+    unparsed = conn.execute(text("""
+        SELECT id, ah_product_size FROM ingredient
+        WHERE ah_product_size IS NOT NULL AND ah_product_size != ''
+          AND ah_pkg_qty IS NULL
+    """)).fetchall()
+    for ing_id, size_str in unparsed:
+        parsed = _parse_product_size(size_str)
+        if parsed:
+            conn.execute(
+                text('UPDATE ingredient SET ah_pkg_qty = :qty, ah_pkg_unit = :unit WHERE id = :id'),
+                {'qty': parsed[0], 'unit': parsed[1], 'id': ing_id}
+            )
+
+    overig_ingredients = conn.execute(
+        text("SELECT id, name FROM ingredient WHERE category = 'Overig' OR category IS NULL")
+    ).fetchall()
+    for ing_id, ing_name in overig_ingredients:
+        new_cat = _guess_ingredient_category(ing_name)
+        if new_cat != 'Overig':
+            conn.execute(
+                text('UPDATE ingredient SET category = :cat WHERE id = :id'),
+                {'cat': new_cat, 'id': ing_id}
+            )
+
+    conn.execute(text('DELETE FROM shopping_list_override'))
+
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS shopping_list_exclusion (
+            id INTEGER PRIMARY KEY,
+            year INTEGER NOT NULL,
+            week_number INTEGER NOT NULL,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
+            UNIQUE(year, week_number, ingredient_id)
+        )
+    '''))
+
+
+def _migrate_v2(conn):
+    """Ingrediënt unit-normalisatie: preferred_unit kolom + conversietabel."""
+    ing_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
+    if 'preferred_unit' not in ing_cols:
+        conn.execute(text('ALTER TABLE ingredient ADD COLUMN preferred_unit VARCHAR(20)'))
+
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS ingredient_unit_conversion (
+            id INTEGER PRIMARY KEY,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
+            from_unit VARCHAR(20) NOT NULL,
+            to_unit VARCHAR(20) NOT NULL,
+            factor REAL NOT NULL,
+            UNIQUE(ingredient_id, from_unit)
+        )
+    '''))
+
+
+def _migrate_v3(conn):
+    """unit_type + display_unit kolommen, confidence/reasoning op conversietabel."""
+    ing_cols = [row[1] for row in conn.execute(
+        text('PRAGMA table_info(ingredient)')).fetchall()]
+    for col, col_def in [
+        ('unit_type',    'VARCHAR(20)'),
+        ('display_unit', 'VARCHAR(20)'),
+    ]:
+        if col not in ing_cols:
+            conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+
+    conv_cols = [row[1] for row in conn.execute(
+        text('PRAGMA table_info(ingredient_unit_conversion)')).fetchall()]
+    for col, col_def in [
+        ('confidence', 'REAL'),
+        ('reasoning',  'TEXT'),
+    ]:
+        if col not in conv_cols:
+            conn.execute(text(
+                f'ALTER TABLE ingredient_unit_conversion ADD COLUMN {col} {col_def}'))
+
+
+def _migrate_v4(conn):
+    """Migratie naar app-native categorieën (Source of Truth)."""
+    # 1:1 mapping voor niet-gesplitste categorieën
+    CATEGORY_MAP = {
+        'Groente & Aardappelen':       'Groente, Fruit & Aardappelen',
+        'Fruit':                       'Groente, Fruit & Aardappelen',
+        'Vlees':                       'Vlees & Gevogelte',
+        'Vis':                         'Vis & Schaaldieren',
+        'Vegetarisch & Vegan':         'Vegetarisch & Plantaardig',
+        'Vleeswaren':                  'Kaas & Vleeswaren',
+        'Kaas':                        'Kaas & Vleeswaren',
+        'Zuivel & Eieren':             'Zuivel, Plantaardige Zuivel & Eieren',
+        'Bakkerij':                    'Brood & Bakkerij',
+        'Pasta, Rijst & Wereldkeuken': 'Pasta, Rijst & Granen',
+        'Blikken & Potten':            'Conserven & Peulvruchten',
+        'Bakken':                      'Ontbijt, Bakken & Desserts',
+        'Ontbijt & Beleg':             'Ontbijt, Bakken & Desserts',
+        'Koek, Snoep & Chocolade':     'Snacks & Zoetwaren',
+        'Koffie & Thee':               'Dranken',
+        'Frisdrank & Water':           'Dranken',
+        'Bier, Wijn & Aperitieven':    'Dranken',
+        'Diepvries':                   'Diepvries',
+        'Overig':                      'Overig',
+    }
+    # Categorieën die gesplitst worden — herclassificatie via keywords
+    SPLIT_CATEGORIES = {'Soepen, Sauzen & Kruiden', 'Snacks & Noten'}
+
+    rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
+    for ing_id, ing_name, old_cat in rows:
+        if old_cat in SPLIT_CATEGORIES:
+            new_cat = _guess_ingredient_category(ing_name)
+        else:
+            new_cat = CATEGORY_MAP.get(old_cat, _guess_ingredient_category(ing_name))
+        conn.execute(
+            text('UPDATE ingredient SET category = :cat WHERE id = :id'),
+            {'cat': new_cat, 'id': ing_id}
+        )
+
+
 def migrate_db():
     with db.engine.connect() as conn:
-        recipe_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
-        for col, col_def in [('url', 'TEXT'), ('instructions', 'TEXT'), ('serves', 'INTEGER')]:
-            if col not in recipe_cols:
-                try:
-                    conn.execute(text(f'ALTER TABLE recipe ADD COLUMN {col} {col_def}'))
-                except OperationalError:
-                    pass
-
-        menu_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(menu_item)')).fetchall()]
-        if 'people_count' not in menu_cols:
-            try:
-                conn.execute(text('ALTER TABLE menu_item ADD COLUMN people_count INTEGER'))
-            except OperationalError:
-                pass
-        if 'skip_shopping_list' not in menu_cols:
-            try:
-                conn.execute(text('ALTER TABLE menu_item ADD COLUMN skip_shopping_list BOOLEAN NOT NULL DEFAULT 0'))
-            except OperationalError:
-                pass
-
-        cookbook_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(cookbook)')).fetchall()]
-        if 'is_archived' not in cookbook_cols:
-            try:
-                conn.execute(text('ALTER TABLE cookbook ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0'))
-            except OperationalError:
-                pass
-
-        ingredient_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(ingredient)')).fetchall()]
-        for col, col_def in [
-            ('ah_product_id', 'INTEGER'),
-            ('ah_product_name', 'VARCHAR(200)'),
-            ('ah_product_size', 'VARCHAR(50)'),
-            ('ah_product_price', 'VARCHAR(20)'),
-            ('ah_product_image', 'VARCHAR(500)'),
-            ('ah_product_bonus', 'BOOLEAN DEFAULT 0'),
-            ('ah_product_updated', 'INTEGER'),
-            ('ah_product_color', 'VARCHAR(20)'),
-            ('display_name', "VARCHAR(100) NOT NULL DEFAULT ''"),
-            ('preparation', 'VARCHAR(100)'),
-            ('ah_pkg_qty', 'REAL'),
-            ('ah_pkg_unit', 'VARCHAR(20)'),
-            ('ah_conv_factor', 'REAL'),
-            ('ah_conv_unit', 'VARCHAR(20)'),
-        ]:
-            if col not in ingredient_cols:
-                try:
-                    conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
-                except OperationalError:
-                    pass
-
-        # Add preparation column to recipe_ingredient
-        ri_cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_ingredient)')).fetchall()]
-        if 'preparation' not in ri_cols:
-            try:
-                conn.execute(text('ALTER TABLE recipe_ingredient ADD COLUMN preparation VARCHAR(100)'))
-            except OperationalError:
-                pass
-
-        # Create ingredient_alias table
-        conn.execute(text('''
-            CREATE TABLE IF NOT EXISTS ingredient_alias (
-                id INTEGER PRIMARY KEY,
-                alias VARCHAR(100) NOT NULL UNIQUE,
-                ingredient_id INTEGER NOT NULL REFERENCES ingredient(id)
-            )
-        '''))
-
         conn.execute(text('''
             CREATE TABLE IF NOT EXISTS settings (
                 id INTEGER PRIMARY KEY,
@@ -2952,51 +3153,32 @@ def migrate_db():
             )
         '''))
 
-        # Backfill display_name from name where empty
-        conn.execute(text("""
-            UPDATE ingredient SET display_name = name
-            WHERE display_name = '' OR display_name IS NULL
-        """))
+        row = conn.execute(
+            text("SELECT value FROM settings WHERE key = 'schema_version'")
+        ).fetchone()
+        current = int(row[0]) if row else 0
 
-        # Backfill ah_pkg_qty/ah_pkg_unit voor bestaande gekoppelde producten
-        unparsed = conn.execute(text("""
-            SELECT id, ah_product_size FROM ingredient
-            WHERE ah_product_size IS NOT NULL AND ah_product_size != ''
-              AND ah_pkg_qty IS NULL
-        """)).fetchall()
-        for ing_id, size_str in unparsed:
-            parsed = _parse_product_size(size_str)
-            if parsed:
+        if current < 1:
+            _migrate_v1(conn)
+        if current < 2:
+            _migrate_v2(conn)
+        if current < 3:
+            _migrate_v3(conn)
+        if current < 4:
+            _migrate_v4(conn)
+
+        target = 4
+        if current < target:
+            if row:
                 conn.execute(
-                    text('UPDATE ingredient SET ah_pkg_qty = :qty, ah_pkg_unit = :unit WHERE id = :id'),
-                    {'qty': parsed[0], 'unit': parsed[1], 'id': ing_id}
+                    text("UPDATE settings SET value = :v WHERE key = 'schema_version'"),
+                    {'v': str(target)}
                 )
-
-        # Herclassificeer alleen ingrediënten met categorie 'Overig'
-        overig_ingredients = conn.execute(
-            text("SELECT id, name FROM ingredient WHERE category = 'Overig' OR category IS NULL")
-        ).fetchall()
-        for ing_id, ing_name in overig_ingredients:
-            new_cat = _guess_ingredient_category(ing_name)
-            if new_cat != 'Overig':
+            else:
                 conn.execute(
-                    text('UPDATE ingredient SET category = :cat WHERE id = :id'),
-                    {'cat': new_cat, 'id': ing_id}
+                    text("INSERT INTO settings (key, value) VALUES ('schema_version', :v)"),
+                    {'v': str(target)}
                 )
-
-        # Qty-overrides worden niet meer persistent opgeslagen; tabel leegmaken.
-        conn.execute(text('DELETE FROM shopping_list_override'))
-
-        # Shopping list exclusions (afgevinkte items per week)
-        conn.execute(text('''
-            CREATE TABLE IF NOT EXISTS shopping_list_exclusion (
-                id INTEGER PRIMARY KEY,
-                year INTEGER NOT NULL,
-                week_number INTEGER NOT NULL,
-                ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
-                UNIQUE(year, week_number, ingredient_id)
-            )
-        '''))
 
         conn.commit()
 
