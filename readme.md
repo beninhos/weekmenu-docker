@@ -4,7 +4,7 @@ Een web-applicatie om je weekmenu te plannen en automatisch boodschappenlijsten 
 
 ## Functionaliteiten
 
-### 📋 Recepten
+### recepten
 - Beheer recepten met ingrediënten en aantal personen
 - **Automatisch importeren van online recepten via URL** — scrape titel, afbeelding, ingrediënten, bereidingswijze
 - **Autocomplete voor ingrediënten** — zoek bestaande ingrediënten terwijl je typt
@@ -14,40 +14,35 @@ Een web-applicatie om je weekmenu te plannen en automatisch boodschappenlijsten 
 - Afbeelding upload voor recepten en kookboeken
 - Favorieten, recent gebruikt en populaire recepten
 
-### 📅 Weekmenu & Planning
+### Weekmenu & Planning
 - Plan weekmenu's voor ontbijt, lunch en diner
 - **3 weergaven**: rasterkaart, coverflow (flip-through), en lijstweergave
 - **Detail-panel**: volledige receptinfo, ingrediënten-checklist, afbeelding
 - Portie aanpassing op basis van aantal personen per maaltijd (automatische herberekening)
-- Keyboard-navigatie: pijltjes of klik om recepten te bladeren
 
-### 🛒 Boodschappenlijst
+### Boodschappenlijst
 - **Automatisch gegenereerde boodschappenlijst per productgroep**
 - Aggregatie op ingredient_id + eenheid (geen dubbele regels meer)
 - **AH-productkoppeling**: zoeken en koppelen van Albert Heijn producten
-- Kleurgecodeerde productblokken (per merk/verpakking)
-- Hoeveelheid-controls (−/+/🗑) met persistentie
-- Vink items af (strikethrough)
-- Wissen en versturen naar AH
 
 ### 🔗 Albert Heijn Integratie
 - **Productkoppeling**: zoek AH-producten en koppel ze aan ingrediënten
 - **Boodschappenlijst → AH-app**: verstuur gegenereerde lijst rechtstreeks naar je AH-winkelkarretje (OAuth via reverse proxy)
 - Bonus-aanduidingen en actuele prijzen
-- AH-categorie grouping (Vers, Pantry, Drank, etc.)
+- AH-categorie grouping
 
-### 📚 Kookboeken
+### Kookboeken
 - Beheer kookboeken met afbeelding
 - Sorteren en filteren op kookboek
 - Recepten verplaatsen tussen kookboeken
 - Archiveren/terugzetten van kookboeken
 
-### 💾 Import/Export
+### Import/Export
 - **Import**: recepten vanuit URL, JSON-bestanden
 - **Export**: alle recepten als JSON
 - Bewaar bakups van je receptenverzameling
 
-### 🎨 UI/UX
+### UI/UX
 - **Ink & Paper kleurpalet**: warm grijs/bruin/beige design
 - **Tailwind CSS v3** met arbitrary value support
 - Responsive design (mobile-first)
