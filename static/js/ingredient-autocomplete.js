@@ -1,18 +1,17 @@
-let acDebounce = null;
-
 /* -- Autocomplete ------------------------------------------------ */
 function initAutocomplete(input) {
     const wrap = input.closest('.relative') || input.parentElement;
     const dropdown = wrap.querySelector('.ac-dropdown');
     const hiddenId = wrap.querySelector('input[name="ingredient_id[]"]');
     let activeIdx = -1;
+    let debounce = null;
 
     input.addEventListener('input', () => {
         hiddenId.value = '';
         const q = input.value.trim();
-        clearTimeout(acDebounce);
+        clearTimeout(debounce);
         if (q.length < 1) { dropdown.classList.add('hidden'); return; }
-        acDebounce = setTimeout(() => fetchResults(q, dropdown, input, hiddenId), 200);
+        debounce = setTimeout(() => fetchResults(q, dropdown, input, hiddenId), 200);
     });
 
     input.addEventListener('keydown', (e) => {

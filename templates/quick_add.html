@@ -6,10 +6,10 @@
         <div class="flex items-center space-x-4">
             <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Quick Add</h2>
             <div class="flex items-center space-x-2">
-                <a href="{{ url_for('quick_add', year=year, week=week-1) }}" 
+                <a href="{{ url_for('menu.quick_add', year=year, week=week-1) }}" 
                    class="text-[#6B6B6B] hover:text-[#2C2C2C]">←</a>
                 <span class="font-medium">Week {{ week }}</span>
-                <a href="{{ url_for('quick_add', year=year, week=week+1) }}" 
+                <a href="{{ url_for('menu.quick_add', year=year, week=week+1) }}" 
                    class="text-[#6B6B6B] hover:text-[#2C2C2C]">→</a>
             </div>
         </div>

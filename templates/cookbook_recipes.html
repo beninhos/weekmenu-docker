@@ -12,11 +12,11 @@
             <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ cookbook.name }}</h1>
         </div>
         <div class="space-x-2">
-            <a href="{{ url_for('new_recipe') }}" 
+            <a href="{{ url_for('recipes.new_recipe') }}" 
                class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded">
                 Nieuw Recept
             </a>
-            <a href="{{ url_for('list_cookbooks') }}" 
+            <a href="{{ url_for('recipes.list_cookbooks') }}" 
                class="border border-[#D4CEC4] text-[#2C2C2C] font-medium py-2 px-4 rounded hover:bg-[#F5F2ED]">
                 Terug naar Kookboeken
             </a>
@@ -44,7 +44,7 @@
                     
                     <div>
                         <h3 class="font-semibold text-[#2C2C2C]">
-                            <a href="{{ url_for('edit_recipe', id=recipe.id) }}" class="hover:text-[#8B4513]">{{ recipe.name }}</a>
+                            <a href="{{ url_for('recipes.edit_recipe', id=recipe.id) }}" class="hover:text-[#8B4513]">{{ recipe.name }}</a>
                         </h3>
                         <div class="flex items-center space-x-3 text-sm text-[#6B6B6B]">
                             {% if recipe.page %}
@@ -64,7 +64,7 @@
                             data-is-favorite="{{ recipe.is_favorite|lower }}">
                         {{ '⭐' if recipe.is_favorite else '☆' }}
                     </button>
-                    <a href="{{ url_for('edit_recipe', id=recipe.id) }}" 
+                    <a href="{{ url_for('recipes.edit_recipe', id=recipe.id) }}" 
                        class="bg-[#2C2C2C] hover:bg-[#2C2C2C] text-white py-1 px-3 rounded text-sm">
                         Bewerken
                     </a>

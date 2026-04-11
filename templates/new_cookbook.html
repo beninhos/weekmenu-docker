@@ -14,7 +14,7 @@
     {% endif %}
     {% endwith %}
     
-    <form method="POST" action="{{ url_for('new_cookbook') }}" enctype="multipart/form-data" class="bg-[#F5F2ED] border border-[#E8E4DC] rounded px-8 pt-6 pb-8 mb-4">
+    <form method="POST" action="{{ url_for('recipes.new_cookbook') }}" enctype="multipart/form-data" class="bg-[#F5F2ED] border border-[#E8E4DC] rounded px-8 pt-6 pb-8 mb-4">
         <div class="mb-4">
             <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="name">
                 Naam
@@ -46,7 +46,7 @@
                     class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
                 Opslaan
             </button>
-            <a href="{{ url_for('list_cookbooks') }}" 
+            <a href="{{ url_for('recipes.list_cookbooks') }}" 
                class="border border-[#D4CEC4] text-[#2C2C2C] font-medium py-2 px-4 rounded hover:bg-[#F5F2ED]">
                 Annuleren
             </a>

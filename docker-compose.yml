@@ -17,3 +17,4 @@ services:
       - FLASK_RUN_HOST=10.0.1.3
       - DATABASE_URL=sqlite:////data/weekmenu.db
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}

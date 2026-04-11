@@ -19,17 +19,18 @@
         <div class="flex items-center gap-2 flex-wrap">
             <!-- Week navigatie -->
             <div class="flex items-center rounded-lg overflow-hidden" style="border: 1px solid var(--color-border); background: white;">
-                <a href="{{ url_for('week_menu', year=year, week=week-1) }}"
+                <a href="{{ url_for('menu.week_menu', year=year, week=week-1) }}"
                    style="color: var(--color-pencil); text-decoration:none;"
                    class="px-3 py-2 text-sm transition-colors hover:bg-[#F5F2ED]">&#8592;</a>
                 <span class="px-3 py-2 text-sm font-medium" style="color: var(--color-ink); border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border);">Week {{ week }}</span>
-                <a href="{{ url_for('week_menu', year=year, week=week+1) }}"
+                <a href="{{ url_for('menu.week_menu', year=year, week=week+1) }}"
                    style="color: var(--color-pencil); text-decoration:none;"
                    class="px-3 py-2 text-sm transition-colors hover:bg-[#F5F2ED]">&#8594;</a>
             </div>
-            <button onclick="copyPreviousWeek()"
-                    class="btn-secondary inline-flex items-center gap-1.5 text-sm">
-                &#8635; Kopieer week
+            <button onclick="clearWeek()"
+                    class="btn-secondary inline-flex items-center gap-1.5 text-sm"
+                    style="color: #b91c1c;">
+                &#10005; Week wissen
             </button>
         </div>
     </div>
@@ -510,12 +511,12 @@ document.querySelectorAll('.meal-select-btn').forEach(btn => {
     });
 });
 
-// ── Vorige week kopiëren ────────────────────────────────────────────────────
+// ── Week wissen ────────────────────────────────────────────────────────────
 
-async function copyPreviousWeek() {
-    if (!confirm('Weet je zeker dat je het menu van de vorige week wilt kopiëren? Het huidige menu wordt overschreven.')) return;
+async function clearWeek() {
+    if (!confirm('Weet je zeker dat je het complete weekmenu wilt wissen? Dit verwijdert ook de boodschappenlijst.')) return;
     try {
-        const response = await fetch('/copy_previous_week', {
+        const response = await fetch('/clear_week_menu', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ week: {{ week }}, year: {{ year }} })
@@ -524,7 +525,7 @@ async function copyPreviousWeek() {
         if (data.status === 'success') location.reload();
         else alert('Fout: ' + (data.message || 'Onbekende fout'));
     } catch (error) {
-        alert('Fout bij kopiëren: ' + error.message);
+        alert('Fout bij wissen: ' + error.message);
     }
 }
 

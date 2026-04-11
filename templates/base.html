@@ -156,20 +156,20 @@
 <body>
     <nav style="background: var(--color-paper); border-bottom: 1px solid var(--color-border);">
         <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-            <a href="{{ url_for('index') }}" style="text-decoration:none;" class="flex items-center gap-2">
+            <a href="{{ url_for('main.index') }}" style="text-decoration:none;" class="flex items-center gap-2">
                 <img src="{{ url_for('static', filename='favicon-light.svg') }}" alt="" style="width:28px;height:28px;border-radius:6px;">
                 <span style="font-family: var(--font-serif); font-size: 1.25rem; color: var(--color-ink); letter-spacing: -0.02em;">Weekmenu</span>
             </a>
 
             <div class="hidden md:flex items-center gap-6">
-                <a href="{{ url_for('receptenplanner') }}"
-                   class="text-sm {% if request.endpoint == 'receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
-                <a href="{{ url_for('boodschappenlijst_redirect') }}"
-                   class="text-sm {% if request.endpoint == 'boodschappenlijst' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
+                <a href="{{ url_for('recipes.receptenplanner') }}"
+                   class="text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
+                <a href="{{ url_for('main.boodschappenlijst_redirect') }}"
+                   class="text-sm {% if request.endpoint == 'main.boodschappenlijst_redirect' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
             </div>
 
             <div class="flex items-center gap-4">
-                <a href="{{ url_for('settings') }}"
+                <a href="{{ url_for('settings.settings_page') }}"
                    class="w-8 h-8 flex items-center justify-center rounded-md border"
                    style="border-color: var(--color-linen); text-decoration:none;">
                     <svg class="w-4 h-4" fill="currentColor" style="color: var(--color-pencil);" viewBox="0 0 20 20">

@@ -8,14 +8,14 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
 <div class="mb-6">
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Kookboeken</h1>
-        <a href="{{ url_for('new_cookbook') }}" class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded">
+        <a href="{{ url_for('recipes.new_cookbook') }}" class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded">
             Nieuw Kookboek
         </a>
     </div>
 
     {% macro cookbook_card(cookbook) %}
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] overflow-hidden hover:shadow-lg transition-shadow duration-200{% if cookbook.is_archived %} opacity-60{% endif %}">
-        <a href="{{ url_for('list_cookbook_recipes', id=cookbook.id) }}" class="block">
+        <a href="{{ url_for('recipes.list_cookbook_recipes', id=cookbook.id) }}" class="block">
             <div class="aspect-w-3 aspect-h-4">
                 {% if cookbook.image_path %}
                 <img src="{{ url_for('static', filename=cookbook.image_path.replace('static/', '')) }}"

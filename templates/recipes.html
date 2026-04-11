@@ -3,7 +3,7 @@
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten</h2>
-        <a href="{{ url_for('new_recipe') }}"
+        <a href="{{ url_for('recipes.new_recipe') }}"
            class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
             Nieuw Recept
         </a>
@@ -46,7 +46,7 @@
                                 data-is-favorite="{{ recipe.is_favorite|lower }}">
                             {{ '⭐' if recipe.is_favorite else '☆' }}
                         </button>
-                        <a href="{{ url_for('edit_recipe', id=recipe.id) }}"
+                        <a href="{{ url_for('recipes.edit_recipe', id=recipe.id) }}"
                            class="text-[#8B4513] hover:text-[#8B4513]">Bewerken</a>
                         <button onclick="deleteRecipe({{ recipe.id }})"
                                 class="text-red-500 hover:text-red-700">Verwijderen</button>

@@ -191,7 +191,7 @@
           class="border border-[#D4CEC4] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A882] bg-white">
     <option value="">Alle kookboeken</option>
   </select>
-  <a href="{{ url_for('new_recipe') }}"
+  <a href="{{ url_for('recipes.new_recipe') }}"
      class="inline-flex items-center gap-1.5 bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors ml-auto"
      style="text-decoration:none;">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -363,6 +363,7 @@
 <div id="toast"></div>
 
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script>
 // ── Data ──────────────────────────────────────────────────
 const RECIPES         = {{ recipes_json | safe }};
@@ -389,7 +390,7 @@ function cardImage(r, w, h) {
                  style="width:${w};height:${h};object-fit:cover;display:block;">`;
   }
   return `<div style="width:${w};height:${h};display:flex;align-items:center;justify-content:center;">
-    <span style="font-size:2.5rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span>
+    <span style="font-size:2.5rem;font-weight:800;color:#D4CEC4;">${esc((r.name?.[0] ?? '?').toUpperCase())}</span>
   </div>`;
 }
 
@@ -464,7 +465,7 @@ function renderGrid() {
     <div class="recipe-card-grid" onclick="openDetail(${r.id})">
       ${r.image_path
         ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy">`
-        : `<div class="card-placeholder"><span style="font-size:3rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span></div>`
+        : `<div class="card-placeholder"><span style="font-size:3rem;font-weight:800;color:#D4CEC4;">${esc((r.name?.[0] ?? '?').toUpperCase())}</span></div>`
       }
       <div class="card-overlay">
         <span style="color:white;font-weight:600;font-size:0.8rem;line-height:1.25;
@@ -496,7 +497,7 @@ function renderCoverflow() {
     div.innerHTML = r.image_path
       ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy">`
       : `<div class="cf-placeholder" style="background:#F5F2ED;">
-           <span style="font-size:4rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span>
+           <span style="font-size:4rem;font-weight:800;color:#D4CEC4;">${esc((r.name?.[0] ?? '?').toUpperCase())}</span>
          </div>`;
     div.innerHTML += `<div class="cf-label">${esc(r.name)}</div>`;
     div.addEventListener('click', () => {
@@ -565,7 +566,7 @@ function renderList() {
         ${r.image_path
           ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;">`
           : `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;">
-               <span style="font-size:1.4rem;font-weight:800;color:#D4CEC4;">${esc(r.name[0].toUpperCase())}</span>
+               <span style="font-size:1.4rem;font-weight:800;color:#D4CEC4;">${esc((r.name?.[0] ?? '?').toUpperCase())}</span>
              </div>`
         }
       </div>
@@ -599,7 +600,7 @@ function openDetail(recipeId) {
   } else {
     img.style.display = 'none';
     ph.style.display  = 'flex';
-    document.getElementById('dp-initial').textContent = r.name[0].toUpperCase();
+    document.getElementById('dp-initial').textContent = (r.name?.[0] ?? '?').toUpperCase();
   }
 
   document.getElementById('dp-name').textContent = r.name;
@@ -617,7 +618,7 @@ function openDetail(recipeId) {
 
   const instrWrap = document.getElementById('dp-instr-wrap');
   if (r.instructions) {
-    document.getElementById('dp-instr').innerHTML = r.instructions;
+    document.getElementById('dp-instr').innerHTML = DOMPurify.sanitize(r.instructions);
     instrWrap.style.display = 'block';
   } else {
     instrWrap.style.display = 'none';

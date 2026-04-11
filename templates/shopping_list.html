@@ -287,8 +287,8 @@ async function doSearch(input) {
                     ${p.image ? `<img src="${p.image}" class="w-full h-full object-contain p-1.5" style="mix-blend-mode:multiply" alt="">` : ''}
                 </div>
                 <div class="flex-grow min-w-0">
-                    <div class="text-sm font-semibold text-[#2C2C2C] truncate">${p.title}</div>
-                    <div class="text-xs text-[#6B6B6B]">${p.size || ''}</div>
+                    <div class="text-sm font-semibold text-[#2C2C2C] truncate">${esc(p.title)}</div>
+                    <div class="text-xs text-[#6B6B6B]">${esc(p.size || '')}</div>
                 </div>
                 <div class="text-right shrink-0">
                     ${p.isBonus ? '<div style="font-size:10px" class="font-semibold bg-[#FDF8F3] text-[#8B4513] px-1 rounded mb-0.5">BONUS</div>' : ''}

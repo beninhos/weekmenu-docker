@@ -41,7 +41,7 @@
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-1">Recepten</h3>
                 <p class="text-sm text-[#6B6B6B]">Alle recepten, ook bereikbaar via Kookboeken.</p>
             </div>
-            <a href="{{ url_for('receptenplanner') }}"
+            <a href="{{ url_for('recipes.receptenplanner') }}"
                class="text-sm bg-[#2C2C2C] text-white px-3 py-1.5 rounded hover:bg-[#2C2C2C] shrink-0">
                 Recepten →
             </a>
@@ -55,7 +55,7 @@
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-1">Kookboeken</h3>
                 <p class="text-sm text-[#6B6B6B]">Beheer je kookboeken: toevoegen, hernoemen, archiveren.</p>
             </div>
-            <a href="{{ url_for('list_cookbooks') }}"
+            <a href="{{ url_for('recipes.list_cookbooks') }}"
                class="text-sm bg-[#2C2C2C] text-white px-3 py-1.5 rounded hover:bg-[#2C2C2C] shrink-0">
                 Kookboeken →
             </a>
@@ -100,7 +100,7 @@
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6" id="ah-account">
         <div class="flex items-center justify-between mb-4">
             <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B]">Albert Heijn</h3>
-            <a href="{{ url_for('ah_products') }}"
+            <a href="{{ url_for('ah.ah_products') }}"
                class="text-sm bg-[#2C2C2C] text-white px-3 py-1.5 rounded hover:bg-[#1a1a1a]">
                 AH Producten →
             </a>
@@ -233,7 +233,7 @@
                     <p class="font-medium">Exporteer als JSON</p>
                     <p class="text-sm text-[#6B6B6B] mt-1">Download alle recepten, ingrediënten en kookboeken als JSON-bestand (zonder afbeeldingen).</p>
                 </div>
-                <a href="{{ url_for('export_data') }}"
+                <a href="{{ url_for('import_export.export_data') }}"
                    class="ml-6 shrink-0 bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
                     Exporteer JSON
                 </a>
@@ -247,7 +247,7 @@
                     <p class="font-medium">Exporteer als ZIP (met afbeeldingen)</p>
                     <p class="text-sm text-[#6B6B6B] mt-1">Download alle recepten, kookboeken én afbeeldingen als één ZIP-bestand. Ideaal voor volledige back-ups.</p>
                 </div>
-                <a href="{{ url_for('export_zip') }}"
+                <a href="{{ url_for('import_export.export_zip') }}"
                    class="ml-6 shrink-0 bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
                     Exporteer ZIP
                 </a>

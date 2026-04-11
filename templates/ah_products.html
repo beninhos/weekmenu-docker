@@ -8,7 +8,7 @@
             <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">AH Producten</h2>
             <p class="text-sm text-[#6B6B6B] mt-1">Koppel per ingrediënt je voorkeurs-AH-product. Eenmalig instellen, altijd gebruikt bij "Stuur naar AH".</p>
         </div>
-        <a href="{{ url_for('settings') }}" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C]">← Instellingen</a>
+        <a href="{{ url_for('settings.settings_page') }}" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C]">← Instellingen</a>
     </div>
 
     <!-- Zoekfilter -->
@@ -74,7 +74,7 @@
                     </div>
                 </div>
                 <div class="flex flex-col gap-2 flex-shrink-0">
-                    <button onclick="refreshIngredient({{ ing.id }})"
+                    <button onclick="refreshIngredient({{ ing.id }}, event)"
                             title="Ververs productinfo"
                             class="text-xs text-[#6B6B6B] hover:text-[#8B4513] border border-[#E8E4DC] px-2 py-1 rounded hover:border-[#D4CEC4] transition-colors">
                         🔄
@@ -108,7 +108,7 @@
                                id="convUnit-{{ ing.id }}" class="w-24 text-sm border-[#D4CEC4] rounded"
                                placeholder="recept-eenheid">
                     </div>
-                    <button onclick="savePkg({{ ing.id }})"
+                    <button onclick="savePkg({{ ing.id }}, event)"
                             class="text-xs bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">Opslaan</button>
                 </div>
             </div>
@@ -147,6 +147,7 @@
 
 </div>
 
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script>
 function filterIngredients(q) {
     const lower = q.toLowerCase();
@@ -183,8 +184,8 @@ async function doSearch(id) {
                 ? `<img src="${p.image}" class="w-12 h-12 object-contain rounded flex-shrink-0">`
                 : `<div class="w-12 h-12 bg-[#F5F2ED] rounded flex-shrink-0"></div>`}
             <div class="min-w-0">
-                <p class="text-xs font-medium text-[#2C2C2C] leading-tight line-clamp-2">${p.title}</p>
-                <p class="text-xs text-[#6B6B6B]">${p.size}</p>
+                <p class="text-xs font-medium text-[#2C2C2C] leading-tight line-clamp-2">${esc(p.title)}</p>
+                <p class="text-xs text-[#6B6B6B]">${esc(p.size)}</p>
                 <div class="flex items-center gap-1 mt-0.5">
                     ${p.price ? `<span class="text-xs font-semibold">€${p.price}</span>` : ''}
                     ${p.isBonus ? '<span class="text-xs bg-[#C9A882] text-[#2C2C2C] font-bold px-1 rounded">BONUS</span>' : ''}
@@ -211,7 +212,7 @@ function togglePkg(id) {
     btn.textContent = wasHidden ? '▾ Verpakking instellen' : '▸ Verpakking instellen';
 }
 
-async function savePkg(id) {
+async function savePkg(id, event) {
     const btn = event.target;
     const data = {
         ah_pkg_qty:     parseFloat(document.getElementById('pkgQty-' + id).value) || null,
@@ -228,7 +229,7 @@ async function savePkg(id) {
     setTimeout(() => btn.textContent = 'Opslaan', 1500);
 }
 
-async function refreshIngredient(ingId) {
+async function refreshIngredient(ingId, event) {
     const btn = event.target;
     btn.textContent = '⏳';
     btn.disabled = true;
