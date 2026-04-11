@@ -166,34 +166,33 @@
             </a>
 
             <div class="hidden md:flex items-center gap-6">
+                <a href="{{ url_for('main.index') }}"
+                   class="text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Week</a>
                 <a href="{{ url_for('recipes.receptenplanner') }}"
                    class="text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
                 <a href="{{ url_for('main.boodschappenlijst_redirect') }}"
                    class="text-sm {% if request.endpoint == 'main.boodschappenlijst_redirect' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
+                <a href="{{ url_for('settings.settings_page') }}"
+                   class="text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
             </div>
 
-            <div class="flex items-center gap-2">
-                <a href="{{ url_for('settings.settings_page') }}"
-                   class="w-8 h-8 flex items-center justify-center rounded-md border"
-                   style="border-color: var(--color-linen); text-decoration:none;">
-                    <svg class="w-4 h-4" fill="currentColor" style="color: var(--color-pencil);" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-                    </svg>
-                </a>
-                <button onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
-                        class="md:hidden w-8 h-8 flex items-center justify-center rounded-md border"
-                        style="border-color: var(--color-linen);">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" style="color: var(--color-pencil);" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                </button>
-            </div>
+            <button onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
+                    class="md:hidden w-8 h-8 flex items-center justify-center rounded-md border"
+                    style="border-color: var(--color-linen);">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" style="color: var(--color-pencil);" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
         </div>
         <div id="mobile-menu" class="hidden md:hidden border-t px-4 pb-3 pt-2 space-y-2" style="border-color: var(--color-border);">
+            <a href="{{ url_for('main.index') }}"
+               class="block py-2 text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Week</a>
             <a href="{{ url_for('recipes.receptenplanner') }}"
                class="block py-2 text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
             <a href="{{ url_for('main.boodschappenlijst_redirect') }}"
                class="block py-2 text-sm {% if request.endpoint == 'main.boodschappenlijst_redirect' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
+            <a href="{{ url_for('settings.settings_page') }}"
+               class="block py-2 text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
         </div>
     </nav>
 

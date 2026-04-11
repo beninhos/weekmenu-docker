@@ -62,13 +62,16 @@ def _clean_html(html):
 
 
 def _sanitize_json(text):
-    """Strip markdown code fences from LLM response."""
+    """Strip markdown code fences and extra whitespace from LLM response."""
     text = text.strip()
+    # Strip markdown fences (with optional language tag)
     if text.startswith('```'):
-        text = text.split('\n', 1)[1]
+        text = text.split('\n', 1)[1] if '\n' in text else text[3:]
         if text.endswith('```'):
             text = text.rsplit('```', 1)[0]
         text = text.strip()
+    # Strip trailing commas before } or ]
+    text = re.sub(r',(\s*[}\]])', r'\1', text)
     return text
 
 
@@ -565,7 +568,8 @@ def scrape_recipe():
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.0-flash')
             response = model.generate_content(prompt)
-            result = json.loads(_sanitize_json(response.text))
+            sanitized = _sanitize_json(response.text)
+            result = json.loads(sanitized)
 
             if 'error' in result:
                 return jsonify({'status': 'error', 'message': result['error']}), 400
@@ -591,8 +595,10 @@ def scrape_recipe():
                 'cookbook_id': cookbook_id,
                 'cookbook_name': cookbook_name,
             })
-        except Exception:
-            return jsonify({'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina.'}), 400
+        except json.JSONDecodeError as e:
+            return jsonify({'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}), 400
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': f'Fout bij verwerken: {str(e)[:100]}'}), 400
 
     try:
         title = scraper.title() or ''
@@ -738,7 +744,8 @@ def recipe_from_photo():
             content.append({'mime_type': img['mime_type'], 'data': img['data']})
 
         response = model.generate_content(content)
-        result = _json.loads(_sanitize_json(response.text))
+        sanitized = _sanitize_json(response.text)
+        result = _json.loads(sanitized)
 
         if 'error' in result:
             return jsonify({'status': 'error', 'message': result['error']}), 400
@@ -756,6 +763,6 @@ def recipe_from_photo():
         })
 
     except _json.JSONDecodeError as e:
-        return jsonify({'status': 'error', 'message': f'Kon recept niet parsen: {e}'}), 400
+        return jsonify({'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}), 400
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Fout bij verwerken: {str(e)}'}), 400
+        return jsonify({'status': 'error', 'message': f'Fout bij verwerken: {str(e)[:100]}'}), 400
