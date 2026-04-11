@@ -14,7 +14,7 @@ from weekmenu.models import (
     Recipe, Ingredient, IngredientAlias, Cookbook,
     RecipeIngredient, Settings,
 )
-from weekmenu.constants import PRODUCT_CATEGORIES, _BROWSER_HEADERS
+from weekmenu.constants import PRODUCT_CATEGORIES, _BROWSER_HEADERS, DUTCH_UNITS
 from weekmenu.services.units import (
     _normalize_ingredient, _guess_ingredient_category,
     _normalize_ri_unit, parse_ingredients_from_list,
@@ -23,6 +23,70 @@ from weekmenu.services.recipes import (
     _resolve_or_create_ingredient, _get_or_create_site_cookbook,
     _get_gemini_api_key,
 )
+
+_VALID_UNITS = sorted(set(DUTCH_UNITS.values()))
+_UNITS_STR = ', '.join(_VALID_UNITS)
+
+_GEMINI_RECIPE_PROMPT = f"""Extraheer het recept. Geef ALLEEN geldige JSON terug, geen markdown.
+
+{{
+  "title": "Recept naam",
+  "yields": 4,
+  "prep_time": 30,
+  "ingredients": [
+    {{"name": "bloem", "amount": 200, "unit": "g"}},
+    {{"name": "eieren", "amount": 3, "unit": "stuks"}}
+  ],
+  "instructions": "Stap 1. Verwarm de oven...\\nStap 2. Meng..."
+}}
+
+Regels:
+- Gebruik ALLEEN deze eenheden voor "unit": {_UNITS_STR}
+- "amount" is een getal (int of float), of null als onbekend
+- Converteer breuken naar decimalen: ½ → 0.5, ¼ → 0.25, "anderhalve" → 1.5
+- Haal hoeveelheden uit de naam en zet ze in "amount"
+- "name" is de ingrediëntnaam zonder hoeveelheid of eenheid
+- "instructions" als enkele string met stappen gescheiden door newlines
+- "prep_time" in minuten (int of null)
+- Als er geen recept gevonden kan worden: {{"error": "Geen recept gevonden"}}
+"""
+
+
+def _clean_html(html):
+    """Strip non-content HTML tags, return plain text (max 10k chars)."""
+    for tag in ('script', 'style', 'nav', 'footer', 'iframe'):
+        html = re.sub(rf'<{tag}[^>]*>.*?</{tag}>', ' ', html, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', ' ', html)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text[:10000]
+
+
+def _sanitize_json(text):
+    """Strip markdown code fences from LLM response."""
+    text = text.strip()
+    if text.startswith('```'):
+        text = text.split('\n', 1)[1]
+        if text.endswith('```'):
+            text = text.rsplit('```', 1)[0]
+        text = text.strip()
+    return text
+
+
+def _build_gemini_ingredients(raw_list):
+    """Convert structured LLM ingredient dicts to app format with category."""
+    ingredients = []
+    for ing in raw_list:
+        name = (ing.get('name') or '').strip()
+        if not name:
+            continue
+        ingredients.append({
+            'name': name,
+            'amount': ing.get('amount'),
+            'unit': ing.get('unit') or '',
+            'category': _guess_ingredient_category(name),
+        })
+    return ingredients
+
 
 bp = Blueprint('recipes', __name__)
 
@@ -113,7 +177,7 @@ def new_cookbook():
         if image and image.filename:
             filename = secure_filename(image.filename)
             image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.root_path, image_path))
+            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
 
         new_cb = Cookbook(name=cookbook_name, abbreviation=abbreviation, image_path=image_path)
         db.session.add(new_cb)
@@ -141,7 +205,7 @@ def edit_cookbook(id):
         if image and image.filename:
             filename = secure_filename(image.filename)
             image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.root_path, image_path))
+            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
             cookbook.image_path = image_path
 
         db.session.commit()
@@ -191,7 +255,7 @@ def delete_cookbook(id):
         return jsonify({'status': 'error', 'message': 'Kookboek heeft nog recepten. Verwijder of verplaats ze eerst.'}), 400
     if cookbook.image_path:
         try:
-            os.remove(os.path.join(current_app.root_path, cookbook.image_path))
+            os.remove(os.path.join(current_app.static_folder, 'uploads', os.path.basename(cookbook.image_path)))
         except OSError:
             pass
     db.session.delete(cookbook)
@@ -209,7 +273,7 @@ def new_recipe():
         if image and image.filename:
             filename = secure_filename(image.filename)
             image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.root_path, image_path))
+            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
         elif request.form.get('image_path_imported'):
             image_path = request.form.get('image_path_imported')
 
@@ -282,7 +346,7 @@ def edit_recipe(id):
         if image and image.filename:
             filename = secure_filename(image.filename)
             image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.root_path, image_path))
+            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
             recipe.image_path = image_path
 
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
@@ -484,7 +548,51 @@ def scrape_recipe():
         try:
             scraper = scrape_html(html, org_url=url, wild_mode=True)
         except Exception:
+            scraper = None
+
+    # ── LLM fallback wanneer scraper faalt ──────────────────
+    if scraper is None:
+        api_key = _get_gemini_api_key()
+        if not api_key:
             return jsonify({'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina. De site ondersteunt geen gestructureerde receptdata.'}), 400
+
+        import google.generativeai as genai
+
+        text = _clean_html(html)
+        prompt = _GEMINI_RECIPE_PROMPT + f"\n\nTekst van de pagina:\n{text}"
+
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            response = model.generate_content(prompt)
+            result = json.loads(_sanitize_json(response.text))
+
+            if 'error' in result:
+                return jsonify({'status': 'error', 'message': result['error']}), 400
+
+            cookbook_id = cookbook_name = None
+            try:
+                from urllib.parse import urlparse as _urlparse
+                domain = _urlparse(url).netloc
+                cookbook = _get_or_create_site_cookbook(domain, html, None, _requests)
+                if cookbook:
+                    cookbook_id, cookbook_name = cookbook.id, cookbook.name
+            except Exception:
+                pass
+
+            return jsonify({
+                'status': 'success',
+                'name': result.get('title', ''),
+                'serves': result.get('yields'),
+                'url': url,
+                'instructions': result.get('instructions', ''),
+                'ingredients': _build_gemini_ingredients(result.get('ingredients', [])),
+                'image_path': None,
+                'cookbook_id': cookbook_id,
+                'cookbook_name': cookbook_name,
+            })
+        except Exception:
+            return jsonify({'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina.'}), 400
 
     try:
         title = scraper.title() or ''
@@ -542,7 +650,7 @@ def scrape_recipe():
             elif 'gif' in content_type:
                 ext = '.gif'
             fname = hashlib.md5(image_url.encode()).hexdigest() + ext
-            save_path = os.path.join(current_app.root_path, 'static/uploads', fname)
+            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
             with open(save_path, 'wb') as f:
                 f.write(img_resp.content)
             image_path = os.path.join('static/uploads', fname)
@@ -577,7 +685,6 @@ def scrape_recipe():
 @bp.route('/recipe/from-photo', methods=['POST'])
 def recipe_from_photo():
     import google.generativeai as genai
-    import base64
     import json as _json
 
     api_key = _get_gemini_api_key()
@@ -595,7 +702,7 @@ def recipe_from_photo():
         return jsonify({'status': 'error', 'message': "Maximaal 3 foto's toegestaan"}), 400
 
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash')
 
     image_parts = []
     first_image_path = None
@@ -613,7 +720,7 @@ def recipe_from_photo():
             elif photo.content_type == 'image/webp':
                 ext = '.webp'
             fname = hashlib.md5(image_bytes).hexdigest() + ext
-            save_path = os.path.join(current_app.root_path, 'static/uploads', fname)
+            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
             with open(save_path, 'wb') as f:
                 f.write(image_bytes)
             first_image_path = os.path.join('static/uploads', fname)
@@ -623,26 +730,7 @@ def recipe_from_photo():
             'data': image_bytes,
         })
 
-    prompt = """Dit is een foto van een kookboekpagina. Extraheer het recept volledig.
-
-Geef ALLEEN geldige JSON terug, zonder uitleg of markdown:
-{
-  "naam": "Recept naam",
-  "personen": 4,
-  "ingredienten": [
-    "200 gram bloem",
-    "3 eieren",
-    "1 ui, gesnipperd"
-  ],
-  "bereiding": "Stap 1. Verwarm de oven op 180°C.\\nStap 2. Meng de bloem...",
-  "opmerkingen": "Optionele tips of notities uit het recept"
-}
-
-Regels:
-- ingredienten als array van strings in natuurlijk Nederlands formaat
-- bereiding als enkele string met stappen gescheiden door newlines
-- Als er geen recept zichtbaar is: {"error": "Geen recept gevonden"}
-- Bij meerdere foto's: combineer ingrediënten en bereiding van alle pagina's"""
+    prompt = _GEMINI_RECIPE_PROMPT + "\n\nBij meerdere foto's: combineer ingrediënten en bereiding van alle pagina's."
 
     try:
         content = [prompt]
@@ -650,28 +738,18 @@ Regels:
             content.append({'mime_type': img['mime_type'], 'data': img['data']})
 
         response = model.generate_content(content)
-        result_text = response.text.strip()
-
-        if result_text.startswith('```'):
-            result_text = result_text.split('\n', 1)[1]
-            if result_text.endswith('```'):
-                result_text = result_text.rsplit('```', 1)[0]
-            result_text = result_text.strip()
-
-        result = _json.loads(result_text)
+        result = _json.loads(_sanitize_json(response.text))
 
         if 'error' in result:
             return jsonify({'status': 'error', 'message': result['error']}), 400
 
-        parsed_ingredients = parse_ingredients_from_list(result.get('ingredienten', []))
-
         return jsonify({
             'status': 'success',
-            'name': result.get('naam', ''),
-            'serves': result.get('personen'),
+            'name': result.get('title', ''),
+            'serves': result.get('yields'),
             'url': None,
-            'instructions': result.get('bereiding', ''),
-            'ingredients': parsed_ingredients,
+            'instructions': result.get('instructions', ''),
+            'ingredients': _build_gemini_ingredients(result.get('ingredients', [])),
             'image_path': first_image_path,
             'cookbook_id': None,
             'cookbook_name': None,
