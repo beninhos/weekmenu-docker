@@ -1,4 +1,4 @@
-const CACHE = 'weekmenu-v1';
+const CACHE = 'weekmenu-v2';
 const SHELL = [
   '/',
   '/static/favicon.svg',

@@ -3,7 +3,7 @@
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Boodschappenlijst — Week {{ week }}</h2>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap justify-end">
             <button onclick="clearAll()"
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
                 ✕ Wissen
@@ -13,7 +13,7 @@
                 Naar AH
             </button>
             <button onclick="window.print()"
-                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
+                    class="hidden md:block bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
                 Printen
             </button>
         </div>
@@ -39,19 +39,19 @@
                  data-qty="{{ item.qty }}">
 
                 {# ── Hoofd-rij: links (recept) + rechts (AH) ── #}
-                <div class="item-row flex items-center gap-4 py-3 border-b border-[#E8E4DC]" style="min-height:88px">
+                <div class="item-row flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 py-3 border-b border-[#E8E4DC]">
 
-                    {# LINKS — simpele lijst (42% vaste breedte) #}
-                    <div class="list-left flex items-center gap-2 shrink-0" style="width:42%">
+                    {# LINKS — simpele lijst #}
+                    <div class="list-left flex items-center gap-2 w-full md:w-[42%] md:shrink-0">
                         <input type="checkbox" class="cursor-pointer shrink-0" onchange="toggleItem(this)">
                         <span class="item-text text-sm text-[#2C2C2C]">
                             <span class="font-semibold">{{ item.amount_display }}</span>{% if item.unit %}<span class="text-[#6B6B6B]"> {{ item.unit }}</span>{% endif %} {{ item.name }}
                         </span>
                     </div>
 
-                    {# RECHTS — AH-productstijl (flex-grow) #}
+                    {# RECHTS — AH-productstijl #}
                     {% if item.ah_product_id %}
-                    <div class="list-right flex items-center gap-2 flex-grow min-w-0">
+                    <div class="list-right flex items-center gap-2 w-full md:flex-grow min-w-0">
                         {# Gekleurde productblok: afbeelding + naam + prijs #}
                         <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden cursor-pointer"
                              onclick="toggleSearch(this)"
@@ -90,7 +90,7 @@
                         <button onclick="removeItem(this)" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-1" style="font-size:0.75rem">✕</button>
                     </div>
                     {% else %}
-                    <div class="list-right flex items-center gap-3 flex-grow">
+                    <div class="list-right flex items-center gap-3 w-full md:flex-grow">
                         <button class="ah-badge text-sm text-[#6B6B6B] hover:text-[#8B4513] border border-dashed border-[#D4CEC4] hover:border-[#C9A882] rounded-lg px-3 py-2"
                                 onclick="toggleSearch(this)">
                             + Koppel AH product
@@ -102,7 +102,7 @@
                 </div>
 
                 {# ── Zoekpaneel (collapsed by default) ── #}
-                <div class="ah-search-panel hidden border border-[#E8E4DC] rounded-lg bg-white shadow-sm mt-1 mb-2" style="margin-left:calc(42% + 1rem)">
+                <div class="ah-search-panel hidden border border-[#E8E4DC] rounded-lg bg-white shadow-sm mt-1 mb-2">
                     <div class="flex gap-1 p-2 border-b border-[#E8E4DC]">
                         <input type="text"
                                class="ah-search-input flex-grow text-sm border border-[#E8E4DC] rounded px-2 py-1 focus:outline-none focus:border-[#C9A882]"

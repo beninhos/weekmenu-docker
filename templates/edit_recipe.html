@@ -19,16 +19,21 @@
         
         <div>
             <label class="block text-sm font-semibold text-[#2C2C2C]">Kookboek</label>
-            <select name="cookbook" 
+            <select name="cookbook" id="fieldCookbook"
+                    onchange="toggleNewCookbook(this)"
                     class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 <option value="">Selecteer een kookboek</option>
                 {% for cookbook in cookbooks %}
-                <option value="{{ cookbook.id }}" 
+                <option value="{{ cookbook.id }}"
                         {{ 'selected' if cookbook.id == recipe.cookbook_id }}>
                     {{ cookbook.name }}
                 </option>
                 {% endfor %}
+                <option value="__new__">+ Nieuw kookboek</option>
             </select>
+            <input type="text" name="new_cookbook_name" id="newCookbookInput"
+                   placeholder="Naam nieuw kookboek"
+                   class="hidden mt-2 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         
         <div>
@@ -73,22 +78,26 @@
             <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h3>
             <div id="ingredients" class="space-y-2">
                 {% for ri in recipe.ingredients %}
-                <div class="grid grid-cols-12 gap-2 ingredient-row">
-                    <div class="col-span-4 relative">
+                <div class="grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row">
+                    <div class="col-span-11 md:col-span-4 order-1 md:order-1 relative">
                         <input type="text" name="ingredient[]" value="{{ ri.ingredient.display }}" autocomplete="off"
                                class="ingredient-ac block w-full rounded-md border-[#D4CEC4] shadow-sm">
                         <input type="hidden" name="ingredient_id[]" value="{{ ri.ingredient.id }}">
                         <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
                     </div>
-                    <div class="col-span-2">
-                        <input type="number" step="0.1" name="amount[]" value="{{ ri.amount }}"
+                    <div class="col-span-1 order-2 md:order-5 flex items-center justify-center">
+                        <button type="button" onclick="this.closest('.ingredient-row').remove()"
+                                class="w-8 h-8 flex items-center justify-center rounded text-red-400 hover:text-red-600 text-xl font-bold">×</button>
+                    </div>
+                    <div class="col-span-6 md:col-span-2 order-3 md:order-2">
+                        <input type="number" step="0.1" inputmode="decimal" name="amount[]" value="{{ ri.amount }}"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
-                    <div class="col-span-2">
+                    <div class="col-span-6 md:col-span-2 order-4 md:order-3">
                         <input type="text" name="unit[]" value="{{ ri.unit }}" list="unit-list"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
-                    <div class="col-span-3">
+                    <div class="col-span-12 md:col-span-3 order-5 md:order-4">
                         <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                             {% for cat in categories %}
                             <option value="{{ cat }}" {{ 'selected' if ri.ingredient.category == cat }}>
@@ -96,10 +105,6 @@
                             </option>
                             {% endfor %}
                         </select>
-                    </div>
-                    <div class="col-span-1 flex items-center justify-center">
-                        <button type="button" onclick="this.closest('.ingredient-row').remove()"
-                                class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -129,6 +134,17 @@
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ingredient-autocomplete.js') }}"></script>
 <script>
+function toggleNewCookbook(select) {
+    const input = document.getElementById('newCookbookInput');
+    if (select.value === '__new__') {
+        input.classList.remove('hidden');
+        input.focus();
+    } else {
+        input.classList.add('hidden');
+        input.value = '';
+    }
+}
+
 const quill = new Quill('#quill-editor', {
   modules: {
     toolbar: [
@@ -157,31 +173,31 @@ const categories = {{ categories | tojson }};
 function addIngredientRow(name, amount, unit, category, ingId, preparation) {
     const container = document.getElementById('ingredients');
     const row = document.createElement('div');
-    row.className = 'grid grid-cols-12 gap-2 ingredient-row';
+    row.className = 'grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row';
     const optionsHtml = categories.map(cat => `<option value="${esc(cat)}">${esc(cat)}</option>`).join('');
     row.innerHTML = `
-        <div class="col-span-4 relative">
+        <div class="col-span-11 md:col-span-4 order-1 md:order-1 relative">
             <input type="text" name="ingredient[]" placeholder="Ingrediënt" value="${esc(name ?? '')}" autocomplete="off"
                    class="ingredient-ac block w-full rounded-md border-[#D4CEC4] shadow-sm">
             <input type="hidden" name="ingredient_id[]" value="${esc(ingId ?? '')}">
             <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
         </div>
-        <div class="col-span-2">
-            <input type="number" step="0.1" name="amount[]" placeholder="Aantal" value="${esc(amount ?? '')}"
+        <div class="col-span-1 order-2 md:order-5 flex items-center justify-center">
+            <button type="button" onclick="this.closest('.ingredient-row').remove()"
+                    class="w-8 h-8 flex items-center justify-center rounded text-red-400 hover:text-red-600 text-xl font-bold">×</button>
+        </div>
+        <div class="col-span-6 md:col-span-2 order-3 md:order-2">
+            <input type="number" step="0.1" inputmode="decimal" name="amount[]" placeholder="Aantal" value="${esc(amount ?? '')}"
                    class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
-        <div class="col-span-2">
+        <div class="col-span-6 md:col-span-2 order-4 md:order-3">
             <input type="text" name="unit[]" placeholder="Eenheid" value="${esc(unit ?? '')}" list="unit-list"
                    class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
-        <div class="col-span-3">
+        <div class="col-span-12 md:col-span-3 order-5 md:order-4">
             <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 ${optionsHtml}
             </select>
-        </div>
-        <div class="col-span-1 flex items-center justify-center">
-            <button type="button" onclick="this.closest('.ingredient-row').remove()"
-                    class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
         </div>
     `;
     if (category) {

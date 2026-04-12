@@ -20,8 +20,8 @@ from weekmenu.services.units import (
     _normalize_ri_unit, parse_ingredients_from_list,
 )
 from weekmenu.services.recipes import (
-    _resolve_or_create_ingredient, _get_or_create_site_cookbook,
-    _get_gemini_api_key,
+    _resolve_or_create_ingredient, _suggest_site_cookbook,
+    _download_site_logo, _get_gemini_api_key,
 )
 
 _VALID_UNITS = sorted(set(DUTCH_UNITS.values()))
@@ -178,9 +178,14 @@ def new_cookbook():
         image = request.files.get('image')
         image_path = None
         if image and image.filename:
-            filename = secure_filename(image.filename)
-            image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
+            image_data = image.read()
+            ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
+            fname = hashlib.md5(image_data).hexdigest() + ext
+            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, 'wb') as f:
+                f.write(image_data)
+            image_path = os.path.join('static/uploads', fname)
 
         new_cb = Cookbook(name=cookbook_name, abbreviation=abbreviation, image_path=image_path)
         db.session.add(new_cb)
@@ -206,10 +211,14 @@ def edit_cookbook(id):
 
         image = request.files.get('image')
         if image and image.filename:
-            filename = secure_filename(image.filename)
-            image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
-            cookbook.image_path = image_path
+            image_data = image.read()
+            ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
+            fname = hashlib.md5(image_data).hexdigest() + ext
+            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, 'wb') as f:
+                f.write(image_data)
+            cookbook.image_path = os.path.join('static/uploads', fname)
 
         db.session.commit()
         return redirect(url_for('recipes.list_cookbooks'))
@@ -274,17 +283,49 @@ def new_recipe():
         image = request.files.get('image')
         image_path = None
         if image and image.filename:
-            filename = secure_filename(image.filename)
-            image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
+            image_data = image.read()
+            ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
+            fname = hashlib.md5(image_data).hexdigest() + ext
+            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, 'wb') as f:
+                f.write(image_data)
+            image_path = os.path.join('static/uploads', fname)
         elif request.form.get('image_path_imported'):
             image_path = request.form.get('image_path_imported')
+
+        cookbook_id = request.form.get('cookbook') or None
+        if cookbook_id == '__new__':
+            new_name = request.form.get('new_cookbook_name', '').strip()
+            if new_name:
+                existing = Cookbook.query.filter_by(name=new_name).first()
+                if existing:
+                    cookbook_id = existing.id
+                else:
+                    words = new_name.split()
+                    abbr = ''.join(w[0].upper() for w in words if w)[:5]
+                    cb_image = None
+                    recipe_url = request.form.get('url', '').strip()
+                    if recipe_url:
+                        try:
+                            from urllib.parse import urlparse as _up
+                            domain = _up(recipe_url).netloc
+                            import requests as _req
+                            cb_image = _download_site_logo(domain, '', _req)
+                        except Exception:
+                            pass
+                    new_cb = Cookbook(name=new_name, abbreviation=abbr, image_path=cb_image)
+                    db.session.add(new_cb)
+                    db.session.flush()
+                    cookbook_id = new_cb.id
+            else:
+                cookbook_id = None
 
         serves_val = request.form.get('serves', '').strip()
         recipe = Recipe(
             name=request.form['name'],
             serves=int(serves_val) if serves_val else None,
-            cookbook_id=request.form.get('cookbook') if request.form.get('cookbook') else None,
+            cookbook_id=cookbook_id,
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path,
             url=request.form.get('url') or None,
@@ -340,17 +381,48 @@ def edit_recipe(id):
         recipe.name = request.form['name']
         serves_val = request.form.get('serves', '').strip()
         recipe.serves = int(serves_val) if serves_val else None
-        recipe.cookbook_id = request.form.get('cookbook') if request.form.get('cookbook') else None
+
+        cookbook_id = request.form.get('cookbook') or None
+        if cookbook_id == '__new__':
+            new_name = request.form.get('new_cookbook_name', '').strip()
+            if new_name:
+                existing = Cookbook.query.filter_by(name=new_name).first()
+                if existing:
+                    cookbook_id = existing.id
+                else:
+                    words = new_name.split()
+                    abbr = ''.join(w[0].upper() for w in words if w)[:5]
+                    cb_image = None
+                    recipe_url = request.form.get('url', '').strip()
+                    if recipe_url:
+                        try:
+                            from urllib.parse import urlparse as _up
+                            domain = _up(recipe_url).netloc
+                            import requests as _req
+                            cb_image = _download_site_logo(domain, '', _req)
+                        except Exception:
+                            pass
+                    new_cb = Cookbook(name=new_name, abbreviation=abbr, image_path=cb_image)
+                    db.session.add(new_cb)
+                    db.session.flush()
+                    cookbook_id = new_cb.id
+            else:
+                cookbook_id = None
+        recipe.cookbook_id = cookbook_id
         recipe.page = request.form['page'] if request.form['page'] else None
         recipe.url = request.form.get('url') or None
         recipe.instructions = request.form.get('instructions') or None
 
         image = request.files.get('image')
         if image and image.filename:
-            filename = secure_filename(image.filename)
-            image_path = os.path.join('static/uploads', filename)
-            image.save(os.path.join(current_app.static_folder, 'uploads', filename))
-            recipe.image_path = image_path
+            image_data = image.read()
+            ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
+            fname = hashlib.md5(image_data).hexdigest() + ext
+            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            with open(save_path, 'wb') as f:
+                f.write(image_data)
+            recipe.image_path = os.path.join('static/uploads', fname)
 
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
 
@@ -573,13 +645,11 @@ def scrape_recipe():
             if 'error' in result:
                 return jsonify({'status': 'error', 'message': result['error']}), 400
 
-            cookbook_id = cookbook_name = None
+            cookbook_info = {'id': None, 'name': None, 'exists': False}
             try:
                 from urllib.parse import urlparse as _urlparse
                 domain = _urlparse(url).netloc
-                cookbook = _get_or_create_site_cookbook(domain, html, None, _requests)
-                if cookbook:
-                    cookbook_id, cookbook_name = cookbook.id, cookbook.name
+                cookbook_info = _suggest_site_cookbook(domain, html, None)
             except Exception:
                 pass
 
@@ -591,8 +661,9 @@ def scrape_recipe():
                 'instructions': result.get('instructions', ''),
                 'ingredients': _build_gemini_ingredients(result.get('ingredients', [])),
                 'image_path': None,
-                'cookbook_id': cookbook_id,
-                'cookbook_name': cookbook_name,
+                'cookbook_id': cookbook_info.get('id'),
+                'cookbook_name': cookbook_info.get('name'),
+                'cookbook_exists': cookbook_info.get('exists', False),
             })
         except json.JSONDecodeError as e:
             return jsonify({'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}), 400
@@ -671,15 +742,11 @@ def scrape_recipe():
     except Exception:
         pass
 
-    cookbook_id = None
-    cookbook_name = None
+    cookbook_info = {'id': None, 'name': None, 'exists': False}
     try:
         from urllib.parse import urlparse as _urlparse
         domain = _urlparse(url).netloc
-        cookbook = _get_or_create_site_cookbook(domain, html, scraper, _requests)
-        if cookbook:
-            cookbook_id = cookbook.id
-            cookbook_name = cookbook.name
+        cookbook_info = _suggest_site_cookbook(domain, html, scraper)
     except Exception:
         pass
 
@@ -691,8 +758,9 @@ def scrape_recipe():
         'instructions': instructions,
         'ingredients': parsed_ingredients,
         'image_path': image_path,
-        'cookbook_id': cookbook_id,
-        'cookbook_name': cookbook_name,
+        'cookbook_id': cookbook_info.get('id'),
+        'cookbook_name': cookbook_info.get('name'),
+        'cookbook_exists': cookbook_info.get('exists', False),
     })
 
 
@@ -731,6 +799,8 @@ def recipe_from_photo():
                 ext = '.png'
             elif photo.content_type == 'image/webp':
                 ext = '.webp'
+            elif photo.content_type == 'image/avif':
+                ext = '.avif'
             fname = hashlib.md5(image_bytes).hexdigest() + ext
             save_path = os.path.join(current_app.static_folder, 'uploads', fname)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)

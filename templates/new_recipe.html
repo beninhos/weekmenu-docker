@@ -19,7 +19,7 @@
         <!-- Foto import -->
         <div id="importPhoto" class="space-y-3">
             <div>
-                <input type="file" id="photoInput" accept="image/*" multiple capture="environment"
+                <input type="file" id="photoInput" accept="image/*" multiple
                        class="hidden" onchange="handlePhotoSelect(this)">
                 <button type="button" onclick="document.getElementById('photoInput').click()"
                         id="photoSelectBtn"
@@ -32,7 +32,10 @@
                     class="hidden w-full bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
                 Lees recept
             </button>
-            <div id="photoStatus" class="hidden text-sm"></div>
+            <div id="photoStatus" class="hidden text-sm flex items-center gap-2">
+                <img id="photoBanana" src="/static/uploads/dancing-banana.gif" class="hidden h-10">
+                <span id="photoStatusText"></span>
+            </div>
         </div>
 
         <!-- URL import -->
@@ -67,12 +70,26 @@
         <div>
             <label class="block text-sm font-semibold text-[#2C2C2C]">Kookboek</label>
             <select name="cookbook" id="fieldCookbook"
+                    onchange="toggleNewCookbook(this)"
                     class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 <option value="">Selecteer een kookboek</option>
                 {% for cookbook in cookbooks %}
                 <option value="{{ cookbook.id }}">{{ cookbook.name }}</option>
                 {% endfor %}
+                <option value="__new__">+ Nieuw kookboek</option>
             </select>
+            <input type="text" name="new_cookbook_name" id="newCookbookInput"
+                   placeholder="Naam nieuw kookboek"
+                   class="hidden mt-2 block w-full rounded-md border-[#D4CEC4] shadow-sm">
+            <div id="cookbookSuggestion" class="hidden mt-2 p-3 bg-[#FDF8F3] border border-[#C9A882] rounded-lg text-sm flex items-center justify-between gap-2">
+                <span id="cookbookSuggestionText"></span>
+                <div class="flex gap-2 shrink-0">
+                    <button type="button" onclick="acceptCookbookSuggestion()"
+                            class="px-3 py-1 bg-[#8B4513] text-white rounded text-xs font-medium">Ja</button>
+                    <button type="button" onclick="dismissCookbookSuggestion()"
+                            class="px-3 py-1 border border-[#D4CEC4] text-[#6B6B6B] rounded text-xs">Nee</button>
+                </div>
+            </div>
         </div>
 
         <div>
@@ -112,31 +129,31 @@
         <div>
             <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h3>
             <div id="ingredients" class="space-y-2">
-                <div class="grid grid-cols-12 gap-2 ingredient-row">
-                    <div class="col-span-4 relative">
+                <div class="grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row">
+                    <div class="col-span-11 md:col-span-4 order-1 md:order-1 relative">
                         <input type="text" name="ingredient[]" placeholder="Ingrediënt" autocomplete="off"
                                class="ingredient-ac block w-full rounded-md border-[#D4CEC4] shadow-sm">
                         <input type="hidden" name="ingredient_id[]" value="">
                         <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
                     </div>
-                    <div class="col-span-2">
-                        <input type="number" step="0.1" name="amount[]" placeholder="Aantal"
+                    <div class="col-span-1 order-2 md:order-5 flex items-center justify-center">
+                        <button type="button" onclick="this.closest('.ingredient-row').remove()"
+                                class="w-8 h-8 flex items-center justify-center rounded text-red-400 hover:text-red-600 text-xl font-bold">×</button>
+                    </div>
+                    <div class="col-span-6 md:col-span-2 order-3 md:order-2">
+                        <input type="number" step="0.1" inputmode="decimal" name="amount[]" placeholder="Aantal"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
-                    <div class="col-span-2">
+                    <div class="col-span-6 md:col-span-2 order-4 md:order-3">
                         <input type="text" name="unit[]" placeholder="Eenheid" list="unit-list"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
-                    <div class="col-span-3">
+                    <div class="col-span-12 md:col-span-3 order-5 md:order-4">
                         <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                             {% for cat in categories %}
                             <option value="{{ cat }}">{{ cat }}</option>
                             {% endfor %}
                         </select>
-                    </div>
-                    <div class="col-span-1 flex items-center justify-center">
-                        <button type="button" onclick="this.closest('.ingredient-row').remove()"
-                                class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
                     </div>
                 </div>
             </div>
@@ -189,31 +206,31 @@ const categories = {{ categories | tojson }};
 function addIngredientRow(name, amount, unit, category, ingId, preparation) {
     const container = document.getElementById('ingredients');
     const row = document.createElement('div');
-    row.className = 'grid grid-cols-12 gap-2 ingredient-row';
+    row.className = 'grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row';
     const optionsHtml = categories.map(cat => `<option value="${esc(cat)}">${esc(cat)}</option>`).join('');
     row.innerHTML = `
-        <div class="col-span-4 relative">
+        <div class="col-span-11 md:col-span-4 order-1 md:order-1 relative">
             <input type="text" name="ingredient[]" placeholder="Ingrediënt" value="${esc(name)}" autocomplete="off"
                    class="ingredient-ac block w-full rounded-md border-[#D4CEC4] shadow-sm">
             <input type="hidden" name="ingredient_id[]" value="${esc(ingId ?? '')}">
             <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
         </div>
-        <div class="col-span-2">
-            <input type="number" step="0.1" name="amount[]" placeholder="Aantal" value="${esc(amount ?? '')}"
+        <div class="col-span-1 order-2 md:order-5 flex items-center justify-center">
+            <button type="button" onclick="this.closest('.ingredient-row').remove()"
+                    class="w-8 h-8 flex items-center justify-center rounded text-red-400 hover:text-red-600 text-xl font-bold">×</button>
+        </div>
+        <div class="col-span-6 md:col-span-2 order-3 md:order-2">
+            <input type="number" step="0.1" inputmode="decimal" name="amount[]" placeholder="Aantal" value="${esc(amount ?? '')}"
                    class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
-        <div class="col-span-2">
+        <div class="col-span-6 md:col-span-2 order-4 md:order-3">
             <input type="text" name="unit[]" placeholder="Eenheid" value="${esc(unit ?? '')}" list="unit-list"
                    class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
-        <div class="col-span-3">
+        <div class="col-span-12 md:col-span-3 order-5 md:order-4">
             <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                 ${optionsHtml}
             </select>
-        </div>
-        <div class="col-span-1 flex items-center justify-center">
-            <button type="button" onclick="this.closest('.ingredient-row').remove()"
-                    class="text-red-400 hover:text-red-600 text-xl leading-none font-bold">×</button>
         </div>
     `;
     if (category) {
@@ -221,6 +238,44 @@ function addIngredientRow(name, amount, unit, category, ingId, preparation) {
     }
     container.appendChild(row);
     initAutocomplete(row.querySelector('.ingredient-ac'));
+}
+
+/* ── Nieuw kookboek toggle ───────────────────────────────── */
+let pendingSuggestion = null;
+
+function toggleNewCookbook(select) {
+    const input = document.getElementById('newCookbookInput');
+    if (select.value === '__new__') {
+        input.classList.remove('hidden');
+        input.focus();
+    } else {
+        input.classList.add('hidden');
+        input.value = '';
+    }
+    document.getElementById('cookbookSuggestion').classList.add('hidden');
+}
+
+function showCookbookSuggestion(name) {
+    pendingSuggestion = name;
+    const banner = document.getElementById('cookbookSuggestion');
+    document.getElementById('cookbookSuggestionText').textContent = `Kookboek '${name}' aanmaken?`;
+    banner.classList.remove('hidden');
+}
+
+function acceptCookbookSuggestion() {
+    if (!pendingSuggestion) return;
+    const sel = document.getElementById('fieldCookbook');
+    sel.value = '__new__';
+    const input = document.getElementById('newCookbookInput');
+    input.value = pendingSuggestion;
+    input.classList.remove('hidden');
+    document.getElementById('cookbookSuggestion').classList.add('hidden');
+    pendingSuggestion = null;
+}
+
+function dismissCookbookSuggestion() {
+    document.getElementById('cookbookSuggestion').classList.add('hidden');
+    pendingSuggestion = null;
 }
 
 /* ── Import mode switching ────────────────────────────────── */
@@ -246,21 +301,21 @@ function showImportMode(mode) {
 /* ── Photo import ────────────────────────────────────────── */
 let selectedPhotos = [];
 
-function handlePhotoSelect(input) {
-    const files = Array.from(input.files).slice(0, 3);
-    selectedPhotos = files;
-
+function renderPhotoPreview() {
     const preview = document.getElementById('photoPreview');
     const importBtn = document.getElementById('photoImportBtn');
+    const selectBtn = document.getElementById('photoSelectBtn');
 
-    if (files.length === 0) {
+    if (selectedPhotos.length === 0) {
         preview.classList.add('hidden');
         importBtn.classList.add('hidden');
+        selectBtn.textContent = "Kies foto's (max 3)";
+        selectBtn.classList.remove('hidden');
         return;
     }
 
     preview.innerHTML = '';
-    files.forEach((file, i) => {
+    selectedPhotos.forEach((file, i) => {
         const div = document.createElement('div');
         div.className = 'relative';
         const img = document.createElement('img');
@@ -269,13 +324,35 @@ function handlePhotoSelect(input) {
         const badge = document.createElement('span');
         badge.className = 'absolute top-1 left-1 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded';
         badge.textContent = i + 1;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = '✕';
+        removeBtn.className = 'absolute top-1 right-1 bg-black/50 text-white text-xs w-5 h-5 rounded flex items-center justify-center leading-none';
+        removeBtn.onclick = () => { selectedPhotos.splice(i, 1); renderPhotoPreview(); };
         div.appendChild(img);
         div.appendChild(badge);
+        div.appendChild(removeBtn);
         preview.appendChild(div);
     });
 
     preview.classList.remove('hidden');
     importBtn.classList.remove('hidden');
+
+    if (selectedPhotos.length >= 3) {
+        selectBtn.classList.add('hidden');
+    } else {
+        selectBtn.classList.remove('hidden');
+        selectBtn.textContent = `Voeg foto toe (${selectedPhotos.length}/3)`;
+    }
+}
+
+function handlePhotoSelect(input) {
+    const nieuweFiles = Array.from(input.files).filter(f =>
+        !selectedPhotos.some(e => e.name === f.name && e.size === f.size)
+    );
+    selectedPhotos = selectedPhotos.concat(nieuweFiles).slice(0, 3);
+    input.value = '';
+    renderPhotoPreview();
 }
 
 async function importFromPhoto() {
@@ -283,26 +360,35 @@ async function importFromPhoto() {
 
     const btn = document.getElementById('photoImportBtn');
     const statusDiv = document.getElementById('photoStatus');
+    const banana = document.getElementById('photoBanana');
+    const statusText = document.getElementById('photoStatusText');
 
     btn.disabled = true;
     btn.textContent = 'Bezig met lezen...';
-    statusDiv.className = 'text-sm text-[#6B6B6B]';
-    statusDiv.textContent = 'Recept wordt herkend...';
+    statusDiv.className = 'text-sm text-[#6B6B6B] flex items-center gap-2';
+    statusText.textContent = 'Recept wordt herkend...';
+    banana.classList.remove('hidden');
     statusDiv.classList.remove('hidden');
 
     const formData = new FormData();
     selectedPhotos.forEach(file => formData.append('photos', file));
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
     try {
         const response = await fetch('/recipe/from-photo', {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
         const data = await response.json();
 
         if (data.status !== 'success') {
-            statusDiv.className = 'text-sm text-red-600';
-            statusDiv.textContent = 'Fout: ' + data.message;
+            statusDiv.className = 'text-sm text-red-600 flex items-center gap-2';
+            banana.classList.add('hidden');
+            statusText.textContent = 'Fout: ' + data.message;
             return;
         }
 
@@ -324,12 +410,17 @@ async function importFromPhoto() {
             data.ingredients.forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit, ing.category));
         }
 
-        statusDiv.className = 'text-sm text-[#8B4513]';
-        statusDiv.textContent = `Herkend: ${data.ingredients?.length || 0} ingrediënten. Controleer en sla op.`;
+        statusDiv.className = 'text-sm text-[#8B4513] flex items-center gap-2';
+        banana.classList.add('hidden');
+        statusText.textContent = `Herkend: ${data.ingredients?.length || 0} ingrediënten. Controleer en sla op.`;
 
     } catch (error) {
-        statusDiv.className = 'text-sm text-red-600';
-        statusDiv.textContent = 'Fout: ' + error.message;
+        clearTimeout(timeoutId);
+        statusDiv.className = 'text-sm text-red-600 flex items-center gap-2';
+        banana.classList.add('hidden');
+        statusText.textContent = error.name === 'AbortError'
+            ? 'Tijdlimiet overschreden. Probeer opnieuw.'
+            : 'Fout: ' + error.message;
     } finally {
         btn.disabled = false;
         btn.textContent = 'Lees recept';
@@ -382,15 +473,18 @@ async function importFromUrl() {
         if (data.url)          document.getElementById('fieldUrl').value = data.url;
         if (data.instructions) quill.root.innerHTML = data.instructions;
 
-        if (data.cookbook_id) {
+        if (data.cookbook_exists && data.cookbook_id) {
             const sel = document.getElementById('fieldCookbook');
             if (!sel.querySelector(`option[value="${data.cookbook_id}"]`)) {
                 const opt = document.createElement('option');
                 opt.value = data.cookbook_id;
                 opt.textContent = data.cookbook_name || '';
-                sel.appendChild(opt);
+                const newOpt = sel.querySelector('option[value="__new__"]');
+                sel.insertBefore(opt, newOpt);
             }
             sel.value = data.cookbook_id;
+        } else if (!data.cookbook_exists && data.cookbook_name) {
+            showCookbookSuggestion(data.cookbook_name);
         }
 
         const preview = document.getElementById('importedImagePreview');
