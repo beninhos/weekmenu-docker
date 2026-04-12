@@ -93,7 +93,7 @@ def _get_or_create_site_cookbook(domain, html_text, scraper, requests_module):
                     elif 'jpeg' in ct or 'jpg' in ct:
                         ext = '.jpg'
                     fname = f"site_{hashlib.md5(clean_domain.encode()).hexdigest()[:8]}{ext}"
-                    dest = os.path.join(current_app.root_path, 'static', 'uploads', fname)
+                    dest = os.path.join(current_app.static_folder, 'uploads', fname)
                     os.makedirs(os.path.dirname(dest), exist_ok=True)
                     with open(dest, 'wb') as f:
                         f.write(r.content)

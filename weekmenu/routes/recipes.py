@@ -559,15 +559,14 @@ def scrape_recipe():
         if not api_key:
             return jsonify({'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina. De site ondersteunt geen gestructureerde receptdata.'}), 400
 
-        import google.generativeai as genai
+        from google import genai as _genai
 
         text = _clean_html(html)
         prompt = _GEMINI_RECIPE_PROMPT + f"\n\nTekst van de pagina:\n{text}"
 
         try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.0-flash')
-            response = model.generate_content(prompt)
+            client = _genai.Client(api_key=api_key)
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
             sanitized = _sanitize_json(response.text)
             result = json.loads(sanitized)
 
@@ -598,7 +597,12 @@ def scrape_recipe():
         except json.JSONDecodeError as e:
             return jsonify({'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}), 400
         except Exception as e:
-            return jsonify({'status': 'error', 'message': f'Fout bij verwerken: {str(e)[:100]}'}), 400
+            msg = str(e)
+            if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
+                msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
+            else:
+                msg = f'Fout bij verwerken: {msg[:100]}'
+            return jsonify({'status': 'error', 'message': msg}), 400
 
     try:
         title = scraper.title() or ''
@@ -645,7 +649,8 @@ def scrape_recipe():
     try:
         image_url = scraper.image()
         if image_url:
-            img_resp = _requests.get(image_url, headers=_BROWSER_HEADERS, timeout=10)
+            from curl_cffi import requests as _cffi_requests
+            img_resp = _cffi_requests.get(image_url, impersonate='chrome', timeout=10)
             img_resp.raise_for_status()
             content_type = img_resp.headers.get('Content-Type', '')
             ext = '.jpg'
@@ -653,10 +658,13 @@ def scrape_recipe():
                 ext = '.png'
             elif 'webp' in content_type:
                 ext = '.webp'
+            elif 'avif' in content_type:
+                ext = '.avif'
             elif 'gif' in content_type:
                 ext = '.gif'
             fname = hashlib.md5(image_url.encode()).hexdigest() + ext
             save_path = os.path.join(current_app.static_folder, 'uploads', fname)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, 'wb') as f:
                 f.write(img_resp.content)
             image_path = os.path.join('static/uploads', fname)
@@ -690,7 +698,8 @@ def scrape_recipe():
 
 @bp.route('/recipe/from-photo', methods=['POST'])
 def recipe_from_photo():
-    import google.generativeai as genai
+    from google import genai as _genai
+    from google.genai import types as _gtypes
     import json as _json
 
     api_key = _get_gemini_api_key()
@@ -706,9 +715,6 @@ def recipe_from_photo():
 
     if len(photos) > 3:
         return jsonify({'status': 'error', 'message': "Maximaal 3 foto's toegestaan"}), 400
-
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-2.0-flash')
 
     image_parts = []
     first_image_path = None
@@ -727,23 +733,21 @@ def recipe_from_photo():
                 ext = '.webp'
             fname = hashlib.md5(image_bytes).hexdigest() + ext
             save_path = os.path.join(current_app.static_folder, 'uploads', fname)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, 'wb') as f:
                 f.write(image_bytes)
             first_image_path = os.path.join('static/uploads', fname)
 
-        image_parts.append({
-            'mime_type': photo.content_type or 'image/jpeg',
-            'data': image_bytes,
-        })
+        image_parts.append(
+            _gtypes.Part.from_bytes(data=image_bytes, mime_type=photo.content_type or 'image/jpeg')
+        )
 
     prompt = _GEMINI_RECIPE_PROMPT + "\n\nBij meerdere foto's: combineer ingrediënten en bereiding van alle pagina's."
 
     try:
-        content = [prompt]
-        for img in image_parts:
-            content.append({'mime_type': img['mime_type'], 'data': img['data']})
-
-        response = model.generate_content(content)
+        client = _genai.Client(api_key=api_key)
+        content = [prompt] + image_parts
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=content)
         sanitized = _sanitize_json(response.text)
         result = _json.loads(sanitized)
 
@@ -765,4 +769,9 @@ def recipe_from_photo():
     except _json.JSONDecodeError as e:
         return jsonify({'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}), 400
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Fout bij verwerken: {str(e)[:100]}'}), 400
+        msg = str(e)
+        if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
+            msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
+        else:
+            msg = f'Fout bij verwerken: {msg[:100]}'
+        return jsonify({'status': 'error', 'message': msg}), 400
