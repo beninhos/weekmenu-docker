@@ -1,92 +1,46 @@
 # Weekmenu Planner
 
-Een web-applicatie om je weekmenu te plannen en automatisch boodschappenlijsten te genereren.
+Weekmenu plannen, recepten beheren en de boodschappenlijst rechtstreeks naar je AH-app sturen. Draait als Docker-container (Flask + SQLite).
 
-## Functionaliteiten
+## Wat het doet
 
-### recepten
-- Beheer recepten met ingrediënten en aantal personen
-- **Automatisch importeren van online recepten via URL** — scrape titel, afbeelding, ingrediënten, bereidingswijze
-- **Autocomplete voor ingrediënten** — zoek bestaande ingrediënten terwijl je typt
-- **Bereiding-veld per recept** — "gesnipperd", "in ringen", apart van de ingrediëntnaam
-- Ingrediënt-normalisatie: dedup op spelling, meervoud, case-variaties via alias-systeem
-- Koppelingen met kookboeken en paginanummers
-- Afbeelding upload voor recepten en kookboeken
-- Favorieten, recent gebruikt en populaire recepten
+Maaltijden plannen per dag (ontbijt, lunch, diner), recepten beheren met ingrediënten en kookboeken, en een gesorteerde boodschappenlijst genereren. Ingrediënten worden samengevoegd op basis van een aliassysteem dat spellingsvarianten, meervouden en hoofdletterverschillen samenvoegt.
 
-### Weekmenu & Planning
-- Plan weekmenu's voor ontbijt, lunch en diner
-- **3 weergaven**: rasterkaart, coverflow (flip-through), en lijstweergave
-- **Detail-panel**: volledige receptinfo, ingrediënten-checklist, afbeelding
-- Portie aanpassing op basis van aantal personen per maaltijd (automatische herberekening)
+Recepten importeer je via URL (scraping, met Gemini 2.5 Flash als fallback) of door een foto van een kookboekpagina te maken. Gemini extraheert het recept inclusief ingrediënten en bereidingswijze.
 
-### Boodschappenlijst
-- **Automatisch gegenereerde boodschappenlijst per productgroep**
-- Aggregatie op ingredient_id + eenheid (geen dubbele regels meer)
-- **AH-productkoppeling**: zoeken en koppelen van Albert Heijn producten
-
-### 🔗 Albert Heijn Integratie
-- **Productkoppeling**: zoek AH-producten en koppel ze aan ingrediënten
-- **Boodschappenlijst → AH-app**: verstuur gegenereerde lijst rechtstreeks naar je AH-winkelkarretje (OAuth via reverse proxy)
-- Bonus-aanduidingen en actuele prijzen
-- AH-categorie grouping
-
-### Kookboeken
-- Beheer kookboeken met afbeelding
-- Sorteren en filteren op kookboek
-- Recepten verplaatsen tussen kookboeken
-- Archiveren/terugzetten van kookboeken
-
-### Import/Export
-- **Import**: recepten vanuit URL, JSON-bestanden
-- **Export**: alle recepten als JSON
-- Bewaar bakups van je receptenverzameling
-
-### UI/UX
-- **Ink & Paper kleurpalet**: warm grijs/bruin/beige design
-- **Tailwind CSS v3** met arbitrary value support
-- Responsive design (mobile-first)
-- Dark mode-compatibel
-
-## Vereisten
-
-- Docker
-- Docker Compose
+De boodschappenlijst stuur je rechtstreeks naar je **Albert Heijn winkelwagentje** via de officieuze AH mobiele API — inclusief bonusaanduidingen en actuele prijzen.
 
 ## Installatie
-```bash
 
+```bash
 git clone https://github.com/beninhos/weekmenu-docker.git
 cd weekmenu-docker
 mkdir -p static/uploads data
-chmod 755 static/uploads 
-cmod 755 data
+chmod 755 static/uploads data
 docker-compose up --build
 # → http://localhost:5001
 ```
 
+Stel een Gemini API-sleutel in via **Instellingen** om foto-import en URL-scraping als fallback te gebruiken.
+
 ## Albert Heijn koppeling
 
-De app kan boodschappenlijsten rechtstreeks naar de AH-app sturen via de officieuze AH mobiele API.
+AH gebruikt hCaptcha op de loginpagina die alleen werkt wanneer de browser de pagina ziet als `localhost`. Een ingebouwde Go reverse proxy ([gebaseerd op appie-go](https://github.com/gwillem/appie-go)) serveert de AH-loginpagina op poort 9002. Via een SSH-tunnel ziet je browser die pagina als localhost — waardoor de login werkt.
 
-### Hoe werkt het
-
-AH gebruikt een invisible hCaptcha op hun loginpagina die alleen voor `localhost` (en `login.ah.nl` zelf) geldig is. Om dit te omzeilen draait er een kleine Go reverse proxy ([gebaseerd op appie-go](https://github.com/gwillem/appie-go)) in de Docker-container die de AH loginpagina doorstuurt op poort 9002. Via een SSH-tunnel ziet je browser de pagina als `localhost:9002` — waardoor hCaptcha gewoon werkt.
-
-### Koppelen
-
-1. Open een SSH-tunnel op je eigen computer:
+1. Open een SSH-tunnel vanaf je eigen computer:
    ```bash
    ssh -L 9002:localhost:9002 user@server
    ```
-2. Ga naar **Instellingen** in de app en klik **"Start AH-koppelaar"**
-3. Open `http://localhost:9002` in je browser en log in met je AH-account
-4. De app detecteert de koppeling automatisch — de instellingenpagina toont daarna **✓ Verbonden**
+2. Ga naar **Instellingen** → **Start AH-koppelaar**
+3. Open `http://localhost:9002` en log in met je AH-account
 
-### Technische details
+De app detecteert de koppeling automatisch en vernieuwt tokens op de achtergrond via het opgeslagen refresh token.
 
-- Go proxy: [ah-proxy/main.go](ah-proxy/main.go) — bindt op `0.0.0.0:9002`, herschrijft `appie://login-exit` redirects naar `/callback`, wisselt de OAuth-code in voor tokens en slaat ze op in `/tmp/appie-tokens.json`
-- Flask leest de tokens via `GET /api/ah/poll-token` en slaat ze op in de lokale SQLite-database
-- Token auto-refresh: verlopen access tokens worden automatisch ververst via het opgeslagen refresh token
-- Dank aan [gwillem/appie-go](https://github.com/gwillem/appie-go) voor de reverse proxy aanpak
+**Technische details:** de Go proxy bindt op poort 9002, herschrijft `appie://login-exit` redirects naar `/callback`, wisselt de OAuth-code in voor tokens en slaat ze op in `/tmp/appie-tokens.json`. Flask leest ze via `GET /api/ah/poll-token`.
 
+## Overige functies
+
+- **Foto-import** — foto van een kookboek, Gemini leest het recept inclusief ingrediëntenlijst
+- **Portieberekening** — pas het aantal personen aan, hoeveelheden worden herberekend
+- **Ingrediënt-normalisatie** — aliassysteem dedupliceert op spelling, meervoud en hoofdletters
+- **3 weekmenu-weergaven** — rasterkaart, coverflow, lijstweergave
