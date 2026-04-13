@@ -191,6 +191,16 @@ def _migrate_v4(conn):
         )
 
 
+def _migrate_v5(conn):
+    """Pantry-ingrediënten tabel voor Ecobooster."""
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS pantry_ingredient (
+            id INTEGER PRIMARY KEY,
+            ingredient_id INTEGER NOT NULL UNIQUE REFERENCES ingredient(id)
+        )
+    '''))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -214,8 +224,10 @@ def migrate_db():
             _migrate_v3(conn)
         if current < 4:
             _migrate_v4(conn)
+        if current < 5:
+            _migrate_v5(conn)
 
-        target = 4
+        target = 5
         if current < target:
             if row:
                 conn.execute(

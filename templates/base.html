@@ -167,11 +167,13 @@
 
             <div class="hidden md:flex items-center gap-6">
                 <a href="{{ url_for('main.index') }}"
-                   class="text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Week</a>
+                   class="text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Weekmenu</a>
                 <a href="{{ url_for('recipes.receptenplanner') }}"
                    class="text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
                 <a href="{{ url_for('main.boodschappenlijst_redirect') }}"
                    class="text-sm {% if request.endpoint == 'main.boodschappenlijst_redirect' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
+                <a href="{{ url_for('recipes.ecobooster') }}"
+                   class="text-sm {% if request.endpoint == 'recipes.ecobooster' %}nav-active{% else %}nav-link{% endif %}">Ecobooster</a>
                 <a href="{{ url_for('settings.settings_page') }}"
                    class="text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
             </div>
@@ -186,11 +188,13 @@
         </div>
         <div id="mobile-menu" class="hidden md:hidden border-t px-4 pb-3 pt-2 space-y-2" style="border-color: var(--color-border);">
             <a href="{{ url_for('main.index') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Week</a>
+               class="block py-2 text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Weekmenu</a>
             <a href="{{ url_for('recipes.receptenplanner') }}"
                class="block py-2 text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
             <a href="{{ url_for('main.boodschappenlijst_redirect') }}"
                class="block py-2 text-sm {% if request.endpoint == 'main.boodschappenlijst_redirect' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
+            <a href="{{ url_for('recipes.ecobooster') }}"
+               class="block py-2 text-sm {% if request.endpoint == 'recipes.ecobooster' %}nav-active{% else %}nav-link{% endif %}">Ecobooster</a>
             <a href="{{ url_for('settings.settings_page') }}"
                class="block py-2 text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
         </div>

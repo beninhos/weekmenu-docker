@@ -3,7 +3,7 @@ from collections import defaultdict
 from weekmenu.extensions import db
 from weekmenu.models import (
     MenuItem, QuickAddItem, CustomShoppingIngredient,
-    Ingredient, IngredientUnitConversion, ShoppingListExclusion,
+    Ingredient, IngredientUnitConversion, ShoppingListExclusion, PantryIngredient,
 )
 from weekmenu.constants import _UNIT_BUY_ONE
 from weekmenu.services.units import (
@@ -50,6 +50,10 @@ def _build_shopping_dict(year, week):
             amount = ri.amount * m
             norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
             shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
+
+    # 3a. Pantry filter — ingrediënten die altijd in huis zijn nooit op de lijst
+    pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
+    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in pantry_ids}
 
     # 3. Exclusion filter — VOOR custom items (BUG 4 FIX)
     excluded_ids = {

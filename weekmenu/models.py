@@ -140,6 +140,13 @@ class ShoppingListOverride(db.Model):
     qty           = db.Column(db.Integer, nullable=False)
 
 
+class PantryIngredient(db.Model):
+    __tablename__ = 'pantry_ingredient'
+    id            = db.Column(db.Integer, primary_key=True)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False, unique=True)
+    ingredient    = db.relationship('Ingredient')
+
+
 class ShoppingListExclusion(db.Model):
     __tablename__ = 'shopping_list_exclusion'
     __table_args__ = (

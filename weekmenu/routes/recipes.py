@@ -12,7 +12,7 @@ from werkzeug.utils import secure_filename
 from weekmenu.extensions import db
 from weekmenu.models import (
     Recipe, Ingredient, IngredientAlias, Cookbook,
-    RecipeIngredient, Settings,
+    RecipeIngredient, Settings, PantryIngredient,
 )
 from weekmenu.constants import PRODUCT_CATEGORIES, _BROWSER_HEADERS, DUTCH_UNITS
 from weekmenu.services.units import (
@@ -52,13 +52,23 @@ Regels:
 """
 
 
-def _clean_html(html):
-    """Strip non-content HTML tags, return plain text (max 10k chars)."""
-    for tag in ('script', 'style', 'nav', 'footer', 'iframe'):
-        html = re.sub(rf'<{tag}[^>]*>.*?</{tag}>', ' ', html, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<[^>]+>', ' ', html)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text[:10000]
+def _clean_html(raw_html):
+    """Strip noise, preserve semantic structure as markdown for Gemini (max 40k chars)."""
+    import html as _html_module
+    if not raw_html:
+        return ""
+    for tag in ('script', 'style', 'nav', 'footer', 'iframe', 'header', 'aside'):
+        raw_html = re.sub(rf'<{tag}[^>]*>.*?</{tag}>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
+    raw_html = re.sub(r'<h[1-6][^>]*>', '\n## ', raw_html, flags=re.IGNORECASE)
+    raw_html = re.sub(r'</h[1-6]>', '\n', raw_html, flags=re.IGNORECASE)
+    raw_html = re.sub(r'<li[^>]*>', '\n- ', raw_html, flags=re.IGNORECASE)
+    raw_html = re.sub(r'</li>', '', raw_html, flags=re.IGNORECASE)
+    raw_html = re.sub(r'<(?:p|br)[^>]*>', '\n', raw_html, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', ' ', raw_html)
+    text = _html_module.unescape(text)
+    text = re.sub(r'\n[ \t]+', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+    return text[:40000]
 
 
 def _sanitize_json(text):
@@ -459,9 +469,25 @@ def edit_recipe(id):
             db.session.add(recipe_ingredient)
 
         db.session.commit()
+
+        # Scope-gebonden pantry-sync: alleen ingrediënten van dit recept aanraken
+        scope_ids         = set(int(x) for x in request.form.getlist('ingredient_id[]') if x)
+        checked_pantry_ids = set(int(x) for x in request.form.getlist('pantry[]'))
+        for ing_id in scope_ids:
+            exists = PantryIngredient.query.filter_by(ingredient_id=ing_id).first()
+            if ing_id in checked_pantry_ids:
+                if not exists:
+                    db.session.add(PantryIngredient(ingredient_id=ing_id))
+            else:
+                if exists:
+                    db.session.delete(exists)
+        db.session.commit()
+
         return redirect(url_for('recipes.receptenplanner'))
 
-    return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
+    pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
+    return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks,
+                           categories=PRODUCT_CATEGORIES, pantry_ids=pantry_ids)
 
 
 @bp.route('/recipe/<int:id>', methods=['DELETE'])
@@ -593,7 +619,7 @@ def get_quick_access_recipes():
 
 @bp.route('/recipe/scrape', methods=['POST'])
 def scrape_recipe():
-    import requests as _requests
+    from curl_cffi import requests as _requests
     from recipe_scrapers import scrape_html
     data = request.get_json()
     url = (data or {}).get('url', '').strip()
@@ -601,19 +627,20 @@ def scrape_recipe():
         return jsonify({'status': 'error', 'message': 'Geen URL opgegeven'}), 400
 
     try:
-        resp = _requests.get(url, headers=_BROWSER_HEADERS, timeout=15, allow_redirects=True)
+        resp = _requests.get(url, impersonate='chrome', timeout=15, allow_redirects=True)
         resp.raise_for_status()
         html = resp.text
-    except _requests.exceptions.Timeout:
-        return jsonify({'status': 'error', 'message': 'De pagina reageerde niet op tijd. Probeer het opnieuw.'}), 400
-    except _requests.exceptions.HTTPError as e:
-        code = e.response.status_code if e.response is not None else '?'
+    except Exception as e:
+        msg = str(e)
+        code = getattr(getattr(e, 'response', None), 'status_code', None)
+        if 'timed out' in msg.lower() or 'timeout' in msg.lower():
+            return jsonify({'status': 'error', 'message': 'De pagina reageerde niet op tijd. Probeer het opnieuw.'}), 400
         if code == 403:
             return jsonify({'status': 'error', 'message': 'Deze website blokkeert automatisch ophalen (403). Probeer een andere site.'}), 400
         if code == 404:
             return jsonify({'status': 'error', 'message': 'Pagina niet gevonden (404). Controleer de URL.'}), 400
-        return jsonify({'status': 'error', 'message': f'De pagina kon niet worden opgehaald (HTTP {code}).'}), 400
-    except Exception:
+        if code:
+            return jsonify({'status': 'error', 'message': f'De pagina kon niet worden opgehaald (HTTP {code}).'}), 400
         return jsonify({'status': 'error', 'message': 'De URL kon niet worden bereikt. Controleer de URL.'}), 400
 
     try:
@@ -845,3 +872,86 @@ def recipe_from_photo():
         else:
             msg = f'Fout bij verwerken: {msg[:100]}'
         return jsonify({'status': 'error', 'message': msg}), 400
+
+
+# ── Ecobooster ───────────────────────────────────────────────────────────────
+
+@bp.route('/ecobooster')
+def ecobooster():
+    pantry = PantryIngredient.query.order_by(PantryIngredient.id).all()
+    return render_template('ecobooster.html', pantry=pantry)
+
+
+@bp.route('/api/ecobooster/match', methods=['POST'])
+def ecobooster_match():
+    fresh_ids  = set(request.json.get('ingredient_ids', []))
+    if not fresh_ids:
+        return jsonify([])
+
+    pantry_ids    = {p.ingredient_id for p in PantryIngredient.query.all()}
+    all_available = fresh_ids | pantry_ids
+
+    results = []
+    for recipe in Recipe.query.all():
+        ri_list   = recipe.ingredients
+        ri_ids    = {ri.ingredient_id for ri in ri_list}
+        total     = len(ri_ids)
+        if total == 0:
+            continue
+
+        matched_fresh  = fresh_ids & ri_ids
+        if not matched_fresh:
+            continue
+
+        matched_pantry = pantry_ids & ri_ids
+        eco_score      = round((len(matched_fresh) + len(matched_pantry)) / total * 100)
+        missing        = [ri.ingredient.display for ri in ri_list
+                          if ri.ingredient_id not in all_available]
+
+        results.append({
+            'id':          recipe.id,
+            'name':        recipe.name,
+            'is_favorite': recipe.is_favorite,
+            'cookbook':    recipe.cookbook.abbreviation if recipe.cookbook else None,
+            'page':        recipe.page,
+            'serves':      recipe.serves,
+            'eco_score':   eco_score,
+            'missing':     missing,
+            'missing_count': len(missing),
+        })
+
+    results.sort(key=lambda x: (x['missing_count'], -x['eco_score']))
+    return jsonify(results)
+
+
+@bp.route('/api/pantry', methods=['GET'])
+def get_pantry():
+    items = PantryIngredient.query.order_by(PantryIngredient.id).all()
+    return jsonify([{
+        'id':           p.id,
+        'ingredient_id': p.ingredient_id,
+        'name':         p.ingredient.display,
+    } for p in items])
+
+
+@bp.route('/api/pantry', methods=['POST'])
+def add_pantry():
+    ingredient_id = request.json.get('ingredient_id')
+    if not ingredient_id:
+        return jsonify({'status': 'error', 'message': 'ingredient_id verplicht'}), 400
+    if PantryIngredient.query.filter_by(ingredient_id=ingredient_id).first():
+        return jsonify({'status': 'exists'})
+    p = PantryIngredient(ingredient_id=ingredient_id)
+    db.session.add(p)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'id': p.id, 'ingredient_id': p.ingredient_id,
+                    'name': p.ingredient.display})
+
+
+@bp.route('/api/pantry/<int:ingredient_id>', methods=['DELETE'])
+def remove_pantry(ingredient_id):
+    p = PantryIngredient.query.filter_by(ingredient_id=ingredient_id).first()
+    if p:
+        db.session.delete(p)
+        db.session.commit()
+    return jsonify({'status': 'ok'})
