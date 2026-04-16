@@ -5,7 +5,7 @@ import hashlib
 from flask import current_app
 
 from weekmenu.extensions import db
-from weekmenu.models import Ingredient, IngredientAlias, Cookbook, Settings
+from weekmenu.models import Ingredient, IngredientAlias, Cookbook
 from weekmenu.constants import _KNOWN_SITES, _BROWSER_HEADERS
 from weekmenu.services.units import _normalize_ingredient, _guess_ingredient_category
 
@@ -113,11 +113,3 @@ def _download_site_logo(domain, html_text, requests_module):
         except Exception:
             continue
     return None
-
-
-def _get_gemini_api_key():
-    """Get Gemini API key from database or environment."""
-    s = Settings.query.filter_by(key='gemini_api_key').first()
-    if s and s.value:
-        return s.value
-    return os.environ.get('GEMINI_API_KEY')

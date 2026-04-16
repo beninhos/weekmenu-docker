@@ -1,104 +1,27 @@
 import hashlib
 import json
 import os
-import re
 
 from flask import (
     Blueprint, render_template, request, jsonify,
     redirect, url_for, flash, current_app,
 )
-from werkzeug.utils import secure_filename
 
 from weekmenu.extensions import db
 from weekmenu.models import (
     Recipe, Ingredient, IngredientAlias, Cookbook,
     RecipeIngredient, Settings, PantryIngredient,
 )
-from weekmenu.constants import PRODUCT_CATEGORIES, _BROWSER_HEADERS, DUTCH_UNITS
+from weekmenu.constants import PRODUCT_CATEGORIES
 from weekmenu.services.units import (
-    _normalize_ingredient, _guess_ingredient_category,
-    _normalize_ri_unit, parse_ingredients_from_list,
+    _normalize_ingredient, _guess_ingredient_category, _normalize_ri_unit,
 )
 from weekmenu.services.recipes import (
-    _resolve_or_create_ingredient, _suggest_site_cookbook,
-    _download_site_logo, _get_gemini_api_key,
+    _resolve_or_create_ingredient, _download_site_logo,
 )
-
-_VALID_UNITS = sorted(set(DUTCH_UNITS.values()))
-_UNITS_STR = ', '.join(_VALID_UNITS)
-
-_GEMINI_RECIPE_PROMPT = f"""Extraheer het recept. Geef ALLEEN geldige JSON terug, geen markdown.
-
-{{
-  "title": "Recept naam",
-  "yields": 4,
-  "prep_time": 30,
-  "ingredients": [
-    {{"name": "bloem", "amount": 200, "unit": "g"}},
-    {{"name": "eieren", "amount": 3, "unit": "stuks"}}
-  ],
-  "instructions": "Stap 1. Verwarm de oven...\\nStap 2. Meng..."
-}}
-
-Regels:
-- Gebruik ALLEEN deze eenheden voor "unit": {_UNITS_STR}
-- "amount" is een getal (int of float), of null als onbekend
-- Converteer breuken naar decimalen: ½ → 0.5, ¼ → 0.25, "anderhalve" → 1.5
-- Haal hoeveelheden uit de naam en zet ze in "amount"
-- "name" is de ingrediëntnaam zonder hoeveelheid of eenheid
-- "instructions" als enkele string met stappen gescheiden door newlines
-- "prep_time" in minuten (int of null)
-- Als er geen recept gevonden kan worden: {{"error": "Geen recept gevonden"}}
-"""
-
-
-def _clean_html(raw_html):
-    """Strip noise, preserve semantic structure as markdown for Gemini (max 40k chars)."""
-    import html as _html_module
-    if not raw_html:
-        return ""
-    for tag in ('script', 'style', 'nav', 'footer', 'iframe', 'header', 'aside'):
-        raw_html = re.sub(rf'<{tag}[^>]*>.*?</{tag}>', '', raw_html, flags=re.DOTALL | re.IGNORECASE)
-    raw_html = re.sub(r'<h[1-6][^>]*>', '\n## ', raw_html, flags=re.IGNORECASE)
-    raw_html = re.sub(r'</h[1-6]>', '\n', raw_html, flags=re.IGNORECASE)
-    raw_html = re.sub(r'<li[^>]*>', '\n- ', raw_html, flags=re.IGNORECASE)
-    raw_html = re.sub(r'</li>', '', raw_html, flags=re.IGNORECASE)
-    raw_html = re.sub(r'<(?:p|br)[^>]*>', '\n', raw_html, flags=re.IGNORECASE)
-    text = re.sub(r'<[^>]+>', ' ', raw_html)
-    text = _html_module.unescape(text)
-    text = re.sub(r'\n[ \t]+', '\n', text)
-    text = re.sub(r'\n{3,}', '\n\n', text).strip()
-    return text[:40000]
-
-
-def _sanitize_json(text):
-    """Strip markdown code fences and extra whitespace from LLM response."""
-    text = text.strip()
-    # Strip markdown fences (with optional language tag)
-    if text.startswith('```'):
-        text = text.split('\n', 1)[1] if '\n' in text else text[3:]
-        if text.endswith('```'):
-            text = text.rsplit('```', 1)[0]
-        text = text.strip()
-    # Strip trailing commas before } or ]
-    text = re.sub(r',(\s*[}\]])', r'\1', text)
-    return text
-
-
-def _build_gemini_ingredients(raw_list):
-    """Convert structured LLM ingredient dicts to app format with category."""
-    ingredients = []
-    for ing in raw_list:
-        name = (ing.get('name') or '').strip()
-        if not name:
-            continue
-        ingredients.append({
-            'name': name,
-            'amount': ing.get('amount'),
-            'unit': ing.get('unit') or '',
-            'category': _guess_ingredient_category(name),
-        })
-    return ingredients
+from weekmenu.services.gemini import scrape_recipe_from_url, recipe_from_photos
+from weekmenu.services.recipe_matcher import score_recipes
+from weekmenu.services.pantry import list_pantry, add_to_pantry, remove_from_pantry
 
 
 bp = Blueprint('recipes', __name__)
@@ -619,259 +542,17 @@ def get_quick_access_recipes():
 
 @bp.route('/recipe/scrape', methods=['POST'])
 def scrape_recipe():
-    from curl_cffi import requests as _requests
-    from recipe_scrapers import scrape_html
-    data = request.get_json()
-    url = (data or {}).get('url', '').strip()
-    if not url:
-        return jsonify({'status': 'error', 'message': 'Geen URL opgegeven'}), 400
-
-    try:
-        resp = _requests.get(url, impersonate='chrome', timeout=15, allow_redirects=True)
-        resp.raise_for_status()
-        html = resp.text
-    except Exception as e:
-        msg = str(e)
-        code = getattr(getattr(e, 'response', None), 'status_code', None)
-        if 'timed out' in msg.lower() or 'timeout' in msg.lower():
-            return jsonify({'status': 'error', 'message': 'De pagina reageerde niet op tijd. Probeer het opnieuw.'}), 400
-        if code == 403:
-            return jsonify({'status': 'error', 'message': 'Deze website blokkeert automatisch ophalen (403). Probeer een andere site.'}), 400
-        if code == 404:
-            return jsonify({'status': 'error', 'message': 'Pagina niet gevonden (404). Controleer de URL.'}), 400
-        if code:
-            return jsonify({'status': 'error', 'message': f'De pagina kon niet worden opgehaald (HTTP {code}).'}), 400
-        return jsonify({'status': 'error', 'message': 'De URL kon niet worden bereikt. Controleer de URL.'}), 400
-
-    try:
-        scraper = scrape_html(html, org_url=url)
-        scraper.title()
-    except Exception:
-        try:
-            scraper = scrape_html(html, org_url=url, wild_mode=True)
-        except Exception:
-            scraper = None
-
-    # ── LLM fallback wanneer scraper faalt ──────────────────
-    if scraper is None:
-        api_key = _get_gemini_api_key()
-        if not api_key:
-            return jsonify({'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina. De site ondersteunt geen gestructureerde receptdata.'}), 400
-
-        from google import genai as _genai
-
-        text = _clean_html(html)
-        prompt = _GEMINI_RECIPE_PROMPT + f"\n\nTekst van de pagina:\n{text}"
-
-        try:
-            client = _genai.Client(api_key=api_key)
-            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-            sanitized = _sanitize_json(response.text)
-            result = json.loads(sanitized)
-
-            if 'error' in result:
-                return jsonify({'status': 'error', 'message': result['error']}), 400
-
-            cookbook_info = {'id': None, 'name': None, 'exists': False}
-            try:
-                from urllib.parse import urlparse as _urlparse
-                domain = _urlparse(url).netloc
-                cookbook_info = _suggest_site_cookbook(domain, html, None)
-            except Exception:
-                pass
-
-            return jsonify({
-                'status': 'success',
-                'name': result.get('title', ''),
-                'serves': result.get('yields'),
-                'url': url,
-                'instructions': result.get('instructions', ''),
-                'ingredients': _build_gemini_ingredients(result.get('ingredients', [])),
-                'image_path': None,
-                'cookbook_id': cookbook_info.get('id'),
-                'cookbook_name': cookbook_info.get('name'),
-                'cookbook_exists': cookbook_info.get('exists', False),
-            })
-        except json.JSONDecodeError as e:
-            return jsonify({'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}), 400
-        except Exception as e:
-            msg = str(e)
-            if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
-                msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
-            else:
-                msg = f'Fout bij verwerken: {msg[:100]}'
-            return jsonify({'status': 'error', 'message': msg}), 400
-
-    try:
-        title = scraper.title() or ''
-    except Exception:
-        title = ''
-
-    try:
-        yields_str = scraper.yields() or ''
-        serves_match = re.search(r'\d+', yields_str)
-        serves = int(serves_match.group()) if serves_match else None
-    except Exception:
-        serves = None
-
-    try:
-        instructions = scraper.instructions() or ''
-    except Exception:
-        instructions = ''
-
-    raw_ingredients = []
-    section_names = []
-    try:
-        groups = scraper.ingredient_groups()
-        if groups and len(groups) > 1:
-            for g in groups:
-                if g.ingredients:
-                    raw_ingredients.extend(g.ingredients)
-                if g.purpose:
-                    section_names.append(g.purpose)
-        else:
-            raise ValueError('single group, use .ingredients()')
-    except Exception:
-        try:
-            raw_ingredients = scraper.ingredients() or []
-        except Exception:
-            raw_ingredients = []
-
-    if section_names:
-        prefix = 'Secties: ' + ' + '.join(section_names) + '\n\n'
-        instructions = prefix + instructions
-
-    parsed_ingredients = parse_ingredients_from_list(raw_ingredients)
-
-    image_path = None
-    try:
-        image_url = scraper.image()
-        if image_url:
-            from curl_cffi import requests as _cffi_requests
-            img_resp = _cffi_requests.get(image_url, impersonate='chrome', timeout=10)
-            img_resp.raise_for_status()
-            content_type = img_resp.headers.get('Content-Type', '')
-            ext = '.jpg'
-            if 'png' in content_type:
-                ext = '.png'
-            elif 'webp' in content_type:
-                ext = '.webp'
-            elif 'avif' in content_type:
-                ext = '.avif'
-            elif 'gif' in content_type:
-                ext = '.gif'
-            fname = hashlib.md5(image_url.encode()).hexdigest() + ext
-            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, 'wb') as f:
-                f.write(img_resp.content)
-            image_path = os.path.join('static/uploads', fname)
-    except Exception:
-        pass
-
-    cookbook_info = {'id': None, 'name': None, 'exists': False}
-    try:
-        from urllib.parse import urlparse as _urlparse
-        domain = _urlparse(url).netloc
-        cookbook_info = _suggest_site_cookbook(domain, html, scraper)
-    except Exception:
-        pass
-
-    return jsonify({
-        'status': 'success',
-        'name': title,
-        'serves': serves,
-        'url': url,
-        'instructions': instructions,
-        'ingredients': parsed_ingredients,
-        'image_path': image_path,
-        'cookbook_id': cookbook_info.get('id'),
-        'cookbook_name': cookbook_info.get('name'),
-        'cookbook_exists': cookbook_info.get('exists', False),
-    })
+    data = request.get_json() or {}
+    payload, status = scrape_recipe_from_url(data.get('url', ''))
+    return jsonify(payload), status
 
 
 @bp.route('/recipe/from-photo', methods=['POST'])
 def recipe_from_photo():
-    from google import genai as _genai
-    from google.genai import types as _gtypes
-    import json as _json
-
-    api_key = _get_gemini_api_key()
-    if not api_key:
-        return jsonify({'status': 'error', 'message': 'Gemini API key niet geconfigureerd'}), 400
-
     if 'photos' not in request.files:
         return jsonify({'status': 'error', 'message': "Geen foto's ontvangen"}), 400
-
-    photos = request.files.getlist('photos')
-    if not photos or len(photos) == 0 or photos[0].filename == '':
-        return jsonify({'status': 'error', 'message': "Geen foto's geselecteerd"}), 400
-
-    if len(photos) > 3:
-        return jsonify({'status': 'error', 'message': "Maximaal 3 foto's toegestaan"}), 400
-
-    image_parts = []
-    first_image_path = None
-
-    for i, photo in enumerate(photos):
-        if photo.filename == '':
-            continue
-
-        image_bytes = photo.read()
-
-        if i == 0:
-            ext = '.jpg'
-            if photo.content_type == 'image/png':
-                ext = '.png'
-            elif photo.content_type == 'image/webp':
-                ext = '.webp'
-            elif photo.content_type == 'image/avif':
-                ext = '.avif'
-            fname = hashlib.md5(image_bytes).hexdigest() + ext
-            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, 'wb') as f:
-                f.write(image_bytes)
-            first_image_path = os.path.join('static/uploads', fname)
-
-        image_parts.append(
-            _gtypes.Part.from_bytes(data=image_bytes, mime_type=photo.content_type or 'image/jpeg')
-        )
-
-    prompt = _GEMINI_RECIPE_PROMPT + "\n\nBij meerdere foto's: combineer ingrediënten en bereiding van alle pagina's."
-
-    try:
-        client = _genai.Client(api_key=api_key)
-        content = [prompt] + image_parts
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=content)
-        sanitized = _sanitize_json(response.text)
-        result = _json.loads(sanitized)
-
-        if 'error' in result:
-            return jsonify({'status': 'error', 'message': result['error']}), 400
-
-        return jsonify({
-            'status': 'success',
-            'name': result.get('title', ''),
-            'serves': result.get('yields'),
-            'url': None,
-            'instructions': result.get('instructions', ''),
-            'ingredients': _build_gemini_ingredients(result.get('ingredients', [])),
-            'image_path': first_image_path,
-            'cookbook_id': None,
-            'cookbook_name': None,
-        })
-
-    except _json.JSONDecodeError as e:
-        return jsonify({'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}), 400
-    except Exception as e:
-        msg = str(e)
-        if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
-            msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
-        else:
-            msg = f'Fout bij verwerken: {msg[:100]}'
-        return jsonify({'status': 'error', 'message': msg}), 400
+    payload, status = recipe_from_photos(request.files.getlist('photos'))
+    return jsonify(payload), status
 
 
 # ── Ecobooster ───────────────────────────────────────────────────────────────
@@ -884,74 +565,24 @@ def ecobooster():
 
 @bp.route('/api/ecobooster/match', methods=['POST'])
 def ecobooster_match():
-    fresh_ids  = set(request.json.get('ingredient_ids', []))
-    if not fresh_ids:
-        return jsonify([])
+    fresh_ids = request.json.get('ingredient_ids', []) if request.json else []
+    return jsonify(score_recipes(fresh_ids, source='ecobooster'))
 
-    pantry_ids    = {p.ingredient_id for p in PantryIngredient.query.all()}
-    all_available = fresh_ids | pantry_ids
 
-    results = []
-    for recipe in Recipe.query.all():
-        ri_list   = recipe.ingredients
-        ri_ids    = {ri.ingredient_id for ri in ri_list}
-        total     = len(ri_ids)
-        if total == 0:
-            continue
-
-        matched_fresh  = fresh_ids & ri_ids
-        if not matched_fresh:
-            continue
-
-        matched_pantry = pantry_ids & ri_ids
-        eco_score      = round((len(matched_fresh) + len(matched_pantry)) / total * 100)
-        missing        = [ri.ingredient.display for ri in ri_list
-                          if ri.ingredient_id not in all_available]
-
-        results.append({
-            'id':          recipe.id,
-            'name':        recipe.name,
-            'is_favorite': recipe.is_favorite,
-            'cookbook':    recipe.cookbook.abbreviation if recipe.cookbook else None,
-            'page':        recipe.page,
-            'serves':      recipe.serves,
-            'eco_score':   eco_score,
-            'missing':     missing,
-            'missing_count': len(missing),
-        })
-
-    results.sort(key=lambda x: (x['missing_count'], -x['eco_score']))
-    return jsonify(results)
-
+# ── Pantry API ───────────────────────────────────────────────────────────────
 
 @bp.route('/api/pantry', methods=['GET'])
 def get_pantry():
-    items = PantryIngredient.query.order_by(PantryIngredient.id).all()
-    return jsonify([{
-        'id':           p.id,
-        'ingredient_id': p.ingredient_id,
-        'name':         p.ingredient.display,
-    } for p in items])
+    return jsonify(list_pantry())
 
 
 @bp.route('/api/pantry', methods=['POST'])
 def add_pantry():
-    ingredient_id = request.json.get('ingredient_id')
-    if not ingredient_id:
-        return jsonify({'status': 'error', 'message': 'ingredient_id verplicht'}), 400
-    if PantryIngredient.query.filter_by(ingredient_id=ingredient_id).first():
-        return jsonify({'status': 'exists'})
-    p = PantryIngredient(ingredient_id=ingredient_id)
-    db.session.add(p)
-    db.session.commit()
-    return jsonify({'status': 'ok', 'id': p.id, 'ingredient_id': p.ingredient_id,
-                    'name': p.ingredient.display})
+    data = request.json or {}
+    payload, status = add_to_pantry(data.get('ingredient_id'))
+    return jsonify(payload), status
 
 
 @bp.route('/api/pantry/<int:ingredient_id>', methods=['DELETE'])
 def remove_pantry(ingredient_id):
-    p = PantryIngredient.query.filter_by(ingredient_id=ingredient_id).first()
-    if p:
-        db.session.delete(p)
-        db.session.commit()
-    return jsonify({'status': 'ok'})
+    return jsonify(remove_from_pantry(ingredient_id))
