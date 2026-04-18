@@ -1,8 +1,7 @@
 from flask import Blueprint, render_template
 
-from weekmenu.services.seasons import (
-    current_month, MONTH_NAMES_NL, resolve_seasonal_ingredients,
-)
+from weekmenu.constants import MONTH_NAMES_NL
+from weekmenu.services.seasons import current_month, resolve_seasonal_ingredients
 from weekmenu.services.recipe_matcher import score_recipes
 
 
