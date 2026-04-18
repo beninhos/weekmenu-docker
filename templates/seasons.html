@@ -33,7 +33,7 @@
         <div class="space-y-2">
             {% for r in recipes %}
             {% set score_color = '#4A7C59' if r.eco_score >= 75 else ('#8B7A3A' if r.eco_score >= 50 else '#6B6B6B') %}
-            <a href="{{ url_for('recipes.edit_recipe', id=r.id) }}"
+            <a href="{{ url_for('recipes.edit_recipe', id=r.id) }}" onclick="return openDetail(event, {{ r.id }})"
                class="bg-white border border-[#E8E4DC] rounded-lg px-4 py-3 flex items-start gap-3 hover:border-[#C9A882] hover:bg-[#FAF8F5] transition-colors no-underline">
                 <div class="flex-grow min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
@@ -71,4 +71,9 @@
     {% endif %}
 
 </div>
+
+{% include '_recipe_detail_modal.html' %}
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<script src="{{ url_for('static', filename='js/recipe-detail-modal.js') }}"></script>
 {% endblock %}

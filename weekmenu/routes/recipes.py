@@ -27,6 +27,33 @@ from weekmenu.services.pantry import list_pantry, add_to_pantry, remove_from_pan
 bp = Blueprint('recipes', __name__)
 
 
+def serialize_recipe(r, default_serves=4):
+    """Volledige recept-payload voor detail-modal en receptenplanner-cache."""
+    return {
+        'id': r.id,
+        'name': r.name,
+        'serves': r.serves or default_serves,
+        'image_path': r.image_path or '',
+        'cookbook': r.cookbook.name if r.cookbook else None,
+        'cookbook_abbr': r.cookbook.abbreviation if r.cookbook else None,
+        'page': r.page,
+        'url': r.url or '',
+        'instructions': r.instructions or '',
+        'is_favorite': r.is_favorite,
+        'ingredients': [
+            {
+                'id': ri.id,
+                'name': ri.ingredient.display,
+                'amount': ri.amount,
+                'unit': ri.unit,
+                'category': ri.ingredient.category,
+                'preparation': ri.preparation or '',
+            }
+            for ri in r.ingredients
+        ],
+    }
+
+
 @bp.route('/recipes')
 def recipes():
     return redirect(url_for('recipes.receptenplanner'))
@@ -43,38 +70,24 @@ def receptenplanner():
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else 4
 
-    recipes_json = json.dumps([
-        {
-            'id': r.id,
-            'name': r.name,
-            'serves': r.serves or default_serves,
-            'image_path': r.image_path or '',
-            'cookbook': r.cookbook.name if r.cookbook else None,
-            'cookbook_abbr': r.cookbook.abbreviation if r.cookbook else None,
-            'page': r.page,
-            'url': r.url or '',
-            'instructions': r.instructions or '',
-            'is_favorite': r.is_favorite,
-            'ingredients': [
-                {
-                    'id': ri.id,
-                    'name': ri.ingredient.display,
-                    'amount': ri.amount,
-                    'unit': ri.unit,
-                    'category': ri.ingredient.category,
-                    'preparation': ri.preparation or '',
-                }
-                for ri in r.ingredients
-            ]
-        }
-        for r in recipes
-    ], ensure_ascii=False)
+    recipes_json = json.dumps(
+        [serialize_recipe(r, default_serves) for r in recipes],
+        ensure_ascii=False,
+    )
 
     return render_template('receptenplanner.html',
                            recipes_json=recipes_json,
                            current_week=current_week,
                            current_year=current_year,
                            default_serves=default_serves)
+
+
+@bp.route('/api/recipe/<int:id>')
+def api_recipe_detail(id):
+    recipe = Recipe.query.get_or_404(id)
+    default_serves_setting = Settings.query.filter_by(key='default_serves').first()
+    default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else 4
+    return jsonify(serialize_recipe(recipe, default_serves))
 
 
 @bp.route('/cookbook/<int:id>/recipes')
