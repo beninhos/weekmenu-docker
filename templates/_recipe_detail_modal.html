@@ -1,0 +1,100 @@
+{# Gedeeld recept-detail-panel — slides in from right.
+   Inclusief CSS, HTML en (via shared JS-module) fetch-gebaseerde datalading.
+   Callers includen deze partial + <script src="...recipe-detail-modal.js"> + DOMPurify + utils.js. #}
+
+<style>
+  #detail-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 100;
+    display: none;
+  }
+  #detail-panel {
+    position: fixed;
+    top: 0; right: 0;
+    width: 420px;
+    height: 100vh;
+    background: #FAF8F5;
+    box-shadow: -4px 0 28px rgba(0,0,0,0.18);
+    z-index: 110;
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #detail-panel.open { transform: translateX(0); }
+  @media (max-width: 440px) {
+    #detail-panel { width: 100%; }
+  }
+
+  .ing-item label {
+    text-decoration: line-through;
+    color: #6B6B6B;
+  }
+  .ing-item input[type=checkbox]:checked + label {
+    text-decoration: none;
+    color: #2C2C2C;
+  }
+</style>
+
+<div id="detail-overlay" onclick="closeDetail()"></div>
+<div id="detail-panel" role="dialog" aria-modal="true" aria-labelledby="dp-name">
+  <button onclick="closeDetail()" aria-label="Sluiten"
+          class="absolute top-3 right-3 bg-white bg-opacity-90 rounded-full w-8 h-8 flex items-center justify-center text-[#6B6B6B] hover:text-[#2C2C2C] shadow text-lg font-bold z-10"
+          style="line-height:1;">&times;</button>
+
+  <div id="dp-img-wrap" class="relative w-full flex-shrink-0" style="height:220px; background:#F5F2ED;">
+    <img id="dp-img" src="" alt="" class="w-full h-full object-cover" style="display:none;">
+    <div id="dp-placeholder" class="w-full h-full flex items-center justify-center">
+      <span id="dp-initial" class="text-7xl font-extrabold text-[#D4CEC4]"></span>
+    </div>
+  </div>
+
+  <div class="p-5 flex flex-col flex-1">
+    <h2 id="dp-name" class="text-xl font-extrabold text-[#2C2C2C] mb-1 leading-tight"></h2>
+
+    <div class="flex gap-2 mb-3">
+      <button id="dp-fav-btn" onclick="toggleDetailFavorite()" title="Favoriet"
+              class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-[#F5F2ED] text-base transition-colors">
+      </button>
+      <a id="dp-edit-btn" href="#" title="Bewerken"
+         class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-[#F5F2ED] transition-colors" style="text-decoration:none;">
+        <svg class="w-4 h-4" fill="none" stroke="#6B6B6B" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      </a>
+      <button id="dp-del-btn" onclick="deleteFromDetail()" title="Verwijderen"
+              class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-red-50 transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="#6B6B6B" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+      </button>
+    </div>
+
+    <div class="flex flex-wrap gap-x-3 gap-y-1 items-center mb-4 text-sm text-[#6B6B6B]">
+      <span id="dp-cookbook"></span>
+      <span id="dp-page"></span>
+      <a id="dp-url" href="#" target="_blank" rel="noopener noreferrer"
+         class="text-[#8B4513] hover:underline" style="display:none;">Online recept ↗</a>
+      <span id="dp-serves" class="bg-[#F5F2ED] text-[#8B4513] rounded-full px-2 py-0.5 text-xs font-medium"></span>
+    </div>
+
+    <div id="dp-instr-wrap" class="mb-4" style="display:none;">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Bereidingswijze</h3>
+      <div id="dp-instr" class="text-sm text-[#2C2C2C] leading-relaxed overflow-y-auto pr-1" style="max-height:9rem;"></div>
+    </div>
+
+    <div class="mb-5 flex-1">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B]">Ingrediënten</h3>
+        <div class="flex gap-3 text-xs">
+          <button onclick="toggleAll(true)"  class="text-[#8B4513] hover:underline">Alles aan</button>
+          <button onclick="toggleAll(false)" class="text-[#6B6B6B] hover:underline">Alles uit</button>
+        </div>
+      </div>
+      <div id="dp-ingredients" class="space-y-0.5 overflow-y-auto pr-1" style="max-height:14rem;"></div>
+    </div>
+
+    <button id="dp-plan-btn" onclick="openPlanPopup()"
+            class="w-full bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-3 px-4 rounded-lg transition-colors mt-auto">
+      Plan dit recept
+    </button>
+  </div>
+</div>

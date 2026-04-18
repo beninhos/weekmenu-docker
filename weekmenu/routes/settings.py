@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from weekmenu.extensions import db
 from weekmenu.models import Recipe, Cookbook, Ingredient, Settings, PantryIngredient
 from weekmenu.services.ah import _ah_setting
-from weekmenu.services.recipes import _get_gemini_api_key
+from weekmenu.services.gemini import _get_gemini_api_key
 
 bp = Blueprint('settings', __name__)
 
