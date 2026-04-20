@@ -1,6 +1,6 @@
 # Weekmenu Planner
 
-Weekmenu plannen, recepten beheren en de boodschappenlijst rechtstreeks naar je AH-app sturen. Draait als Docker-container (Flask + SQLite).
+Weekmenu plannen, recepten beheren en de boodschappenlijst rechtstreeks naar je AH-app sturen. Draait als Docker-container
 
 ## Wat het doet
 
