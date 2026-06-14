@@ -167,15 +167,19 @@
 
             <div class="hidden md:flex items-center gap-6">
                 <a href="{{ url_for('main.index') }}"
-                   class="text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Weekmenu</a>
+                   class="text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Mijn week</a>
                 <a href="{{ url_for('recipes.receptenplanner') }}"
-                   class="text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
+                   class="text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Recepten</a>
+                <a href="{{ url_for('inspiratie.inspiratie') }}"
+                   class="text-sm {% if request.endpoint == 'inspiratie.inspiratie' %}nav-active{% else %}nav-link{% endif %}">Inspiratie</a>
                 <a href="{{ url_for('main.boodschappenlijst_redirect') }}"
                    class="text-sm {% if request.endpoint == 'main.boodschappenlijst_redirect' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
-                <a href="{{ url_for('recipes.ecobooster') }}"
-                   class="text-sm {% if request.endpoint == 'recipes.ecobooster' %}nav-active{% else %}nav-link{% endif %}">Ecobooster</a>
-                <a href="{{ url_for('seasons.seasons') }}"
-                   class="text-sm {% if request.endpoint == 'seasons.seasons' %}nav-active{% else %}nav-link{% endif %}">Seizoen</a>
+                <a href="{{ url_for('ah.ah_winkelmand') }}"
+                   class="text-sm {% if request.endpoint == 'ah.ah_winkelmand' %}nav-active{% else %}nav-link{% endif %}">AH winkelmand</a>
+                <a href="{{ url_for('ah.ah_products') }}"
+                   class="text-sm {% if request.endpoint == 'ah.ah_products' %}nav-active{% else %}nav-link{% endif %}">AH producten</a>
+                <a href="{{ url_for('pantry.pantry') }}"
+                   class="text-sm {% if request.endpoint == 'pantry.pantry' %}nav-active{% else %}nav-link{% endif %}">Voorraad</a>
                 <a href="{{ url_for('settings.settings_page') }}"
                    class="text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
             </div>
@@ -190,15 +194,19 @@
         </div>
         <div id="mobile-menu" class="hidden md:hidden border-t px-4 pb-3 pt-2 space-y-2" style="border-color: var(--color-border);">
             <a href="{{ url_for('main.index') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Weekmenu</a>
+               class="block py-2 text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Mijn week</a>
             <a href="{{ url_for('recipes.receptenplanner') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Receptenplanner</a>
+               class="block py-2 text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Recepten</a>
+            <a href="{{ url_for('inspiratie.inspiratie') }}"
+               class="block py-2 text-sm {% if request.endpoint == 'inspiratie.inspiratie' %}nav-active{% else %}nav-link{% endif %}">Inspiratie</a>
             <a href="{{ url_for('main.boodschappenlijst_redirect') }}"
                class="block py-2 text-sm {% if request.endpoint == 'main.boodschappenlijst_redirect' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
-            <a href="{{ url_for('recipes.ecobooster') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'recipes.ecobooster' %}nav-active{% else %}nav-link{% endif %}">Ecobooster</a>
-            <a href="{{ url_for('seasons.seasons') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'seasons.seasons' %}nav-active{% else %}nav-link{% endif %}">Seizoen</a>
+            <a href="{{ url_for('ah.ah_winkelmand') }}"
+               class="block py-2 text-sm {% if request.endpoint == 'ah.ah_winkelmand' %}nav-active{% else %}nav-link{% endif %}">AH winkelmand</a>
+            <a href="{{ url_for('ah.ah_products') }}"
+               class="block py-2 text-sm {% if request.endpoint == 'ah.ah_products' %}nav-active{% else %}nav-link{% endif %}">AH producten</a>
+            <a href="{{ url_for('pantry.pantry') }}"
+               class="block py-2 text-sm {% if request.endpoint == 'pantry.pantry' %}nav-active{% else %}nav-link{% endif %}">Voorraad</a>
             <a href="{{ url_for('settings.settings_page') }}"
                class="block py-2 text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
         </div>

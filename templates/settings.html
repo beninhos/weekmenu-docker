@@ -34,35 +34,6 @@
         </form>
     </div>
 
-    <!-- Voorraadkast -->
-    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-1">Voorraadkast</h3>
-        <p class="text-xs text-[#6B6B6B] mb-4">
-            Ingrediënten die altijd in huis zijn. Ze worden nooit op de boodschappenlijst gezet
-            en tellen mee in de <a href="{{ url_for('recipes.ecobooster') }}" class="text-[#8B4513] hover:underline">Ecobooster</a>.
-            Vink ingrediënten aan via recepten, of voeg ze hier direct toe.
-        </p>
-
-        <div id="pantryTable" class="grid grid-cols-3 gap-1 mb-4">
-            {% for p in pantry %}
-            <div class="pantry-row flex items-center justify-between bg-white border border-[#E8E4DC] rounded px-3 py-1.5 text-sm"
-                 data-id="{{ p.ingredient_id }}">
-                <span class="text-[#2C2C2C] truncate">{{ p.ingredient.display }}</span>
-                <button onclick="removePantryItem(this, {{ p.ingredient_id }})"
-                        class="text-[#C4BEB4] hover:text-red-400 ml-2 shrink-0 text-xs leading-none">✕</button>
-            </div>
-            {% endfor %}
-        </div>
-
-        <div class="relative max-w-sm">
-            <input type="text" id="pantrySettingsInput" autocomplete="off"
-                   placeholder="+ Ingrediënt toevoegen…"
-                   class="w-full rounded-md border border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
-            <div id="pantrySettingsDropdown"
-                 class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
-        </div>
-    </div>
-
     <!-- Recepten -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
         <div class="flex items-center justify-between">
@@ -485,85 +456,6 @@ async function importData(input) {
     }
 
     input.value = '';
-}
-
-/* ── Voorraadkast beheer ──────────────────────────────── */
-(function() {
-    const input    = document.getElementById('pantrySettingsInput');
-    const dropdown = document.getElementById('pantrySettingsDropdown');
-    let debounce = null, activeIdx = -1;
-
-    input.addEventListener('input', () => {
-        const q = input.value.trim();
-        clearTimeout(debounce);
-        if (q.length < 1) { dropdown.classList.add('hidden'); return; }
-        debounce = setTimeout(() => fetchPantryOpts(q), 200);
-    });
-
-    input.addEventListener('keydown', e => {
-        if (dropdown.classList.contains('hidden')) return;
-        const items = dropdown.querySelectorAll('.ps-opt');
-        if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); hlPantry(items); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); hlPantry(items); }
-        else if (e.key === 'Enter' && activeIdx >= 0 && items[activeIdx]) { e.preventDefault(); items[activeIdx].click(); }
-        else if (e.key === 'Escape') { dropdown.classList.add('hidden'); activeIdx = -1; }
-    });
-
-    document.addEventListener('click', e => {
-        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-            dropdown.classList.add('hidden'); activeIdx = -1;
-        }
-    });
-
-    function hlPantry(items) {
-        items.forEach((el, i) => el.classList.toggle('bg-[#FAF8F5]', i === activeIdx));
-    }
-
-    async function fetchPantryOpts(q) {
-        const resp    = await fetch('/api/ingredients/search?q=' + encodeURIComponent(q));
-        const results = await resp.json();
-        if (!results.length) { dropdown.classList.add('hidden'); return; }
-        dropdown.innerHTML = results.map(r => `
-            <div class="ps-opt flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm"
-                 data-id="${r.id}" data-name="${escS(r.name)}">
-                <span class="text-[#2C2C2C]">${escS(r.name)}</span>
-                <span class="text-xs text-[#6B6B6B]">${escS(r.category)}</span>
-            </div>
-        `).join('');
-        dropdown.querySelectorAll('.ps-opt').forEach(opt => {
-            opt.addEventListener('click', async () => {
-                dropdown.classList.add('hidden');
-                input.value = '';
-                activeIdx = -1;
-                const id = opt.dataset.id, name = opt.dataset.name;
-                const resp = await fetch('/api/pantry', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ingredient_id: parseInt(id)})
-                });
-                const data = await resp.json();
-                if ((data.status === 'ok' || data.status === 'exists') && !document.querySelector(`#pantryTable .pantry-row[data-id="${id}"]`)) {
-                    const div = document.createElement('div');
-                    div.className = 'pantry-row flex items-center justify-between bg-white border border-[#E8E4DC] rounded px-3 py-1.5 text-sm';
-                    div.dataset.id = id;
-                    div.innerHTML = `<span class="text-[#2C2C2C] truncate">${escS(name)}</span>
-                        <button onclick="removePantryItem(this, ${id})" class="text-[#C4BEB4] hover:text-red-400 ml-2 shrink-0 text-xs leading-none">✕</button>`;
-                    document.getElementById('pantryTable').appendChild(div);
-                }
-            });
-        });
-        dropdown.classList.remove('hidden');
-        activeIdx = -1;
-    }
-})();
-
-async function removePantryItem(btn, ingredientId) {
-    await fetch(`/api/pantry/${ingredientId}`, {method: 'DELETE'});
-    btn.closest('.pantry-row').remove();
-}
-
-function escS(str) {
-    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 async function importZip(input) {

@@ -201,6 +201,20 @@ def _migrate_v5(conn):
     '''))
 
 
+def _migrate_v6(conn):
+    """Extra AH-productvelden: was-prijs, bonusmechanisme, merk, AH-categorie."""
+    ing_cols = [row[1] for row in conn.execute(
+        text('PRAGMA table_info(ingredient)')).fetchall()]
+    for col, col_def in [
+        ('ah_product_was_price',       'VARCHAR(20)'),
+        ('ah_product_bonus_mechanism', 'VARCHAR(100)'),
+        ('ah_product_brand',           'VARCHAR(100)'),
+        ('ah_product_category',        'VARCHAR(100)'),
+    ]:
+        if col not in ing_cols:
+            conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -226,8 +240,10 @@ def migrate_db():
             _migrate_v4(conn)
         if current < 5:
             _migrate_v5(conn)
+        if current < 6:
+            _migrate_v6(conn)
 
-        target = 5
+        target = 6
         if current < target:
             if row:
                 conn.execute(

@@ -1,0 +1,171 @@
+{# ── Verse ingrediënten ── #}
+<div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-1"
+        style="font-family: var(--font-serif)">Ecobooster</h2>
+    <p class="text-sm text-[#6B6B6B] mb-5">Wat moet je opmaken? Vind recepten die jouw ingrediënten gebruiken.</p>
+
+    <div id="freshChips" class="flex flex-wrap gap-2 mb-3 min-h-[2rem]"></div>
+
+    <div class="relative mb-4">
+        <input type="text" id="freshInput" autocomplete="off"
+               placeholder="+ Ingrediënt toevoegen…"
+               class="w-full rounded-md border border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+        <div id="freshDropdown"
+             class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
+    </div>
+
+    <button onclick="doMatch()"
+            class="bg-[#2C2C2C] text-white px-5 py-2 rounded text-sm hover:bg-[#1a1a1a]">
+        Zoek recepten
+    </button>
+</div>
+
+{# ── Resultaten ── #}
+<div id="results" class="space-y-2 hidden">
+    <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B]">Recepten</h3>
+    <div id="resultList"></div>
+</div>
+<div id="noResults" class="hidden text-sm text-[#6B6B6B] text-center py-6">
+    Geen recepten gevonden met deze ingrediënten.
+</div>
+
+<script>
+const freshSelected = {};
+
+initChipInput(
+    document.getElementById('freshInput'),
+    document.getElementById('freshDropdown'),
+    document.getElementById('freshChips'),
+    (id, name) => {
+        if (freshSelected[id]) return;
+        freshSelected[id] = name;
+        renderFreshChips();
+    }
+);
+
+function renderFreshChips() {
+    const container = document.getElementById('freshChips');
+    container.innerHTML = Object.entries(freshSelected).map(([id, name]) => `
+        <span class="flex items-center gap-1 bg-[#2C2C2C] text-white rounded-full px-3 py-1 text-xs">
+            ${esc(name)}
+            <button onclick="removeFresh(${id})" class="hover:text-[#C9A882] ml-1 leading-none">✕</button>
+        </span>
+    `).join('');
+}
+
+function removeFresh(id) {
+    delete freshSelected[id];
+    renderFreshChips();
+}
+
+async function doMatch() {
+    const ids = Object.keys(freshSelected).map(Number);
+    if (!ids.length) return;
+
+    const resp = await fetch('/api/ecobooster/match', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ingredient_ids: ids})
+    });
+    const recipes = await resp.json();
+
+    const list    = document.getElementById('resultList');
+    const section = document.getElementById('results');
+    const empty   = document.getElementById('noResults');
+
+    if (!recipes.length) {
+        section.classList.add('hidden');
+        empty.classList.remove('hidden');
+        return;
+    }
+
+    empty.classList.add('hidden');
+    section.classList.remove('hidden');
+    list.innerHTML = recipes.map(r => {
+        const scoreColor = r.eco_score >= 75 ? '#4A7C59'
+                         : r.eco_score >= 50 ? '#8B7A3A'
+                         : '#6B6B6B';
+        const meta = [
+            r.cookbook ? `${r.cookbook}${r.page ? ' · p.' + r.page : ''}` : null,
+            r.serves   ? `${r.serves} pers.` : null,
+        ].filter(Boolean).join(' · ');
+
+        const missingHtml = r.missing.length
+            ? `<div class="text-xs text-[#9B8A7A] mt-1">mist: ${r.missing.map(esc).join(', ')}</div>`
+            : `<div class="text-xs text-[#4A7C59] mt-1">Alles in huis</div>`;
+
+        return `
+        <a href="/recipe/${r.id}/edit" onclick="return openDetail(event, ${r.id})"
+           class="bg-white border border-[#E8E4DC] rounded-lg px-4 py-3 flex items-start gap-3 hover:border-[#C9A882] hover:bg-[#FAF8F5] transition-colors no-underline">
+            <div class="flex-grow min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    ${r.is_favorite ? '<span class="text-[#C9A882]" title="Favoriet">★</span>' : ''}
+                    <span class="font-semibold text-sm text-[#2C2C2C]">${esc(r.name)}</span>
+                </div>
+                ${meta ? `<div class="text-xs text-[#6B6B6B] mt-0.5">${esc(meta)}</div>` : ''}
+                ${missingHtml}
+            </div>
+            <div class="shrink-0 text-right">
+                <div class="text-sm font-bold" style="color:${scoreColor}">${r.eco_score}%</div>
+                ${r.missing_count > 0
+                    ? `<div class="text-xs text-[#6B6B6B]">mist ${r.missing_count}</div>`
+                    : `<div class="text-xs text-[#4A7C59]">compleet</div>`}
+            </div>
+        </a>`;
+    }).join('');
+}
+
+function initChipInput(input, dropdown, chipsContainer, onSelect) {
+    let debounce = null;
+    let activeIdx = -1;
+
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+        clearTimeout(debounce);
+        if (q.length < 1) { dropdown.classList.add('hidden'); return; }
+        debounce = setTimeout(() => fetchOpts(q), 200);
+    });
+
+    input.addEventListener('keydown', e => {
+        if (dropdown.classList.contains('hidden')) return;
+        const items = dropdown.querySelectorAll('.ac-opt');
+        if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); highlight(items); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); highlight(items); }
+        else if (e.key === 'Enter' && activeIdx >= 0 && items[activeIdx]) { e.preventDefault(); items[activeIdx].click(); }
+        else if (e.key === 'Escape') { dropdown.classList.add('hidden'); activeIdx = -1; }
+    });
+
+    document.addEventListener('click', e => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden'); activeIdx = -1;
+        }
+    });
+
+    function highlight(items) {
+        items.forEach((el, i) => el.classList.toggle('bg-[#FAF8F5]', i === activeIdx));
+    }
+
+    async function fetchOpts(q) {
+        const resp    = await fetch('/api/ingredients/search?q=' + encodeURIComponent(q));
+        const results = await resp.json();
+        if (!results.length) { dropdown.classList.add('hidden'); return; }
+        dropdown.innerHTML = results.map(r => `
+            <div class="ac-opt flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm"
+                 data-id="${r.id}" data-name="${esc(r.name)}">
+                <span class="text-[#2C2C2C]">${esc(r.name)}</span>
+                <span class="text-xs text-[#6B6B6B]">${esc(r.category)}</span>
+            </div>
+        `).join('');
+        dropdown.querySelectorAll('.ac-opt').forEach(opt => {
+            opt.addEventListener('click', () => {
+                onSelect(opt.dataset.id, opt.dataset.name);
+                input.value = '';
+                dropdown.classList.add('hidden');
+                activeIdx = -1;
+            });
+        });
+        dropdown.classList.remove('hidden');
+        activeIdx = -1;
+    }
+}
+</script>
