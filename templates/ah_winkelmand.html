@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .ah-tile { display:flex; flex-direction:column; align-items:flex-start; gap:2px; background:#fff;
+        border:1px solid #E8E4DC; border-radius:10px; padding:10px 12px; text-align:left;
+        transition:border-color .15s ease, box-shadow .15s ease; text-decoration:none; cursor:pointer; }
+    .ah-tile:hover { border-color:#C9A882; }
+    .ah-tile-active { border-color:#8B4513; box-shadow:0 0 0 1px #8B4513; }
+    .ah-tile-new { align-items:center; justify-content:center; border-style:dashed; color:#8B4513; min-height:84px; }
+    .ah-stepper button { width:24px; height:24px; border:1px solid #D4CEC4; border-radius:6px; background:#fff;
+        color:#2C2C2C; line-height:1; font-size:14px; }
+    .ah-stepper button:hover { background:#F5F2ED; }
+    @keyframes ahFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    .ah-fade { animation:ahFadeIn .18s ease-out; }
+    .ah-price { font-variant-numeric:tabular-nums; }
+    .ah-changed { color:#8B5E13; font-weight:500; }
+    #orderDetail { transition:opacity .2s ease; }
+</style>
+<div class="max-w-3xl mx-auto space-y-4">
+
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">AH winkelmand</h2>
+            <p class="text-sm text-[#6B6B6B] mt-1">Stel wijzigingen samen en bevestig ze in één keer. Afrekenen doe je zelf in de AH-app.</p>
+        </div>
+        <button onclick="reload()" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C] border border-[#E8E4DC] rounded px-3 py-1.5 hover:bg-[#FAF8F5]">⟳ Ververs</button>
+    </div>
+
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] px-4 py-2 flex items-center gap-3 text-sm">
+        <span class="text-[#6B6B6B]">Weekmenu:</span>
+        <button onclick="changeWeek(-1)" class="px-2 py-0.5 rounded hover:bg-white text-[#6B6B6B]">‹</button>
+        <span id="weekLabel" class="font-medium text-[#2C2C2C]">week {{ week }}, {{ year }}</span>
+        <button onclick="changeWeek(1)" class="px-2 py-0.5 rounded hover:bg-white text-[#6B6B6B]">›</button>
+    </div>
+
+    <div id="orderTiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px"></div>
+
+    <div id="concept"></div>
+    <div id="orderDetail"></div>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script>
+const state = {
+    year: {{ year }}, week: {{ week }},
+    orders: [], selected: null,
+    order: null, needed: [], unlinked: [],
+    currentQty: {}, meta: {}, draft: {},
+};
+
+function money(n) { return '€' + (Number(n) || 0).toFixed(2).replace('.', ','); }
+
+function reload() { loadOrders(); }
+
+async function loadOrders() {
+    const tiles = document.getElementById('orderTiles');
+    tiles.innerHTML = '<p class="text-sm text-[#6B6B6B]">Orders laden…</p>';
+    let orders = [];
+    try { orders = await (await fetch('/api/ah/orders')).json(); } catch (e) {}
+    state.orders = Array.isArray(orders) ? orders : [];
+    if (!state.orders.length) {
+        tiles.innerHTML = newMomentTile();
+        document.getElementById('concept').innerHTML = '';
+        document.getElementById('orderDetail').innerHTML =
+            '<div class="bg-[#F5F2ED] border border-[#E8E4DC] rounded-lg px-4 py-3 text-sm text-[#6B6B6B]">' +
+            'Geen geplande AH-orders gevonden. Boek een bezorgmoment in de AH-app (knop hierboven), ' +
+            'of controleer je koppeling bij <a class="underline" href="/settings">Instellingen</a>.</div>';
+        return;
+    }
+    if (!state.selected || !state.orders.find(o => o.orderId === state.selected)) {
+        state.selected = state.orders[0].orderId;
+    }
+    renderTiles();
+    loadOrder(state.selected);
+}
+
+function renderTiles() {
+    document.getElementById('orderTiles').innerHTML =
+        state.orders.map(orderTile).join('') + newMomentTile();
+}
+
+function orderTile(o) {
+    const sel = o.orderId === state.selected;
+    return `<button onclick="selectOrder(${o.orderId})" class="ah-tile ${sel ? 'ah-tile-active' : ''}">
+        <div class="text-sm font-semibold text-[#2C2C2C]">${esc(o.dateDisplay || o.date || 'Order')}</div>
+        <div class="text-xs text-[#6B6B6B]">${esc(o.timeDisplay || '')}</div>
+        <div class="ah-price text-sm font-bold mt-1 text-[#2C2C2C]">${money(o.total)}</div>
+        ${o.modifiable ? '<div class="text-[11px] text-[#3f7d3f]">wijzigbaar</div>' : '<div class="text-[11px] text-[#6B6B6B]">vergrendeld</div>'}
+    </button>`;
+}
+
+function newMomentTile() {
+    return `<a href="https://www.ah.nl/" target="_blank" rel="noopener" class="ah-tile ah-tile-new">
+        <div style="font-size:22px;line-height:1">+</div>
+        <div class="text-xs text-center">nieuw bezorg&shy;moment in AH</div>
+    </a>`;
+}
+
+function selectOrder(id) {
+    if (id === state.selected) return;
+    if (Object.keys(state.draft).length && !confirm('Je hebt een onbevestigd concept. Wisselen van order wist dat. Doorgaan?')) return;
+    state.selected = id;
+    state.draft = {};
+    renderTiles();
+    loadOrder(id);
+}
+
+async function loadOrder(id) {
+    const el = document.getElementById('orderDetail');
+    el.innerHTML = '<p class="text-sm text-[#6B6B6B]">Order laden…</p>';
+    let d;
+    try { d = await (await fetch(`/api/ah/order/${id}?week=${state.week}&year=${state.year}`)).json(); }
+    catch (e) { el.innerHTML = '<p class="text-sm text-red-700">Order niet bereikbaar.</p>'; return; }
+    if (d.error) { el.innerHTML = `<p class="text-sm text-red-700">${esc(d.error)}</p>`; return; }
+
+    state.order = d.order;
+    state.editable = !!d.order.editable;
+    state.needed = d.needed || [];
+    state.unlinked = d.unlinked || [];
+    state.currentQty = {};
+    state.meta = {};
+    (d.order.groups || []).forEach(g => g.items.forEach(it => {
+        state.currentQty[it.productId] = it.quantity;
+        state.meta[it.productId] = { name: it.title, image: it.image, size: it.size };
+    }));
+    state.needed.forEach(n => { state.meta[n.productId] = { name: n.productName || n.name, image: n.image, size: n.size }; });
+    state.draft = {};
+    renderDetail();
+}
+
+function targetQty(pid) {
+    return (pid in state.draft) ? state.draft[pid] : (state.currentQty[pid] || 0);
+}
+
+function setDraft(pid, qty) {
+    if (!state.editable) return;
+    qty = Math.max(0, qty | 0);
+    if (qty === (state.currentQty[pid] || 0)) delete state.draft[pid];
+    else state.draft[pid] = qty;
+    renderDetail();
+}
+
+function clearDraft() { state.draft = {}; renderDetail(); }
+
+function changeList() {
+    return Object.keys(state.draft).map(pid => {
+        pid = parseInt(pid, 10);
+        const from = state.currentQty[pid] || 0, to = state.draft[pid];
+        const m = state.meta[pid] || {};
+        let kind = 'change';
+        if (from === 0) kind = 'add';
+        else if (to === 0) kind = 'remove';
+        return { pid, from, to, kind, name: m.name || ('#' + pid), image: m.image };
+    });
+}
+
+function renderDetail() {
+    const o = state.order;
+    renderConcept();
+
+    const stateBanner = state.editable
+        ? `<div class="bg-[#EAF3EA] border border-[#CBE3CB] rounded-lg px-3 py-2 text-xs text-[#3f7d3f] mb-1">Deze bestelling staat open — je kunt hier toevoegen/aanpassen. Doorzetten doe je zelf in de AH-app.</div>`
+        : `<div class="bg-[#FAF6EE] border border-[#E8D9B8] rounded-lg px-3 py-2 text-xs text-[#8B5E13] mb-1 flex items-center justify-between gap-2">
+               <span>Deze bestelling is doorgezet (alleen-lezen). Wil je iets toevoegen? Open hem zelf in de AH-app.</span>
+               <a href="https://www.ah.nl/" target="_blank" rel="noopener" class="underline whitespace-nowrap">open AH ↗</a>
+           </div>`;
+
+    let neededHtml;
+    if (state.needed.length) {
+        neededHtml = `<div class="ah-fade bg-white border border-[#E8E4DC] rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-semibold text-[#2C2C2C]">Nog nodig uit je weekmenu (${state.needed.length})</h3>
+            </div>
+            <div class="grid grid-cols-2 gap-2">${state.needed.map(neededCard).join('')}</div>
+        </div>`;
+    } else {
+        neededHtml = `<div class="bg-white border border-[#E8E4DC] rounded-lg p-3 text-sm text-[#3f7d3f]">✓ Alles uit je weekmenu (week ${state.week}) zit al in deze order.</div>`;
+    }
+
+    const unlinkedHtml = state.unlinked.length
+        ? `<div class="text-xs text-[#8B4513] mt-1">${state.unlinked.length} ingrediënt(en) nog niet gekoppeld: ${state.unlinked.slice(0, 5).map(esc).join(', ')}${state.unlinked.length > 5 ? '…' : ''} — koppel ze op <a class="underline" href="/ah-producten">AH producten</a>.</div>`
+        : '';
+
+    const groupsHtml = o.groups.map(g => `
+        <div class="mt-3">
+            <div class="text-xs font-semibold text-[#8B4513] mb-1">${esc(g.taxonomy)}</div>
+            <div class="space-y-1">${g.items.map(orderRow).join('')}</div>
+        </div>`).join('');
+
+    document.getElementById('orderDetail').innerHTML = `
+        ${stateBanner}${neededHtml}${unlinkedHtml}
+        <div class="mt-4 bg-white border border-[#E8E4DC] rounded-lg p-3">
+            <h3 class="text-sm font-semibold text-[#2C2C2C]">In je mandje (${o.itemCount})</h3>
+            ${o.groups.length ? groupsHtml : '<p class="text-sm text-[#6B6B6B] mt-2">Deze order is nog leeg.</p>'}
+        </div>
+        <div class="bg-[#F5F2ED] border border-[#E8E4DC] rounded-lg px-4 py-3 flex items-center gap-4 text-sm">
+            <span class="text-[#6B6B6B]">${o.itemCount} items</span>
+            <span class="ah-price font-bold text-[#2C2C2C]">${money(o.total)}</span>
+            ${o.savings > 0 ? `<span class="text-[#3f7d3f]">bonusvoordeel ${money(o.savings)}</span>` : ''}
+            <span class="ml-auto text-xs text-[#6B6B6B]">producten, excl. bezorg/statiegeld</span>
+        </div>`;
+
+    const tile = state.orders.find(x => x.orderId === o.orderId);
+    if (tile) { tile.total = o.total; renderTiles(); }
+}
+
+function renderConcept() {
+    const changes = changeList();
+    const el = document.getElementById('concept');
+    if (!changes.length) { el.innerHTML = ''; return; }
+    const rows = changes.map(c => {
+        let label;
+        if (c.kind === 'add') label = `<span class="ah-changed">+ ${c.to}×</span> ${esc(c.name)}`;
+        else if (c.kind === 'remove') label = `<span class="text-[#b91c1c]">− verwijderen</span> ${esc(c.name)}`;
+        else label = `<span class="ah-changed">${c.from}× → ${c.to}×</span> ${esc(c.name)}`;
+        return `<div class="flex items-center gap-2 text-sm py-0.5">
+            <button onclick="setDraft(${c.pid}, ${c.from})" title="Uit concept halen" class="text-[#6B6B6B] hover:text-[#b91c1c]">×</button>
+            <span class="min-w-0 truncate">${label}</span>
+        </div>`;
+    }).join('');
+    el.innerHTML = `<div class="ah-fade bg-[#FAF6EE] border border-[#E8D9B8] rounded-lg p-3">
+        <div class="flex items-center justify-between mb-1">
+            <h3 class="text-sm font-semibold text-[#8B5E13]">Concept — ${changes.length} wijziging${changes.length === 1 ? '' : 'en'}</h3>
+            <button onclick="clearDraft()" class="text-xs text-[#6B6B6B] hover:text-[#2C2C2C] underline">wissen</button>
+        </div>
+        <div class="mb-2">${rows}</div>
+        <button onclick="confirmDraft()" id="confirmBtn"
+                class="w-full text-sm font-semibold text-white bg-[#8B4513] rounded px-3 py-2 hover:bg-[#723910]">
+            ${changes.length} wijziging${changes.length === 1 ? '' : 'en'} doorvoeren in je open order
+        </button>
+        <p class="text-[11px] text-[#8B5E13] mt-1 text-center">Wordt toegevoegd aan je geopende bestelling. Doorzetten doe je zelf in de AH-app.</p>
+    </div>`;
+}
+
+function neededCard(it) {
+    const inDraft = (it.productId in state.draft) && state.draft[it.productId] > 0;
+    return `<div class="ah-fade flex items-center gap-2 ${inDraft ? 'bg-[#FAF6EE] border-[#E8D9B8]' : 'bg-[#FAF8F5] border-[#E8E4DC]'} border rounded-lg p-2">
+        ${it.image ? `<img src="${it.image}" class="w-10 h-10 object-contain flex-shrink-0">` : '<div class="w-10 h-10 bg-[#F5F2ED] rounded flex-shrink-0"></div>'}
+        <div class="min-w-0 flex-1">
+            <div class="text-xs font-medium text-[#2C2C2C] line-clamp-2">${esc(it.productName || it.name)}</div>
+            <div class="text-[11px] text-[#6B6B6B]">${esc(it.size || '')}${it.price ? ' · €' + it.price : ''}</div>
+        </div>
+        ${!state.editable
+            ? ''
+            : inDraft
+                ? `<span class="text-xs font-medium text-[#8B5E13] flex-shrink-0">in concept ✓</span>`
+                : `<button onclick="setDraft(${it.productId}, ${it.qty || 1})" class="text-xs font-medium text-white bg-[#16a34a] rounded px-2 py-1 flex-shrink-0">+ ${it.qty || 1}</button>`}
+    </div>`;
+}
+
+function orderRow(it) {
+    const tgt = targetQty(it.productId);
+    const changed = tgt !== it.quantity;
+    const removed = changed && tgt === 0;
+    return `<div class="flex items-center gap-2 ${removed ? 'opacity-50' : ''}">
+        ${it.image ? `<img src="${it.image}" class="w-10 h-10 object-contain flex-shrink-0">` : '<div class="w-10 h-10 bg-[#F5F2ED] rounded flex-shrink-0"></div>'}
+        <div class="min-w-0 flex-1">
+            <div class="text-xs font-medium text-[#2C2C2C] line-clamp-1">${it.isBonus ? '<span class="text-[10px] bg-[#C9A882] text-[#2C2C2C] font-bold px-1 rounded mr-1">B</span>' : ''}${esc(it.title)}</div>
+            <div class="text-[11px] text-[#6B6B6B]">${esc(it.size || '')}</div>
+        </div>
+        <div class="ah-price text-xs text-right min-w-[64px]">
+            ${it.wasPrice ? `<span class="line-through text-[#6B6B6B] mr-1">€${it.wasPrice.toFixed(2).replace('.', ',')}</span>` : ''}
+            <span class="font-semibold">${money(it.price * it.quantity)}</span>
+        </div>
+        ${state.editable ? `<div class="ah-stepper flex items-center gap-1 flex-shrink-0">
+            <button onclick="setDraft(${it.productId}, ${tgt - 1})" aria-label="minder">−</button>
+            <span class="ah-price w-7 text-center text-sm ${changed ? 'ah-changed' : ''}">${tgt}${changed ? '*' : ''}</span>
+            <button onclick="setDraft(${it.productId}, ${tgt + 1})" aria-label="meer">+</button>
+        </div>
+        <button onclick="setDraft(${it.productId}, 0)" title="Verwijderen" class="text-[#b91c1c] px-1 flex-shrink-0">×</button>`
+        : `<span class="ah-price text-sm text-[#6B6B6B] flex-shrink-0">${it.quantity}×</span>`}
+    </div>`;
+}
+
+async function confirmDraft() {
+    const changes = changeList();
+    if (!changes.length) return;
+    const o = state.order;
+    const tile = state.orders.find(x => x.orderId === state.selected);
+    const when = tile ? (tile.dateDisplay || '') : '';
+    if (!confirm(`${changes.length} wijziging(en) doorvoeren in je open bestelling van ${when}?\n\n(De app zet de order niet door — dat doe je zelf in de AH-app.)`)) return;
+
+    const btn = document.getElementById('confirmBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Bezig met bevestigen…'; }
+    document.getElementById('orderDetail').style.opacity = '0.5';
+    const items = changes.map(c => ({ productId: c.pid, quantity: c.to }));
+    try {
+        const resp = await fetch(`/api/ah/order/${state.selected}/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items }),
+        });
+        const data = await resp.json();
+        if (data.status !== 'ok') throw new Error(data.message || 'Bevestigen mislukt');
+    } catch (e) {
+        document.getElementById('orderDetail').style.opacity = '';
+        if (btn) { btn.disabled = false; }
+        alert((e.message || 'Bevestigen mislukt') + '\n\nJe order is ongewijzigd; je kunt het opnieuw proberen.');
+        renderConcept();
+        return;
+    }
+    state.draft = {};
+    document.getElementById('orderDetail').style.opacity = '';
+    await loadOrder(state.selected);
+}
+
+function changeWeek(delta) {
+    let w = state.week + delta, y = state.year;
+    if (w < 1) { w = 52; y -= 1; }
+    if (w > 53) { w = 1; y += 1; }
+    state.week = w; state.year = y;
+    document.getElementById('weekLabel').textContent = `week ${w}, ${y}`;
+    if (state.selected) loadOrder(state.selected);
+}
+
+loadOrders();
+</script>
+{% endblock %}

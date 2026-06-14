@@ -195,47 +195,87 @@ def add_shopping_item(year, week):
 @bp.route('/api/shopping-list/<int:year>/<int:week>/send-to-ah', methods=['POST'])
 def send_to_ah(year, week):
     import requests as _req
+    from collections import defaultdict
+    from weekmenu.constants import _AH_ORDER_ACTIVE_URL, _AH_ORDER_ITEMS_URL
 
     access_token = ah_get_access_token()
     if not access_token:
         return jsonify({'status': 'error', 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}), 401
 
     shopping_dict = _build_shopping_dict(year, week)
-
     if not shopping_dict:
-        return jsonify({'status': 'ok', 'sent': 0, 'not_found': [], 'message': 'Boodschappenlijst is leeg'})
+        return jsonify({'status': 'ok', 'sent': 0, 'not_linked': [], 'message': 'Boodschappenlijst is leeg'})
 
     _body = request.get_json(force=True) or {}
     qty_overrides = {int(k): v for k, v in _body.get('qty_overrides', {}).items()}
 
-    sent, not_found = 0, []
-
     headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
 
+    # Verzamel gekoppelde producten, samengevoegd per AH-productId
+    # (de AH-API weigert dubbele productId's in één request).
+    merged = defaultdict(int)
+    name_by_pid = {}
+    not_linked = []
     for (ing_id, unit), amount in shopping_dict.items():
         ing = Ingredient.query.get(ing_id)
-        if not ing or not ing.ah_product_id:
+        if not ing:
             continue
+        if not ing.ah_product_id:
+            not_linked.append(ing.display)
+            continue
+        qty = qty_overrides.get(ing_id, _calc_ah_qty(ing, amount, unit))
+        merged[ing.ah_product_id] += max(int(qty or 1), 1)
+        name_by_pid.setdefault(ing.ah_product_id, ing.display)
 
-        display = ing.display
-        quantity = qty_overrides.get(ing_id, _calc_ah_qty(ing, amount, unit))
+    if not merged:
+        return jsonify({
+            'status': 'ok', 'sent': 0, 'not_linked': not_linked,
+            'message': 'Geen gekoppelde AH-producten in de lijst. Koppel ze eerst via AH-producten.',
+        })
 
-        try:
-            resp = _req.patch(
-                _AH_SHOPPINGLIST_URL,
-                json={'items': [{'originCode': 'PRD', 'productId': ing.ah_product_id,
-                                 'quantity': quantity, 'type': 'SHOPPABLE'}]},
-                headers=headers,
-                timeout=10,
+    # Order-mode detecteren: bij een actieve bestelling weigert de
+    # boodschappenlijst (412 "Server in order mode") en moeten items
+    # naar de order zelf — met de Appie-Current-Order-Id header.
+    order_id = None
+    try:
+        r = _req.get(_AH_ORDER_ACTIVE_URL, headers=headers, timeout=10)
+        if r.status_code == 200:
+            order_id = (r.json() or {}).get('id')
+    except Exception:
+        pass
+
+    try:
+        if order_id:
+            items = [{'productId': pid, 'quantity': qty, 'originCode': 'PRD',
+                      'description': '', 'strikethrough': False}
+                     for pid, qty in merged.items()]
+            resp = _req.put(
+                _AH_ORDER_ITEMS_URL,
+                json={'items': items},
+                headers={**headers, 'Appie-Current-Order-Id': str(order_id)},
+                timeout=20,
             )
-            if resp.status_code in (200, 201, 204):
-                sent += 1
-            else:
-                not_found.append(display)
-        except Exception:
-            not_found.append(display)
+            target = 'bestelling'
+        else:
+            items = [{'originCode': 'PRD', 'productId': pid,
+                      'quantity': qty, 'type': 'SHOPPABLE'}
+                     for pid, qty in merged.items()]
+            resp = _req.patch(
+                _AH_SHOPPINGLIST_URL, json={'items': items},
+                headers=headers, timeout=20,
+            )
+            target = 'boodschappenlijst'
+        resp.raise_for_status()
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.warning('AH send mislukt: %r', e)
+        return jsonify({
+            'status': 'error', 'sent': 0, 'not_linked': not_linked,
+            'message': f'Versturen naar AH mislukt: {e}',
+        }), 502
 
-    msg = f'{sent} item{"s" if sent != 1 else ""} toegevoegd aan AH'
-    if not_found:
-        msg += f', {len(not_found)} niet gevonden: {", ".join(not_found[:5])}'
-    return jsonify({'status': 'ok', 'sent': sent, 'not_found': not_found, 'message': msg})
+    sent = len(merged)
+    msg = f'{sent} product{"en" if sent != 1 else ""} toegevoegd aan je AH-{target}'
+    if not_linked:
+        msg += f'. {len(not_linked)} nog niet gekoppeld (overgeslagen): {", ".join(not_linked[:5])}'
+    return jsonify({'status': 'ok', 'sent': sent, 'not_linked': not_linked, 'message': msg})

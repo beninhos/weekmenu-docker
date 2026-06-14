@@ -3,7 +3,7 @@ import time
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 
 from weekmenu.extensions import db
-from weekmenu.models import Recipe, Cookbook, Ingredient, Settings, PantryIngredient
+from weekmenu.models import Recipe, Cookbook, Ingredient, Settings
 from weekmenu.services.ah import _ah_setting
 from weekmenu.services.gemini import _get_gemini_api_key
 
@@ -41,10 +41,8 @@ def settings_page():
     if ah_expires:
         import datetime as _dt
         ah_expires_dt = _dt.datetime.fromtimestamp(int(ah_expires)).strftime('%d %b %Y')
-    pantry = PantryIngredient.query.join(PantryIngredient.ingredient).order_by(Ingredient.display_name).all()
     return render_template('settings.html', stats=stats, default_serves=default_serves,
-                           ah_connected=ah_connected, ah_expires_dt=ah_expires_dt,
-                           pantry=pantry)
+                           ah_connected=ah_connected, ah_expires_dt=ah_expires_dt)
 
 
 @bp.route('/api/gemini/key', methods=['POST', 'DELETE'])

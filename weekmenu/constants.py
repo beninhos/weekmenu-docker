@@ -226,7 +226,19 @@ _AH_TOKEN_URL        = 'https://api.ah.nl/mobile-auth/v1/auth/token'
 _AH_REFRESH_URL      = 'https://api.ah.nl/mobile-auth/v1/auth/token/refresh'
 _AH_SEARCH_URL       = 'https://api.ah.nl/mobile-services/product/search/v2'
 _AH_SHOPPINGLIST_URL = 'https://api.ah.nl/mobile-services/shoppinglist/v2/items'
-_AH_HEADERS          = {'User-Agent': 'Appie/8.22.3', 'x-application': 'AHWEBSHOP'}
+_AH_ORDER_ACTIVE_URL = 'https://api.ah.nl/mobile-services/order/v1/summaries/active?sortBy=DEFAULT'
+_AH_ORDER_ITEMS_URL  = 'https://api.ah.nl/mobile-services/order/v1/items?sortBy=DEFAULT'
+_AH_GRAPHQL_URL      = 'https://api.ah.nl/graphql'
+
+_AH_CLIENT_ID        = 'appie-ios'
+_AH_CLIENT_VERSION   = '9.28'
+_AH_HEADERS          = {
+    'User-Agent':       f'Appie/{_AH_CLIENT_VERSION} (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)',
+    'x-client-name':    _AH_CLIENT_ID,
+    'x-client-version': _AH_CLIENT_VERSION,
+    'x-application':    'AHWEBSHOP',
+    'Accept':           'application/json',
+}
 
 _AH_CAPTCHA_SITEKEY = '617563f1-54b0-496d-a13d-95de4a9c641a'
 _AH_CAPTCHA_PAGE    = 'https://login.ah.nl/login'

@@ -572,8 +572,7 @@ def recipe_from_photo():
 
 @bp.route('/ecobooster')
 def ecobooster():
-    pantry = PantryIngredient.query.order_by(PantryIngredient.id).all()
-    return render_template('ecobooster.html', pantry=pantry)
+    return redirect(url_for('inspiratie.inspiratie', tab='ecobooster'), code=301)
 
 
 @bp.route('/api/ecobooster/match', methods=['POST'])
