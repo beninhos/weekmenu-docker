@@ -1,5 +1,6 @@
 import re
 import time
+import threading
 from collections import Counter
 
 from weekmenu.extensions import db
@@ -54,45 +55,95 @@ def _ah_get_anon_token(force=False):
     return data['access_token']
 
 
-def ah_get_access_token():
-    """Return a valid user AH access token, auto-refreshing if needed."""
-    import requests as _req
-    token   = _ah_setting('ah_access_token')
+# Deel D — token-vangrails. Serialiseer de refresh zodat nooit twee requests
+# tegelijk het roterende AH-refresh-token verbranden. De app draait als single
+# process (Flask dev-server, threaded), dus een in-process Lock volstaat.
+# LET OP: bij meerdere workers (Gunicorn/Uvicorn) spant een in-memory lock niet
+# over processen → gebruik dan een DB-guard (SQLite BEGIN IMMEDIATE / een
+# ah_refreshing-rij met timestamp).
+_refresh_lock = threading.Lock()
+
+
+def _ah_set_tokens(access, refresh, expires_at):
+    """Sla access/refresh/expires atomisch op (één commit), zodat een geroteerd
+    refresh-token nooit half/niet wordt weggeschreven."""
+    values = {
+        'ah_access_token':  access,
+        'ah_refresh_token': refresh,
+        'ah_token_expires': str(expires_at),
+    }
+    for key, val in values.items():
+        s = Settings.query.filter_by(key=key).first()
+        if s:
+            s.value = val
+        else:
+            db.session.add(Settings(key=key, value=val))
+    db.session.commit()
+
+
+def _ah_clear_tokens():
+    """Wis de AH-tokens → status valt terug op 'niet verbonden'."""
+    for key in ('ah_access_token', 'ah_refresh_token', 'ah_token_expires'):
+        s = Settings.query.filter_by(key=key).first()
+        if s:
+            db.session.delete(s)
+    db.session.commit()
+
+
+def _ah_valid_access_token():
+    """Het opgeslagen access-token als het nog ruim geldig is, anders None."""
+    token = _ah_setting('ah_access_token')
     expires = _ah_setting('ah_token_expires')
     if token and expires and int(time.time()) < int(expires) - 60:
         return token
-    refresh = _ah_setting('ah_refresh_token')
-    if not refresh:
+    return None
+
+
+def ah_get_access_token():
+    """Geef een geldig user-AH-access-token; ververst atomisch indien nodig."""
+    import requests as _req
+    from flask import current_app
+
+    # Snel pad: nog geldig token → geen lock nodig.
+    valid = _ah_valid_access_token()
+    if valid:
+        return valid
+    if not _ah_setting('ah_refresh_token'):
         return None
-    try:
-        resp = _req.post(
-            _AH_REFRESH_URL,
-            json={'clientId': _AH_CLIENT_ID, 'refreshToken': refresh},
-            headers=_AH_HEADERS,
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            from flask import current_app
-            current_app.logger.warning(
-                'AH refresh failed: status=%s body=%s',
-                resp.status_code, resp.text[:300]
+
+    # Serialiseer: maar één thread vernieuwt tegelijk (anders rotatie-race).
+    with _refresh_lock:
+        # Een andere thread kan net ververst hebben terwijl we wachtten.
+        valid = _ah_valid_access_token()
+        if valid:
+            return valid
+        refresh = _ah_setting('ah_refresh_token')
+        if not refresh:
+            return None
+        try:
+            resp = _req.post(
+                _AH_REFRESH_URL,
+                json={'clientId': _AH_CLIENT_ID, 'refreshToken': refresh},
+                headers=_AH_HEADERS,
+                timeout=10,
             )
+        except Exception as e:
+            current_app.logger.warning('AH refresh exception: %r', e)
+            return None
+        if resp.status_code != 200:
+            current_app.logger.warning('AH refresh failed: status=%s body=%s',
+                                       resp.status_code, resp.text[:300])
             if resp.status_code in (400, 401, 403):
-                for key in ('ah_access_token', 'ah_refresh_token', 'ah_token_expires'):
-                    s = Settings.query.filter_by(key=key).first()
-                    if s:
-                        db.session.delete(s)
-                db.session.commit()
+                _ah_clear_tokens()  # token ongeldig → niet verbonden
             return None
         data = resp.json()
-        _ah_setting('ah_access_token', data['access_token'])
-        _ah_setting('ah_refresh_token', data.get('refresh_token', refresh))
-        _ah_setting('ah_token_expires', str(int(time.time()) + data.get('expires_in', 604798)))
+        # Sla het (mogelijk geroteerde) refresh-token direct + atomisch op.
+        _ah_set_tokens(
+            data['access_token'],
+            data.get('refresh_token', refresh),
+            int(time.time()) + data.get('expires_in', 604798),
+        )
         return data['access_token']
-    except Exception as e:
-        from flask import current_app
-        current_app.logger.warning('AH refresh exception: %r', e)
-        return None
 
 
 def ah_search_products(query, size=8):
