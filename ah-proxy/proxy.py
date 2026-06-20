@@ -38,8 +38,12 @@ if HTTPS:
     LISTEN_PORT  = 443
     LOCAL_ORIGIN = 'https://login.ah.nl'
 else:
+    # Container-bind blijft 9002; de host-poort kan via docker-mapping afwijken
+    # (bv. 9003 voor de dev-omgeving). AH_PROXY_PORT bepaalt de host-facing poort
+    # in de rewrites, zodat een login via de dev-proxy ook in de dev-omgeving landt.
     LISTEN_PORT  = 9002
-    LOCAL_ORIGIN = 'http://localhost:9002'
+    _PUBLIC_PORT = os.environ.get('AH_PROXY_PORT', '9002')
+    LOCAL_ORIGIN = f'http://localhost:{_PUBLIC_PORT}'
 
 # Begin de OAuth-flow bij de authorize-endpoint (zet sessie op, redirect naar /login).
 OAUTH_START = ('/secure/oauth/authorize?client_id=appie'

@@ -151,7 +151,7 @@
                 </p>
                 <div class="flex items-center gap-2">
                     <code class="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono" id="ahSshCmd">
-                        ssh -L 9002:localhost:9002 user@server
+                        ssh -L {{ ah_proxy_port }}:localhost:{{ ah_proxy_port }} user@server
                     </code>
                     <button onclick="ahCopy('ahSshCmd')"
                             class="shrink-0 text-xs border border-[#D4CEC4] bg-white px-2 py-1.5 rounded hover:bg-[#F5F2ED]">
@@ -168,9 +168,9 @@
                 </p>
                 <div class="flex items-center gap-2">
                     <code class="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono" id="ahLoginUrl">
-                        http://localhost:9002
+                        http://localhost:{{ ah_proxy_port }}
                     </code>
-                    <a href="http://localhost:9002" target="_blank"
+                    <a href="http://localhost:{{ ah_proxy_port }}" target="_blank"
                        class="shrink-0 text-xs bg-[#2C2C2C] text-white px-2 py-1.5 rounded hover:bg-[#1a1a1a]">
                         Openen
                     </a>

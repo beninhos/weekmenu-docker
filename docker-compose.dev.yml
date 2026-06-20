@@ -11,5 +11,6 @@ services:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - DATABASE_URL=sqlite:////data/weekmenu_dev.db
+      - AH_PROXY_PORT=9003
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
