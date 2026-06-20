@@ -1,0 +1,15 @@
+services:
+  weekmenu-dev:
+    build: .
+    ports:
+      - "5002:5001"
+      - "9003:9002"
+    volumes:
+      - ./data:/data
+      - ./static/uploads:/app/static/uploads
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - DATABASE_URL=sqlite:////data/weekmenu_dev.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
