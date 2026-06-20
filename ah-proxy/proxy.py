@@ -8,6 +8,7 @@ OAuth-code ingewisseld voor tokens en weggeschreven naar /tmp/appie-tokens.json
 (de Flask-app pollt dat bestand via /api/ah/poll-token).
 """
 import json
+import os
 import time
 from urllib.parse import urlparse
 
@@ -18,11 +19,27 @@ from flask import Flask, request, Response, redirect
 LOGIN_BASE   = 'https://login.ah.nl'
 TOKEN_URL    = 'https://api.ah.nl/mobile-auth/v1/auth/token'
 CLIENT_ID    = 'appie-ios'
-LISTEN_PORT  = 9002
-LOCAL_ORIGIN = 'http://localhost:9002'
 TOKEN_FILE   = '/tmp/appie-tokens.json'
 IMPERSONATE  = 'chrome120'
 APPIE_UA     = 'Appie/9.28 (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)'
+
+# Deel A — origin-preserving HTTPS. Is er een TLS-cert (cert.pem/key.pem), dan
+# draaien we op :443 met origin **https://login.ah.nl**. De laptop wijst
+# login.ah.nl via /etc/hosts naar de SSH-tunnel → de browser-stack ziet de
+# echte origin, dus hCaptcha (sitekey-lock) én passkey (WebAuthn-origin) werken.
+# Zonder cert: HTTP op :9002 met localhost-origin (fallback/oude gedrag).
+# LET OP: alleen de LAPTOP-/etc/hosts wijst naar de tunnel; de server/container
+# resolvet login.ah.nl normaal, zodat de upstream curl_cffi de échte AH bereikt
+# (geen proxy-loop).
+CERT_FILE = os.environ.get('AH_PROXY_CERT', os.path.join(os.path.dirname(__file__), 'cert.pem'))
+KEY_FILE  = os.environ.get('AH_PROXY_KEY',  os.path.join(os.path.dirname(__file__), 'key.pem'))
+HTTPS = os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE)
+if HTTPS:
+    LISTEN_PORT  = 443
+    LOCAL_ORIGIN = 'https://login.ah.nl'
+else:
+    LISTEN_PORT  = 9002
+    LOCAL_ORIGIN = 'http://localhost:9002'
 
 # Begin de OAuth-flow bij de authorize-endpoint (zet sessie op, redirect naar /login).
 OAUTH_START = ('/secure/oauth/authorize?client_id=appie'
@@ -146,4 +163,6 @@ def proxy(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=LISTEN_PORT, threaded=True)
+    ssl_ctx = (CERT_FILE, KEY_FILE) if HTTPS else None
+    print(f'[ah-proxy] {"HTTPS" if HTTPS else "HTTP"} op :{LISTEN_PORT}, origin {LOCAL_ORIGIN}', flush=True)
+    app.run(host='0.0.0.0', port=LISTEN_PORT, threaded=True, ssl_context=ssl_ctx)
