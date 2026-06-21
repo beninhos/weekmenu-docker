@@ -258,7 +258,10 @@ def send_to_ah(year, week):
             target = 'bestelling'
         else:
             items = [{'originCode': 'PRD', 'productId': pid,
-                      'quantity': qty, 'type': 'SHOPPABLE'}
+                      'quantity': qty, 'type': 'SHOPPABLE',
+                      'description': name_by_pid.get(pid, ''),
+                      'searchTerm': name_by_pid.get(pid, ''),
+                      'strikeThrough': False}
                      for pid, qty in merged.items()]
             resp = _req.patch(
                 _AH_SHOPPINGLIST_URL, json={'items': items},
