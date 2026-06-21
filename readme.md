@@ -33,7 +33,7 @@ Stuur je boodschappenlijst rechtstreeks naar je AH-winkelwagentje.
 
 Soms moet je twee keer achter elkaar inloggen: de eerste poging bouwt de sessie-trust op, de tweede lukt. De koppeling wordt automatisch opgepikt; tokens vernieuwen op de achtergrond.
 
-De AH-login is mogelijk dankzij het werk van [appie-go](https://github.com/gwillem/appie-go) van **gwillem** — hulde. 🙌
+De AH-login is mogelijk dankzij het werk van [appie-go](https://github.com/gwillem/appie-go) van **gwillem**.
 
 ## Testomgeving
 
