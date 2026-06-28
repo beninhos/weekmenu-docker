@@ -208,19 +208,35 @@ def _map_ah_recipe(url, recipe):
 def _try_ah_api_recipe(url):
     """Voor ah.nl/allerhande-recept-URLs: haal het recept op via de AH GraphQL API.
 
-    Omzeilt de Akamai bot-blokkade op de HTML-pagina. Geeft (data, 200) terug,
-    of None als dit geen AH-recept-URL is of de API niets bruikbaars oplevert.
+    Omzeilt de Akamai bot-blokkade op de HTML-pagina. Geeft (data, status) terug
+    voor elke AH-recept-URL (ook bij falen, met duidelijke melding), of None als
+    dit geen AH-recept-URL is — dan gebruikt de aanroeper de normale scraper.
     """
     if 'ah.nl' not in url.lower():
         return None
     m = _AH_RECIPE_ID_RE.search(url)
     if not m:
         return None
+
+    recipe_id = m.group(1)
     from weekmenu.services.ah import ah_get_recipe
-    recipe = ah_get_recipe(m.group(1))
+    try:
+        recipe = ah_get_recipe(recipe_id)
+    except Exception:
+        current_app.logger.exception('AH-recept %s: onverwachte fout bij ophalen', recipe_id)
+        recipe = None
+
+    # AH-recept-URL → committen aan de API; HTML-scrapen is hier toch geblokkeerd.
     if not recipe or not (recipe.get('title') or recipe.get('ingredients')):
-        return None
-    return _map_ah_recipe(url, recipe), 200
+        current_app.logger.warning('AH-recept %s: geen bruikbaar recept via API (%s)', recipe_id, url)
+        return {'status': 'error',
+                'message': 'Dit Albert Heijn-recept kon niet worden opgehaald. '
+                           'Controleer de URL of probeer het later opnieuw.'}, 400
+
+    data = _map_ah_recipe(url, recipe)
+    current_app.logger.info('AH-recept %s opgehaald via API: %r (%d ingrediënten)',
+                            recipe_id, data['name'], len(data['ingredients']))
+    return data, 200
 
 
 def scrape_recipe_from_url(url):

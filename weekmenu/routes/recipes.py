@@ -556,7 +556,11 @@ def get_quick_access_recipes():
 @bp.route('/recipe/scrape', methods=['POST'])
 def scrape_recipe():
     data = request.get_json() or {}
-    payload, status = scrape_recipe_from_url(data.get('url', ''))
+    url = data.get('url', '')
+    payload, status = scrape_recipe_from_url(url)
+    if status != 200:
+        current_app.logger.warning('Recept-import mislukt voor %r: %s',
+                                   url, payload.get('message'))
     return jsonify(payload), status
 
 

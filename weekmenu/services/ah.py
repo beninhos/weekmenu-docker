@@ -401,16 +401,19 @@ def ah_get_recipe(recipe_id):
     try:
         token = _ah_get_anon_token()
     except Exception as e:
-        current_app.logger.warning('AH recipe: anon token mislukt: %r', e)
+        current_app.logger.warning('AH-recept %s: anoniem token mislukt: %r', recipe_id, e)
         return None
     try:
         data = _ah_graphql(token, _AH_RECIPE_QUERY, {'id': int(recipe_id)})
     except Exception as e:
-        current_app.logger.warning('AH recipe: GraphQL request mislukt: %r', e)
+        current_app.logger.warning('AH-recept %s: GraphQL-request mislukt: %r', recipe_id, e)
         return None
     if data.get('errors'):
-        current_app.logger.warning('AH recipe: GraphQL errors: %s', data['errors'])
-    return (data.get('data') or {}).get('recipe')
+        current_app.logger.warning('AH-recept %s: GraphQL-errors: %s', recipe_id, data['errors'])
+    recipe = (data.get('data') or {}).get('recipe')
+    if recipe is None:
+        current_app.logger.info('AH-recept %s: niet gevonden in API', recipe_id)
+    return recipe
 
 
 def _ah_mutation_status(resp_json, field):
