@@ -243,7 +243,8 @@ def import_zip():
                 image_path = None
                 if r_data.get('image_filename'):
                     candidate = os.path.join('static', 'uploads', r_data['image_filename'])
-                    if os.path.isfile(os.path.join(current_app.root_path, candidate)):
+                    full_path = os.path.normpath(os.path.join(current_app.static_folder, '..', candidate))
+                    if os.path.isfile(full_path):
                         image_path = candidate
 
                 recipe = Recipe(
@@ -268,7 +269,6 @@ def import_zip():
                         )
                         db.session.add(ingredient)
                         db.session.flush()
-                        counts['ingredients'] += 1
                     raw_amount = ing_data.get('amount') or 0
                     norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
                     db.session.add(RecipeIngredient(
@@ -277,6 +277,7 @@ def import_zip():
                         amount=norm_amount,
                         unit=norm_unit,
                     ))
+                    counts['ingredients'] += 1
                 counts['recipes'] += 1
 
         db.session.commit()
