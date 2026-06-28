@@ -165,7 +165,7 @@ def export_zip():
     }
 
     buf = io.BytesIO()
-    uploads_dir = os.path.join(current_app.root_path, 'static', 'uploads')
+    uploads_dir = os.path.normpath(os.path.join(current_app.static_folder, 'uploads'))
     image_filenames = set()
     for c in cookbooks:
         if c.image_path:
@@ -199,7 +199,7 @@ def import_zip():
 
         buf.seek(0)
         counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0, 'images': 0}
-        uploads_dir = os.path.join(current_app.root_path, 'static', 'uploads')
+        uploads_dir = os.path.normpath(os.path.join(current_app.static_folder, 'uploads'))
         os.makedirs(uploads_dir, exist_ok=True)
 
         with zipfile.ZipFile(buf, 'r') as zf:
