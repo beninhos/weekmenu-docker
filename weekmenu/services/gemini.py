@@ -96,6 +96,15 @@ def _build_gemini_ingredients(raw_list):
     return ingredients
 
 
+def _is_bot_challenge_page(html):
+    """Detect anti-bot challenge pages (e.g. Akamai) served instead of real content."""
+    if len(html) > 8000:
+        return False
+    markers = ('sec-if-cpt-container', 'powered and protected by', 'akamai', '_abck', 'cf-challenge', 'px-captcha')
+    lowered = html.lower()
+    return any(m in lowered for m in markers)
+
+
 def scrape_recipe_from_url(url):
     """Fetch URL, try structured scraper, fall back to Gemini LLM. Returns (data, status)."""
     from curl_cffi import requests as _requests
@@ -121,6 +130,9 @@ def scrape_recipe_from_url(url):
         if code:
             return {'status': 'error', 'message': f'De pagina kon niet worden opgehaald (HTTP {code}).'}, 400
         return {'status': 'error', 'message': 'De URL kon niet worden bereikt. Controleer de URL.'}, 400
+
+    if _is_bot_challenge_page(html):
+        return {'status': 'error', 'message': 'Deze website blokkeert automatisch ophalen (bot-detectie). Plak het recept handmatig over.'}, 400
 
     try:
         scraper = scrape_html(html, org_url=url)
@@ -230,6 +242,9 @@ def _extract_from_scraper(url, html, scraper):
         instructions = prefix + instructions
 
     parsed_ingredients = parse_ingredients_from_list(raw_ingredients)
+
+    if not title and not parsed_ingredients:
+        return _llm_fallback_from_html(url, html)
 
     image_path = None
     try:
