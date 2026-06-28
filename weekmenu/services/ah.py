@@ -377,6 +377,42 @@ def _ah_graphql(token, query, variables=None):
     return resp.json()
 
 
+_AH_RECIPE_QUERY = '''query($id: Int!) {
+  recipe(id: $id) {
+    id
+    title
+    description
+    cookTime
+    servings { number type }
+    ingredients { name { singular plural } quantity quantityUnit { singular plural } }
+    preparation { steps }
+    images { url width }
+  }
+}'''
+
+
+def ah_get_recipe(recipe_id):
+    """Haal een Allerhande-recept op via de AH GraphQL API (anoniem token, geen login).
+
+    Omzeilt de Akamai bot-detectie die het scrapen van ah.nl-receptpagina's blokkeert.
+    Geeft de ruwe recipe-dict terug, of None bij een fout.
+    """
+    from flask import current_app
+    try:
+        token = _ah_get_anon_token()
+    except Exception as e:
+        current_app.logger.warning('AH recipe: anon token mislukt: %r', e)
+        return None
+    try:
+        data = _ah_graphql(token, _AH_RECIPE_QUERY, {'id': int(recipe_id)})
+    except Exception as e:
+        current_app.logger.warning('AH recipe: GraphQL request mislukt: %r', e)
+        return None
+    if data.get('errors'):
+        current_app.logger.warning('AH recipe: GraphQL errors: %s', data['errors'])
+    return (data.get('data') or {}).get('recipe')
+
+
 def _ah_mutation_status(resp_json, field):
     return (((resp_json.get('data') or {}).get(field)) or {}).get('status')
 

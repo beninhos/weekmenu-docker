@@ -105,6 +105,124 @@ def _is_bot_challenge_page(html):
     return any(m in lowered for m in markers)
 
 
+def _download_image_to_uploads(image_url):
+    """Download an image URL into static/uploads. Returns the relative path or None."""
+    if not image_url:
+        return None
+    try:
+        from curl_cffi import requests as _cffi_requests
+        img_resp = _cffi_requests.get(image_url, impersonate='chrome', timeout=10)
+        img_resp.raise_for_status()
+        content_type = img_resp.headers.get('Content-Type', '')
+        ext = '.jpg'
+        if 'png' in content_type:
+            ext = '.png'
+        elif 'webp' in content_type:
+            ext = '.webp'
+        elif 'avif' in content_type:
+            ext = '.avif'
+        elif 'gif' in content_type:
+            ext = '.gif'
+        fname = hashlib.md5(image_url.encode()).hexdigest() + ext
+        save_path = os.path.join(current_app.static_folder, 'uploads', fname)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with open(save_path, 'wb') as f:
+            f.write(img_resp.content)
+        return os.path.join('static/uploads', fname)
+    except Exception:
+        return None
+
+
+_AH_RECIPE_ID_RE = re.compile(r'/recept/(?:R-)?R?(\d+)', re.IGNORECASE)
+
+
+def _clean_control_chars(s):
+    """Strip stray control characters (AH-data bevat o.a. U+001F in stappen)."""
+    return ''.join(ch for ch in (s or '') if ch >= ' ' or ch in '\n\t')
+
+
+def _map_ah_recipe(url, recipe):
+    """Map an AH GraphQL recipe dict into the standard scrape-result shape."""
+    from weekmenu.constants import DUTCH_UNITS
+
+    title = _clean_control_chars(recipe.get('title') or '').strip()
+
+    servings = recipe.get('servings') or {}
+    serves = servings.get('number')
+
+    # Instructies: intro + genummerde stappen als HTML (Quill-vriendelijk).
+    steps = ((recipe.get('preparation') or {}).get('steps')) or []
+    parts = []
+    description = _clean_control_chars(recipe.get('description') or '').strip()
+    if description:
+        parts.append(f'<p>{description}</p>')
+    if steps:
+        parts.append('<ol>' + ''.join(f'<li>{_clean_control_chars(s)}</li>' for s in steps) + '</ol>')
+    instructions = ''.join(parts)
+
+    ingredients = []
+    for ing in recipe.get('ingredients') or []:
+        name = _clean_control_chars((ing.get('name') or {}).get('singular') or '').strip()
+        if not name:
+            continue
+        amount = ing.get('quantity')
+        raw_unit = ((ing.get('quantityUnit') or {}).get('singular') or '').strip().lower()
+        unit = DUTCH_UNITS.get(raw_unit, raw_unit)
+        if not unit and amount is not None:
+            unit = 'stuks'
+        ingredients.append({
+            'amount': amount,
+            'unit': unit,
+            'name': name,
+            'category': _guess_ingredient_category(name),
+            'raw': ' '.join(str(x) for x in (amount, unit, name) if x not in (None, '')),
+        })
+
+    # Grootste afbeelding kiezen.
+    images = recipe.get('images') or []
+    image_url = None
+    if images:
+        image_url = max(images, key=lambda im: im.get('width') or 0).get('url')
+    image_path = _download_image_to_uploads(image_url)
+
+    cookbook_info = {'id': None, 'name': None, 'exists': False}
+    try:
+        cookbook_info = _suggest_site_cookbook('www.ah.nl', '', None)
+    except Exception:
+        pass
+
+    return {
+        'status': 'success',
+        'name': title,
+        'serves': serves,
+        'url': url,
+        'instructions': instructions,
+        'ingredients': ingredients,
+        'image_path': image_path,
+        'cookbook_id': cookbook_info.get('id'),
+        'cookbook_name': cookbook_info.get('name'),
+        'cookbook_exists': cookbook_info.get('exists', False),
+    }
+
+
+def _try_ah_api_recipe(url):
+    """Voor ah.nl/allerhande-recept-URLs: haal het recept op via de AH GraphQL API.
+
+    Omzeilt de Akamai bot-blokkade op de HTML-pagina. Geeft (data, 200) terug,
+    of None als dit geen AH-recept-URL is of de API niets bruikbaars oplevert.
+    """
+    if 'ah.nl' not in url.lower():
+        return None
+    m = _AH_RECIPE_ID_RE.search(url)
+    if not m:
+        return None
+    from weekmenu.services.ah import ah_get_recipe
+    recipe = ah_get_recipe(m.group(1))
+    if not recipe or not (recipe.get('title') or recipe.get('ingredients')):
+        return None
+    return _map_ah_recipe(url, recipe), 200
+
+
 def scrape_recipe_from_url(url):
     """Fetch URL, try structured scraper, fall back to Gemini LLM. Returns (data, status)."""
     from curl_cffi import requests as _requests
@@ -113,6 +231,11 @@ def scrape_recipe_from_url(url):
     url = (url or '').strip()
     if not url:
         return {'status': 'error', 'message': 'Geen URL opgegeven'}, 400
+
+    # AH/Allerhande blokkeert HTML-scrapen (Akamai). Gebruik de GraphQL API.
+    ah_result = _try_ah_api_recipe(url)
+    if ah_result is not None:
+        return ah_result
 
     try:
         resp = _requests.get(url, impersonate='chrome', timeout=15, allow_redirects=True)
@@ -248,27 +371,7 @@ def _extract_from_scraper(url, html, scraper):
 
     image_path = None
     try:
-        image_url = scraper.image()
-        if image_url:
-            from curl_cffi import requests as _cffi_requests
-            img_resp = _cffi_requests.get(image_url, impersonate='chrome', timeout=10)
-            img_resp.raise_for_status()
-            content_type = img_resp.headers.get('Content-Type', '')
-            ext = '.jpg'
-            if 'png' in content_type:
-                ext = '.png'
-            elif 'webp' in content_type:
-                ext = '.webp'
-            elif 'avif' in content_type:
-                ext = '.avif'
-            elif 'gif' in content_type:
-                ext = '.gif'
-            fname = hashlib.md5(image_url.encode()).hexdigest() + ext
-            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, 'wb') as f:
-                f.write(img_resp.content)
-            image_path = os.path.join('static/uploads', fname)
+        image_path = _download_image_to_uploads(scraper.image())
     except Exception:
         pass
 
