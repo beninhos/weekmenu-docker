@@ -313,6 +313,15 @@ def new_recipe():
             db.session.add(recipe_ingredient)
 
         db.session.commit()
+
+        draft_id = request.form.get('draft_id')
+        if draft_id:
+            from weekmenu.models import RecipeDraft
+            draft = db.session.get(RecipeDraft, int(draft_id))
+            if draft:
+                draft.status = 'accepted'
+                db.session.commit()
+
         return redirect(url_for('recipes.receptenplanner'))
 
     return render_template('new_recipe.html', cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)

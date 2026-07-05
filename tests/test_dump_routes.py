@@ -62,3 +62,13 @@ def test_draft_prefill_payload(app, client):
     assert data['draft_id'] == draft.id
     assert data['name'] == 'Dal'
     assert data['ingredients'][1]['name'] == 'ui'
+
+
+def test_new_recipe_post_with_draft_id_accepts_draft(app, client):
+    draft = _make_draft(app)
+    resp = client.post('/recipe/new', data={
+        'name': 'Dal (aangepast)', 'serves': '2', 'page': '',
+        'draft_id': str(draft.id),
+    })
+    assert resp.status_code == 302
+    assert db.session.get(RecipeDraft, draft.id).status == 'accepted'
