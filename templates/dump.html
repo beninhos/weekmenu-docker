@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten-dump</h1>
+    <p class="text-sm text-[#6B6B6B]">Gooi hier foto's van kookboekpagina's of een PDF in.
+       De recepten worden automatisch herkend en verschijnen hieronder ter controle.</p>
+
+    <!-- Dropzone -->
+    <div id="dropzone"
+         class="border-2 border-dashed border-[#E8E4DC] rounded-lg p-8 text-center cursor-pointer hover:border-[#8B4513] transition-colors">
+        <input type="file" id="fileInput" class="hidden" multiple
+               accept="image/*,application/pdf" onchange="startUpload(this.files)">
+        <p class="font-medium">Sleep foto's of een PDF hierheen</p>
+        <p class="text-sm text-[#6B6B6B] mt-1">of klik om te kiezen</p>
+    </div>
+
+    <!-- Job-status -->
+    <div id="jobStatus" class="hidden text-sm flex items-center gap-2">
+        <img id="jobBanana" src="{{ url_for('static', filename='uploads/dancing-banana.gif') }}" class="h-10 hidden">
+        <span id="jobStatusText"></span>
+        <button id="retryBtn" class="hidden underline text-[#8B4513]" onclick="retryJob()">Opnieuw proberen</button>
+    </div>
+
+    <!-- Kookboek-keuze voor de hele batch -->
+    <div class="flex items-center gap-3">
+        <label class="text-sm font-medium">Kookboek voor opgeslagen recepten:</label>
+        <select id="cookbookSelect" class="border border-[#E8E4DC] rounded px-2 py-1 text-sm">
+            <option value="">— Geen —</option>
+            {% for cb in cookbooks %}
+            <option value="{{ cb.id }}">{{ cb.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <!-- Draft-kaarten -->
+    <div id="draftList" class="space-y-4"></div>
+</div>
+
+<script>
+const initialDrafts = {{ drafts | tojson }};
+const initialJobs = {{ jobs | tojson }};
+const staticUrlPrefix = "{{ url_for('static', filename='') }}";
+let activeJobId = null;
+let pollTimer = null;
+
+/* ── Dropzone ── */
+const dz = document.getElementById('dropzone');
+dz.onclick = () => document.getElementById('fileInput').click();
+dz.ondragover = e => { e.preventDefault(); dz.classList.add('border-[#8B4513]'); };
+dz.ondragleave = () => dz.classList.remove('border-[#8B4513]');
+dz.ondrop = e => { e.preventDefault(); dz.classList.remove('border-[#8B4513]'); startUpload(e.dataTransfer.files); };
+
+function imageUrl(imagePath) {
+    if (!imagePath) return null;
+    return staticUrlPrefix + imagePath.replace(/^static\//, '');
+}
+
+async function startUpload(files) {
+    if (!files || files.length === 0) return;
+    const fd = new FormData();
+    Array.from(files).forEach(f => fd.append('files', f));
+    setJobStatus('Uploaden...', true);
+    try {
+        const resp = await fetch('/dump/upload', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (data.status !== 'success') { setJobError(data.message); return; }
+        activeJobId = data.job_id;
+        setJobStatus('Recepten worden herkend...', true);
+        pollTimer = setInterval(pollJob, 2500);
+    } catch (err) {
+        setJobError(err.message);
+    }
+}
+
+async function pollJob() {
+    const resp = await fetch(`/dump/status/${activeJobId}`);
+    const data = await resp.json();
+    if (data.status === 'processing') return;
+    clearInterval(pollTimer);
+    if (data.status === 'error') { setJobError(data.error_message); return; }
+    setJobStatus(`Klaar: ${data.drafts.length} recept(en) herkend.`, false);
+    data.drafts.forEach(renderCard);
+}
+
+async function retryJob() {
+    if (!activeJobId) return;
+    await fetch(`/dump/job/${activeJobId}/retry`, { method: 'POST' });
+    setJobStatus('Opnieuw bezig...', true);
+    pollTimer = setInterval(pollJob, 2500);
+}
+
+function setJobStatus(text, busy) {
+    const box = document.getElementById('jobStatus');
+    box.classList.remove('hidden');
+    box.className = 'text-sm text-[#6B6B6B] flex items-center gap-2';
+    document.getElementById('jobStatusText').textContent = text;
+    document.getElementById('jobBanana').classList.toggle('hidden', !busy);
+    document.getElementById('retryBtn').classList.add('hidden');
+}
+
+function setJobError(msg) {
+    const box = document.getElementById('jobStatus');
+    box.classList.remove('hidden');
+    box.className = 'text-sm text-red-600 flex items-center gap-2';
+    document.getElementById('jobStatusText').textContent = 'Fout: ' + (msg || 'onbekend');
+    document.getElementById('jobBanana').classList.add('hidden');
+    document.getElementById('retryBtn').classList.toggle('hidden', !activeJobId);
+}
+
+/* ── Draft-kaarten ── */
+function renderCard(d) {
+    const list = document.getElementById('draftList');
+    const card = document.createElement('div');
+    card.id = `draft-${d.id}`;
+    card.className = 'border border-[#E8E4DC] rounded-lg p-4 flex gap-4';
+    const ingHtml = d.ingredients.map(i =>
+        `<li>${i.amount ?? ''} ${i.unit ?? ''} ${i.name}</li>`).join('');
+    const img = imageUrl(d.image_path);
+    card.innerHTML = `
+        ${img ? `<img src="${img}" class="w-28 h-28 object-cover rounded shrink-0">` : ''}
+        <div class="flex-1 min-w-0">
+            <h3 class="font-bold">${d.name}</h3>
+            ${d.serves ? `<p class="text-sm text-[#6B6B6B]">${d.serves} personen</p>` : ''}
+            <ul class="text-sm mt-1 list-disc list-inside text-[#6B6B6B] max-h-28 overflow-y-auto">${ingHtml}</ul>
+            <div class="flex gap-2 mt-3">
+                <button onclick="acceptDraft(${d.id})" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">✓ Opslaan</button>
+                <a href="/recipe/new?draft=${d.id}" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✎ Aanpassen</a>
+                <button onclick="rejectDraft(${d.id})" class="px-3 py-1.5 border border-[#E8E4DC] text-red-600 rounded text-sm">✗ Weg</button>
+            </div>
+        </div>`;
+    list.appendChild(card);
+}
+
+async function acceptDraft(id) {
+    const cookbook_id = document.getElementById('cookbookSelect').value || null;
+    const resp = await fetch(`/dump/draft/${id}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookbook_id }),
+    });
+    if ((await resp.json()).status === 'success') document.getElementById(`draft-${id}`).remove();
+}
+
+async function rejectDraft(id) {
+    await fetch(`/dump/draft/${id}/reject`, { method: 'POST' });
+    document.getElementById(`draft-${id}`).remove();
+}
+
+/* ── Init: bestaande drafts + lopende jobs ── */
+initialDrafts.forEach(renderCard);
+initialJobs.forEach(j => {
+    activeJobId = j.id;
+    if (j.status === 'processing') {
+        setJobStatus('Recepten worden herkend...', true);
+        pollTimer = setInterval(pollJob, 2500);
+    } else if (j.status === 'error') {
+        setJobError(j.error_message);
+    }
+});
+</script>
+{% endblock %}
