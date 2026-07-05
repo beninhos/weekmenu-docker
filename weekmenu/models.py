@@ -161,3 +161,24 @@ class ShoppingListExclusion(db.Model):
     year          = db.Column(db.Integer, nullable=False)
     week_number   = db.Column(db.Integer, nullable=False)
     ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+
+
+class DumpJob(db.Model):
+    id = db.Column(db.String(36), primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default='processing')  # processing|done|error
+    error_message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    drafts = db.relationship('RecipeDraft', backref='job', lazy=True, cascade='all, delete-orphan')
+
+
+class RecipeDraft(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(36), db.ForeignKey('dump_job.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    serves = db.Column(db.Integer, nullable=True)
+    instructions = db.Column(db.Text, nullable=True)
+    ingredients_json = db.Column(db.Text, nullable=False, default='[]')
+    image_path = db.Column(db.String(200), nullable=True)
+    source_page = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending|accepted|rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
