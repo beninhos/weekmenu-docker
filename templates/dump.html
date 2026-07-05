@@ -43,6 +43,12 @@ const staticUrlPrefix = "{{ url_for('static', filename='') }}";
 let activeJobId = null;
 let pollTimer = null;
 
+/* ── XSS-escaping helper ── */
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 /* ── Dropzone ── */
 const dz = document.getElementById('dropzone');
 dz.onclick = () => document.getElementById('fileInput').click();
@@ -74,6 +80,11 @@ async function startUpload(files) {
 
 async function pollJob() {
     const resp = await fetch(`/dump/status/${activeJobId}`);
+    if (!resp.ok) {
+        clearInterval(pollTimer);
+        setJobError('Job niet gevonden');
+        return;
+    }
     const data = await resp.json();
     if (data.status === 'processing') return;
     clearInterval(pollTimer);
@@ -114,13 +125,13 @@ function renderCard(d) {
     card.id = `draft-${d.id}`;
     card.className = 'border border-[#E8E4DC] rounded-lg p-4 flex gap-4';
     const ingHtml = d.ingredients.map(i =>
-        `<li>${i.amount ?? ''} ${i.unit ?? ''} ${i.name}</li>`).join('');
-    const img = imageUrl(d.image_path);
+        `<li>${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)}</li>`).join('');
+    const img = imageUrl(esc(d.image_path));
     card.innerHTML = `
         ${img ? `<img src="${img}" class="w-28 h-28 object-cover rounded shrink-0">` : ''}
         <div class="flex-1 min-w-0">
-            <h3 class="font-bold">${d.name}</h3>
-            ${d.serves ? `<p class="text-sm text-[#6B6B6B]">${d.serves} personen</p>` : ''}
+            <h3 class="font-bold">${esc(d.name)}</h3>
+            ${d.serves ? `<p class="text-sm text-[#6B6B6B]">${esc(d.serves)} personen</p>` : ''}
             <ul class="text-sm mt-1 list-disc list-inside text-[#6B6B6B] max-h-28 overflow-y-auto">${ingHtml}</ul>
             <div class="flex gap-2 mt-3">
                 <button onclick="acceptDraft(${d.id})" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">✓ Opslaan</button>
