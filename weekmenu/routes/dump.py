@@ -1,9 +1,6 @@
-import hashlib
-import io
 import json
-import os
 
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
 from weekmenu.extensions import db
 from weekmenu.models import Cookbook, DumpJob, Recipe, RecipeDraft, RecipeIngredient
@@ -121,52 +118,22 @@ def dump_draft_reject(id):
 
 @bp.route('/dump/draft/<int:id>/crop', methods=['POST'])
 def dump_draft_crop(id):
+    from weekmenu.services.images import parse_crop_body, crop_image
     d = RecipeDraft.query.get_or_404(id)
-    body = request.get_json(silent=True) or {}
-    try:
-        x = float(body['x'])
-        y = float(body['y'])
-        w = float(body['width'])
-        h = float(body['height'])
-    except (KeyError, TypeError, ValueError):
+    coords = parse_crop_body(request.get_json(silent=True) or {})
+    if coords is None:
         return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
-    if not (0 <= x < 1 and 0 <= y < 1 and 0 < w <= 1 and 0 < h <= 1
-            and x + w <= 1.0001 and y + h <= 1.0001):
-        return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
-
     src_rel = d.original_image_path or d.image_path
     if not src_rel:
         return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
-    src_abs = os.path.join(current_app.static_folder, src_rel.replace('static/', '', 1))
-    if not os.path.exists(src_abs):
-        return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
-
-    from PIL import Image
     try:
-        im = Image.open(src_abs)
-        im.load()
-    except Exception:
-        return jsonify({'status': 'error',
-                        'message': 'Dit afbeeldingsformaat kan niet bijgesneden worden'}), 400
-
-    width, height = im.size
-    left = int(x * width)
-    top = int(y * height)
-    right = max(left + 1, int((x + w) * width))
-    bottom = max(top + 1, int((y + h) * height))
-    cropped = im.crop((left, top, right, bottom)).convert('RGB')
-
-    buf = io.BytesIO()
-    cropped.save(buf, 'JPEG', quality=85)
-    data = buf.getvalue()
-    fname = hashlib.md5(data).hexdigest() + '.jpg'
-    uploads = os.path.join(current_app.static_folder, 'uploads')
-    os.makedirs(uploads, exist_ok=True)
-    with open(os.path.join(uploads, fname), 'wb') as f:
-        f.write(data)
-
+        new_path = crop_image(src_rel, *coords)
+    except FileNotFoundError:
+        return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
     if not d.original_image_path:
         d.original_image_path = d.image_path
-    d.image_path = os.path.join('static/uploads', fname)
+    d.image_path = new_path
     db.session.commit()
     return jsonify({'status': 'success', 'image_path': d.image_path})

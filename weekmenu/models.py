@@ -10,6 +10,7 @@ class Recipe(db.Model):
     cookbook_id = db.Column(db.Integer, db.ForeignKey('cookbook.id'), nullable=True)
     page = db.Column(db.Integer)
     image_path = db.Column(db.String(200), nullable=True)
+    original_image_path = db.Column(db.String(200), nullable=True)
     is_favorite = db.Column(db.Boolean, default=False)
     last_used = db.Column(db.DateTime, nullable=True)
     usage_count = db.Column(db.Integer, default=0)

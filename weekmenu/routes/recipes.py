@@ -458,6 +458,29 @@ def toggle_favorite(id):
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 
+@bp.route('/recipe/<int:id>/crop', methods=['POST'])
+def recipe_crop(id):
+    from weekmenu.services.images import parse_crop_body, crop_image
+    recipe = Recipe.query.get_or_404(id)
+    coords = parse_crop_body(request.get_json(silent=True) or {})
+    if coords is None:
+        return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
+    src_rel = recipe.original_image_path or recipe.image_path
+    if not src_rel:
+        return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
+    try:
+        new_path = crop_image(src_rel, *coords)
+    except FileNotFoundError:
+        return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    if not recipe.original_image_path:
+        recipe.original_image_path = recipe.image_path
+    recipe.image_path = new_path
+    db.session.commit()
+    return jsonify({'status': 'success', 'image_path': recipe.image_path})
+
+
 @bp.route('/api/ingredients/search')
 def ingredient_search():
     q = request.args.get('q', '').strip()

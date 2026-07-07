@@ -1,0 +1,72 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<div id="cropModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+     onclick="if (event.target === this) closeCropModal()">
+    <div class="bg-white rounded-lg p-4 max-w-[90vw] max-h-[90vh] flex flex-col gap-3">
+        <h3 class="font-bold">Afbeelding bijsnijden</h3>
+        <div class="overflow-hidden max-h-[70vh]"><img id="cropImage" class="max-w-full block"></div>
+        <p id="cropError" class="hidden text-sm text-red-600"></p>
+        <div class="flex gap-2 justify-end">
+            <button onclick="closeCropModal()" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">Annuleren</button>
+            <button onclick="saveCropModal()" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">Opslaan</button>
+        </div>
+    </div>
+</div>
+<script>
+let _cropper = null, _cropSaveUrl = null, _cropOnSaved = null;
+
+function openCropModal(srcUrl, saveUrl, onSaved) {
+    _cropSaveUrl = saveUrl;
+    _cropOnSaved = onSaved;
+    const img = document.getElementById('cropImage');
+    document.getElementById('cropError').classList.add('hidden');
+    document.getElementById('cropModal').classList.remove('hidden');
+    if (_cropper) { _cropper.destroy(); _cropper = null; }
+    img.onload = () => {
+        if (typeof Cropper === 'undefined') {
+            showCropModalError('Bijsnijden niet beschikbaar (library niet geladen)');
+            return;
+        }
+        _cropper = new Cropper(img, { viewMode: 1, autoCropArea: 0.8 });
+    };
+    img.src = srcUrl + (srcUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+}
+
+function closeCropModal() {
+    if (_cropper) { _cropper.destroy(); _cropper = null; }
+    document.getElementById('cropModal').classList.add('hidden');
+    document.getElementById('cropImage').src = '';
+}
+
+function showCropModalError(msg) {
+    const el = document.getElementById('cropError');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+async function saveCropModal() {
+    if (!_cropper) return;
+    const cd = _cropper.getData();
+    const nat = _cropper.getImageData();
+    const body = {
+        x: cd.x / nat.naturalWidth, y: cd.y / nat.naturalHeight,
+        width: cd.width / nat.naturalWidth, height: cd.height / nat.naturalHeight,
+    };
+    try {
+        const resp = await fetch(_cropSaveUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'success') {
+            showCropModalError(data.message || 'Bijsnijden mislukt');
+            return;
+        }
+        if (_cropOnSaved) _cropOnSaved(data.image_path);
+        closeCropModal();
+    } catch (err) {
+        showCropModalError('Bijsnijden mislukt: ' + err.message);
+    }
+}
+</script>
