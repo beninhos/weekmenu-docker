@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <div class="max-w-3xl mx-auto space-y-6">
     <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten-dump</h1>
     <p class="text-sm text-[#6B6B6B]">Gooi hier foto's van kookboekpagina's of een PDF in.
@@ -34,6 +36,22 @@
 
     <!-- Draft-kaarten -->
     <div id="draftList" class="space-y-4"></div>
+</div>
+
+<!-- Crop-modal -->
+<div id="cropModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+     onclick="if (event.target === this) closeCrop()">
+    <div class="bg-white rounded-lg p-4 max-w-[90vw] max-h-[90vh] flex flex-col gap-3">
+        <h3 class="font-bold">Afbeelding bijsnijden</h3>
+        <div class="overflow-hidden max-h-[70vh]">
+            <img id="cropImage" class="max-w-full block">
+        </div>
+        <p id="cropError" class="hidden text-sm text-red-600"></p>
+        <div class="flex gap-2 justify-end">
+            <button onclick="closeCrop()" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">Annuleren</button>
+            <button onclick="saveCrop()" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">Opslaan</button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -136,6 +154,7 @@ function renderCard(d) {
             <div class="flex gap-2 mt-3">
                 <button onclick="acceptDraft(${d.id})" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">✓ Opslaan</button>
                 <a href="/recipe/new?draft=${d.id}" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✎ Aanpassen</a>
+                ${img ? `<button onclick="openCrop(${d.id})" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✂️ Bijsnijden</button>` : ''}
                 <button onclick="rejectDraft(${d.id})" class="px-3 py-1.5 border border-[#E8E4DC] text-red-600 rounded text-sm">✗ Weg</button>
             </div>
         </div>`;
@@ -168,5 +187,77 @@ initialJobs.forEach(j => {
         setJobError(j.error_message);
     }
 });
+
+/* ── Croppen ── */
+let cropper = null;
+let cropDraftId = null;
+
+async function openCrop(id) {
+    let src = null;
+    try {
+        const resp = await fetch(`/dump/draft/${id}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        src = imageUrl(data.original_image_path || data.image_path);
+    } catch (e) { return; }
+    if (!src) return;
+
+    cropDraftId = id;
+    const modal = document.getElementById('cropModal');
+    const img = document.getElementById('cropImage');
+    document.getElementById('cropError').classList.add('hidden');
+    modal.classList.remove('hidden');
+    if (cropper) { cropper.destroy(); cropper = null; }
+    img.onload = () => {
+        if (typeof Cropper === 'undefined') {
+            showCropError('Bijsnijden niet beschikbaar (library niet geladen)');
+            return;
+        }
+        cropper = new Cropper(img, { viewMode: 1, autoCropArea: 0.8 });
+    };
+    img.src = src + '?t=' + Date.now();
+}
+
+function closeCrop() {
+    if (cropper) { cropper.destroy(); cropper = null; }
+    document.getElementById('cropModal').classList.add('hidden');
+    document.getElementById('cropImage').src = '';
+    cropDraftId = null;
+}
+
+function showCropError(msg) {
+    const el = document.getElementById('cropError');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+async function saveCrop() {
+    if (!cropper || !cropDraftId) return;
+    const cd = cropper.getData();
+    const nat = cropper.getImageData();
+    const body = {
+        x: cd.x / nat.naturalWidth,
+        y: cd.y / nat.naturalHeight,
+        width: cd.width / nat.naturalWidth,
+        height: cd.height / nat.naturalHeight,
+    };
+    try {
+        const resp = await fetch(`/dump/draft/${cropDraftId}/crop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'success') {
+            showCropError(data.message || 'Bijsnijden mislukt');
+            return;
+        }
+        const cardImg = document.querySelector(`#draft-${cropDraftId} img`);
+        if (cardImg) cardImg.src = imageUrl(data.image_path) + '?t=' + Date.now();
+        closeCrop();
+    } catch (err) {
+        showCropError('Bijsnijden mislukt: ' + err.message);
+    }
+}
 </script>
 {% endblock %}
