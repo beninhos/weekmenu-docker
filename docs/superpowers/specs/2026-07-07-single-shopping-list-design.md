@@ -30,10 +30,11 @@ Nieuwe tabel **`ShoppingCheck`** (via migratie v8, idempotent patroon):
 `via_ah` (bool, default False), unique op (`year`, `week_number`,
 `ingredient_id`). Een rij = "dit ingrediënt is voor die week afgevinkt".
 
-Nieuwe tabel **`ShoppingExtra`** (zelfde migratie): `id`, `recipe_id` (FK),
-`people_count` (nullable int), `year`, `week_number` (ISO-week van
-toevoegen), `created_at`. Een rij = "los recept op de boodschappenlijst,
-zonder menuplanning".
+Losse recepten hergebruiken de **bestaande tabel `QuickAddItem`**
+(`recipe_id`, `people_count`, `year`, `week_number`, `created_at`) — die
+telt in `_build_shopping_dict` al mee. Er komt dus géén nieuwe tabel; alleen
+nieuwe API-routes en UI eromheen. De oude quick-add-routes en -template
+vervallen.
 
 De lijst zelf blijft **afgeleid** uit de weekmenu's (bestaande
 `_build_shopping_dict(year, week)` + overrides/exclusions per week blijven
@@ -58,11 +59,11 @@ Nieuwe servicefunctie `build_combined_shopping_list()` in
 - Handmatige overrides van weken buiten het venster tellen mee zolang hun
   week niet ouder is dan 4 weken en er geen check-rij is (de aggregatie
   scant daarvoor overrides tot 4 weken terug).
-- **Losse recepten** (`ShoppingExtra`): hun ingrediënten tellen mee in de
-  aggregatie alsof ze in hun (year, week) gepland waren —
-  `amount × multiplier` via dezelfde `_calc_multiplier`-logica als het menu.
-  Afvinken werkt dus vanzelf (per ingrediënt per week). Zelfde 4-weken-regel
-  als handmatige overrides.
+- **Losse recepten** (`QuickAddItem`): tellen via het bestaande pad in
+  `_build_shopping_dict` al mee in hun (year, week). Afvinken werkt dus
+  vanzelf (per ingrediënt per week). Zelfde 4-weken-regel als handmatige
+  items: weken met QuickAddItems of CustomShoppingIngredients zonder
+  check-rij blijven tot 4 weken terug in de aggregatie meedoen.
 - Sortering en groepering per categorie zoals de bestaande per-week-lijst
   (`CATEGORY_ORDER_SUPERMARKET`).
 
