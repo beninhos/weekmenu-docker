@@ -3,10 +3,16 @@
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten</h2>
-        <a href="{{ url_for('recipes.new_recipe') }}"
-           class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
-            Nieuw Recept
-        </a>
+        <div class="flex gap-2">
+            <a href="{{ url_for('recipes.new_recipe') }}"
+               class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
+                Nieuw Recept
+            </a>
+            <a href="{{ url_for('dump.dump_page') }}"
+               class="border border-[#2C2C2C] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#2C2C2C] hover:text-white">
+                📥 Foto-dump
+            </a>
+        </div>
     </div>
     <div class="grid gap-4">
         {% for recipe in recipes %}
