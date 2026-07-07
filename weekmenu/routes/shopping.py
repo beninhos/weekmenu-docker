@@ -9,16 +9,11 @@ from weekmenu.models import (
     ShoppingListExclusion, CustomShoppingIngredient,
     ShoppingCheck, QuickAddItem,
 )
-from weekmenu.constants import (
-    CATEGORY_ORDER_SUPERMARKET, CATEGORY_BG,
-)
+from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET
 from weekmenu.services.shopping import (
     _build_shopping_dict, send_dict_to_ah, build_combined_shopping_list,
 )
-from weekmenu.services.units import (
-    _calc_ah_qty, _calc_multiplier, _norm_unit,
-    format_amount, _normalize_ri_unit,
-)
+from weekmenu.services.units import _normalize_ri_unit
 from weekmenu.services.menu import clear_shopping_list as _clear_shopping_list
 
 bp = Blueprint('shopping', __name__)
@@ -42,6 +37,7 @@ def boodschappen():
     recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves}
                                for r in recipes])
     weeks_json = json.dumps({str(k): v for k, v in data['weeks_by_ingredient'].items()})
+    iso_now = date.today().isocalendar()
     return render_template('boodschappen.html',
                            grouped_open=_grouped(data['open']),
                            checked_items=sorted(data['checked'],
@@ -49,7 +45,9 @@ def boodschappen():
                                                 reverse=True),
                            quick_add=data['quick_add'],
                            recipes_json=recipes_json,
-                           weeks_by_ingredient_json=weeks_json)
+                           weeks_by_ingredient_json=weeks_json,
+                           current_year=iso_now[0],
+                           current_week=iso_now[1])
 
 
 def _set_checks(ingredient_id, checked, via_ah=False):

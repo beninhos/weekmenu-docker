@@ -7,7 +7,7 @@ from weekmenu.extensions import db
 from weekmenu.models import MenuItem, Recipe, Settings
 from weekmenu.constants import DAYS, MEAL_TYPES
 from weekmenu.services.menu import (
-    plan_recipe, update_week_menu, clear_week, clear_shopping_list,
+    plan_recipe, update_week_menu, clear_week,
 )
 
 bp = Blueprint('menu', __name__)

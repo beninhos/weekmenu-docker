@@ -154,6 +154,22 @@ def test_extra_add_and_delete(app, client):
     assert QuickAddItem.query.get(qid) is None
 
 
+def test_add_item_current_week_appears_open(app, client):
+    ing = Ingredient(name='verse munt', display_name='Verse munt', category='groente')
+    db.session.add(ing)
+    db.session.commit()
+    iso = date.today().isocalendar()
+
+    resp = client.post(f'/api/shopping-list/{iso[0]}/{iso[1]}/add-item',
+                       json={'ingredient_id': ing.id, 'amount': 1, 'unit': 'bosje'})
+    assert resp.status_code == 200
+    assert resp.get_json()['status'] == 'ok'
+
+    result = build_combined_shopping_list()
+    rows = [x for x in result['open'] if x['ingredient_id'] == ing.id]
+    assert rows, 'los toegevoegd item moet open op de gecombineerde lijst staan'
+
+
 def test_old_urls_redirect(app, client):
     resp = client.get('/shopping-list/2026/28')
     assert resp.status_code == 301
