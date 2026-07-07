@@ -183,3 +183,17 @@ class RecipeDraft(db.Model):
     source_page = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending|accepted|rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ShoppingCheck(db.Model):
+    __tablename__ = 'shopping_check'
+    __table_args__ = (
+        db.UniqueConstraint('year', 'week_number', 'ingredient_id',
+                            name='uq_check_week_ingredient'),
+    )
+    id            = db.Column(db.Integer, primary_key=True)
+    year          = db.Column(db.Integer, nullable=False)
+    week_number   = db.Column(db.Integer, nullable=False)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    checked_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    via_ah        = db.Column(db.Boolean, default=False, nullable=False)
