@@ -75,6 +75,28 @@ def boodschappen_check(ingredient_id):
     return jsonify({'status': 'success'})
 
 
+@bp.route('/api/boodschappen/item/<int:ingredient_id>/remove', methods=['POST'])
+def boodschappen_remove(ingredient_id):
+    """Verwijder een regel volledig: handmatige items weg, rest via exclusion.
+
+    Exclusions verbergen bewust géén CustomShoppingIngredients (BUG 4 FIX in
+    _build_shopping_dict), dus die rijen moeten echt verwijderd worden.
+    """
+    data = build_combined_shopping_list()
+    weeks = data['weeks_by_ingredient'].get(ingredient_id)
+    if not weeks:
+        return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
+    for (y, w) in weeks:
+        CustomShoppingIngredient.query.filter_by(
+            year=y, week_number=w, ingredient_id=ingredient_id).delete()
+        if not ShoppingListExclusion.query.filter_by(
+                year=y, week_number=w, ingredient_id=ingredient_id).first():
+            db.session.add(ShoppingListExclusion(
+                year=y, week_number=w, ingredient_id=ingredient_id))
+    db.session.commit()
+    return jsonify({'status': 'success'})
+
+
 @bp.route('/api/boodschappen/check-all', methods=['POST'])
 def boodschappen_check_all():
     data = build_combined_shopping_list()

@@ -239,3 +239,27 @@ def test_home_ignores_cookie_week_invalid_for_year(app, client):
     resp = client.get('/')
     iso = date.today().isocalendar()
     assert f'/week/{iso[0]}/{iso[1]}' in resp.headers['Location']
+
+
+def test_remove_endpoint_removes_custom_item(app, client):
+    ing = Ingredient(name='verwijdertest', display_name='verwijdertest', category='overig')
+    db.session.add(ing)
+    db.session.commit()
+    iso = date.today().isocalendar()
+    client.post(f'/api/shopping-list/{iso[0]}/{iso[1]}/add-item',
+                json={'ingredient_id': ing.id, 'amount': 1, 'unit': 'stuks'})
+    assert [x for x in build_combined_shopping_list()['open'] if x['ingredient_id'] == ing.id]
+
+    resp = client.post(f'/api/boodschappen/item/{ing.id}/remove')
+    assert resp.status_code == 200
+    assert not [x for x in build_combined_shopping_list()['open'] if x['ingredient_id'] == ing.id]
+
+
+def test_remove_endpoint_removes_menu_item_via_exclusion(app, client):
+    r, ing = _mk_recipe('Wegwezen', 'exclude-ding', 100)
+    iso = date.today().isocalendar()
+    _plan(r, iso[0], iso[1])
+    db.session.commit()
+    assert client.post(f'/api/boodschappen/item/{ing.id}/remove').status_code == 200
+    assert not [x for x in build_combined_shopping_list()['open'] if x['ingredient_id'] == ing.id]
+    assert client.post('/api/boodschappen/item/99999/remove').status_code == 404

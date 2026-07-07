@@ -24,16 +24,16 @@
 </div>
 
 <!-- Weekbalk -->
-<div class="bg-white border border-[#E8E4DC] rounded-lg px-5 py-3 mb-4">
-    <div class="flex items-center justify-between gap-3">
+<div class="mb-4">
+    <div class="flex items-center justify-center gap-1">
         <a href="{{ url_for('menu.week_menu', year=prev_year, week=prev_week) }}"
-           class="text-2xl px-3 py-1 rounded hover:bg-[#F5F2ED]" aria-label="Vorige week">‹</a>
-        <div class="text-center">
-            <div class="text-xl font-bold">Week {{ week }}</div>
+           class="text-2xl px-3 py-1 rounded hover:bg-[#EDE9E1]" aria-label="Vorige week">‹</a>
+        <div class="text-center px-1">
+            <div class="text-xl font-bold leading-tight">Week {{ week }}</div>
             <div class="text-sm text-[#6B6B6B]">{{ week_range }}</div>
         </div>
         <a href="{{ url_for('menu.week_menu', year=next_year, week=next_week) }}"
-           class="text-2xl px-3 py-1 rounded hover:bg-[#F5F2ED]" aria-label="Volgende week">›</a>
+           class="text-2xl px-3 py-1 rounded hover:bg-[#EDE9E1]" aria-label="Volgende week">›</a>
     </div>
     {% if not is_current_week %}
     <div class="flex items-center justify-center gap-2 mt-2">
