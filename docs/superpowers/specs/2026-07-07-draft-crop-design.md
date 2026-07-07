@@ -83,8 +83,27 @@ Het origineel blijft altijd staan (zowel het bestand als het pad in
 - Handmatig op dev (poort 5002): croppen op pc (muis) en telefoon (touch),
   hercroppen, accept van een gecropte draft.
 
+## Addendum (2026-07-07, goedgekeurd): croppen in het receptformulier
+
+Croppen moet óók beschikbaar zijn op de bewerkpagina van een recept
+(`edit_recipe.html` toont de afbeelding al):
+
+- `Recipe` krijgt een kolom `original_image_path` (String(200), nullable)
+  via migratie v8 (ALTER TABLE, idempotent patroon) — zelfde
+  hercrop-vanuit-origineel-semantiek als bij drafts.
+- De Pillow-cropkern en coördinaatvalidatie verhuizen uit
+  `routes/dump.py` naar een gedeelde service `weekmenu/services/images.py`
+  (`parse_crop_body(body)`, `crop_image(src_rel, x, y, w, h)`); het
+  draft-endpoint gebruikt die voortaan ook.
+- Nieuw endpoint `POST /recipe/<int:id>/crop`, zelfde contract als het
+  draft-crop-endpoint (fracties 0–1, `{status, image_path}`).
+- De Cropper.js-modal verhuist naar include `templates/_crop_modal.html`
+  met generieke JS (`openCropModal(srcUrl, saveUrl, onSaved)`);
+  `dump.html` en `edit_recipe.html` gebruiken beide de include. Op
+  `edit_recipe.html` staat een ✂️ Bijsnijden-knop bij de afbeelding; na
+  opslaan ververst de preview met cache-buster.
+
 ## Buiten scope
 
 - Croppen op een andere bronpagina dan de huidige afbeelding.
-- Crop-functie in het gewone receptformulier.
 - Automatisch croppen met Gemini's image-model.

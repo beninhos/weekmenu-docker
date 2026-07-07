@@ -965,3 +965,315 @@ Run: `python3 -m pytest tests/ -v` → PASS.
 git add -A
 git commit -m "Boodschappen: quick-add-restanten opgeruimd"
 ```
+
+---
+
+### Task 7: Croppen in het receptformulier (spec-addendum crop-design)
+
+Losstaand van Taak 1-6 (ander featuregebied, zelfde branch). Spec:
+addendum in `docs/superpowers/specs/2026-07-07-draft-crop-design.md`.
+
+**Files:**
+- Modify: `weekmenu/models.py` (Recipe: `original_image_path`)
+- Modify: `weekmenu/migrations.py` (`_migrate_v8`, target 7 → 8)
+- Create: `weekmenu/services/images.py`
+- Modify: `weekmenu/routes/dump.py` (crop-endpoint gebruikt de service)
+- Modify: `weekmenu/routes/recipes.py` (nieuw endpoint `POST /recipe/<id>/crop`)
+- Create: `templates/_crop_modal.html`
+- Modify: `templates/dump.html` (modal → include), `templates/edit_recipe.html` (✂️-knop + include)
+- Test: `tests/test_dump_routes.py`
+
+**Interfaces:**
+- Consumes: bestaand draft-crop-endpoint (`weekmenu/routes/dump.py`, functie `dump_draft_crop`) — de Pillow-kern en validatie daaruit verhuizen naar de service.
+- Produces:
+  - `parse_crop_body(body) -> tuple[float,float,float,float] | None` en `crop_image(src_rel, x, y, w, h) -> str` (nieuw relatief pad; raises `FileNotFoundError` bij ontbrekend bronbestand, `ValueError` bij onleesbaar formaat) in `weekmenu/services/images.py`.
+  - `POST /recipe/<int:id>/crop` — zelfde request/response-contract als `/dump/draft/<id>/crop`.
+  - `Recipe.original_image_path` (String(200), nullable).
+  - Include `templates/_crop_modal.html` met globale JS `openCropModal(srcUrl, saveUrl, onSaved)`.
+
+- [ ] **Step 1: Schrijf failing test**
+
+Toevoegen aan `tests/test_dump_routes.py`:
+```python
+def test_recipe_crop_creates_new_image_and_keeps_original(app, client):
+    import os
+    from PIL import Image
+    from weekmenu.models import Recipe
+
+    uploads = os.path.join(app.static_folder, 'uploads')
+    os.makedirs(uploads, exist_ok=True)
+    Image.new('RGB', (100, 80), (10, 120, 10)).save(os.path.join(uploads, 'recept.png'))
+    recipe = Recipe(name='Croprecept', image_path='static/uploads/recept.png')
+    db.session.add(recipe)
+    db.session.commit()
+
+    resp = client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0.25, 'y': 0.25, 'width': 0.5, 'height': 0.5})
+    assert resp.status_code == 200
+    new_path = resp.get_json()['image_path']
+
+    r = db.session.get(Recipe, recipe.id)
+    assert r.image_path == new_path and new_path.endswith('.jpg')
+    assert r.original_image_path == 'static/uploads/recept.png'
+    out = Image.open(os.path.join(app.static_folder, new_path.replace('static/', '', 1)))
+    assert out.size == (50, 40)
+
+    resp2 = client.post(f'/recipe/{recipe.id}/crop',
+                        json={'x': 0, 'y': 0, 'width': 1, 'height': 1})
+    assert resp2.status_code == 200
+    r = db.session.get(Recipe, recipe.id)
+    out2 = Image.open(os.path.join(app.static_folder, r.image_path.replace('static/', '', 1)))
+    assert out2.size == (100, 80)
+
+
+def test_recipe_crop_without_image_400(app, client):
+    from weekmenu.models import Recipe
+    recipe = Recipe(name='Kaal')
+    db.session.add(recipe)
+    db.session.commit()
+    assert client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0, 'y': 0, 'width': 1, 'height': 1}).status_code == 400
+```
+
+- [ ] **Step 2: Run tests, verwacht FAIL**
+
+Run: `python3 -m pytest tests/test_dump_routes.py -k recipe_crop -v`
+Expected: FAIL — 404 (route bestaat niet)
+
+- [ ] **Step 3: Implementeer**
+
+`weekmenu/models.py`, class `Recipe`, na `image_path`:
+```python
+    original_image_path = db.Column(db.String(200), nullable=True)
+```
+`weekmenu/migrations.py`: `_migrate_v8` naast `_migrate_v7`:
+```python
+def _migrate_v8(conn):
+    """Crop in receptformulier: original_image_path op recipe."""
+    cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe)')).fetchall()]
+    if 'original_image_path' not in cols:
+        try:
+            conn.execute(text('ALTER TABLE recipe ADD COLUMN original_image_path VARCHAR(200)'))
+        except OperationalError:
+            pass
+```
+plus `if current < 8: _migrate_v8(conn)` en `target = 8`.
+
+`weekmenu/services/images.py` (kern verhuisd uit `dump_draft_crop` — neem de bestaande implementatie daar als bron en laat het gedrag identiek):
+```python
+import hashlib
+import io
+import os
+
+from flask import current_app
+
+
+def parse_crop_body(body):
+    """Valideer crop-fracties uit een JSON-body. Returns (x, y, w, h) of None."""
+    try:
+        x = float(body['x'])
+        y = float(body['y'])
+        w = float(body['width'])
+        h = float(body['height'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (0 <= x < 1 and 0 <= y < 1 and 0 < w <= 1 and 0 < h <= 1
+            and x + w <= 1.0001 and y + h <= 1.0001):
+        return None
+    return x, y, w, h
+
+
+def crop_image(src_rel, x, y, w, h):
+    """Crop 'static/...'-bron naar nieuw jpg in static/uploads. Returns nieuw relatief pad."""
+    src_abs = os.path.join(current_app.static_folder, src_rel.replace('static/', '', 1))
+    if not os.path.exists(src_abs):
+        raise FileNotFoundError(src_rel)
+
+    from PIL import Image
+    try:
+        im = Image.open(src_abs)
+        im.load()
+    except Exception:
+        raise ValueError('Dit afbeeldingsformaat kan niet bijgesneden worden')
+
+    width, height = im.size
+    left = int(x * width)
+    top = int(y * height)
+    right = max(left + 1, int((x + w) * width))
+    bottom = max(top + 1, int((y + h) * height))
+    cropped = im.crop((left, top, right, bottom)).convert('RGB')
+
+    buf = io.BytesIO()
+    cropped.save(buf, 'JPEG', quality=85)
+    data = buf.getvalue()
+    fname = hashlib.md5(data).hexdigest() + '.jpg'
+    uploads = os.path.join(current_app.static_folder, 'uploads')
+    os.makedirs(uploads, exist_ok=True)
+    with open(os.path.join(uploads, fname), 'wb') as f:
+        f.write(data)
+    return os.path.join('static/uploads', fname)
+```
+`weekmenu/routes/dump.py`, `dump_draft_crop` herschrijven op de service (gedrag ongewijzigd; bestaande crop-tests moeten blijven slagen):
+```python
+@bp.route('/dump/draft/<int:id>/crop', methods=['POST'])
+def dump_draft_crop(id):
+    from weekmenu.services.images import parse_crop_body, crop_image
+    d = RecipeDraft.query.get_or_404(id)
+    coords = parse_crop_body(request.get_json(silent=True) or {})
+    if coords is None:
+        return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
+    src_rel = d.original_image_path or d.image_path
+    if not src_rel:
+        return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
+    try:
+        new_path = crop_image(src_rel, *coords)
+    except FileNotFoundError:
+        return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    if not d.original_image_path:
+        d.original_image_path = d.image_path
+    d.image_path = new_path
+    db.session.commit()
+    return jsonify({'status': 'success', 'image_path': d.image_path})
+```
+`weekmenu/routes/recipes.py`, nieuw endpoint (na `toggle_favorite`; `RecipeDraft`-patroon volgen, imports `jsonify`/`request` bestaan al):
+```python
+@bp.route('/recipe/<int:id>/crop', methods=['POST'])
+def recipe_crop(id):
+    from weekmenu.services.images import parse_crop_body, crop_image
+    recipe = Recipe.query.get_or_404(id)
+    coords = parse_crop_body(request.get_json(silent=True) or {})
+    if coords is None:
+        return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
+    src_rel = recipe.original_image_path or recipe.image_path
+    if not src_rel:
+        return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
+    try:
+        new_path = crop_image(src_rel, *coords)
+    except FileNotFoundError:
+        return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    if not recipe.original_image_path:
+        recipe.original_image_path = recipe.image_path
+    recipe.image_path = new_path
+    db.session.commit()
+    return jsonify({'status': 'success', 'image_path': recipe.image_path})
+```
+`templates/_crop_modal.html`: verplaats de modal-HTML + JS uit `dump.html` hierheen, generiek gemaakt:
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<div id="cropModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+     onclick="if (event.target === this) closeCropModal()">
+    <div class="bg-white rounded-lg p-4 max-w-[90vw] max-h-[90vh] flex flex-col gap-3">
+        <h3 class="font-bold">Afbeelding bijsnijden</h3>
+        <div class="overflow-hidden max-h-[70vh]"><img id="cropImage" class="max-w-full block"></div>
+        <p id="cropError" class="hidden text-sm text-red-600"></p>
+        <div class="flex gap-2 justify-end">
+            <button onclick="closeCropModal()" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">Annuleren</button>
+            <button onclick="saveCropModal()" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">Opslaan</button>
+        </div>
+    </div>
+</div>
+<script>
+let _cropper = null, _cropSaveUrl = null, _cropOnSaved = null;
+
+function openCropModal(srcUrl, saveUrl, onSaved) {
+    _cropSaveUrl = saveUrl;
+    _cropOnSaved = onSaved;
+    const img = document.getElementById('cropImage');
+    document.getElementById('cropError').classList.add('hidden');
+    document.getElementById('cropModal').classList.remove('hidden');
+    if (_cropper) { _cropper.destroy(); _cropper = null; }
+    img.onload = () => {
+        if (typeof Cropper === 'undefined') {
+            showCropModalError('Bijsnijden niet beschikbaar (library niet geladen)');
+            return;
+        }
+        _cropper = new Cropper(img, { viewMode: 1, autoCropArea: 0.8 });
+    };
+    img.src = srcUrl + (srcUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+}
+
+function closeCropModal() {
+    if (_cropper) { _cropper.destroy(); _cropper = null; }
+    document.getElementById('cropModal').classList.add('hidden');
+    document.getElementById('cropImage').src = '';
+}
+
+function showCropModalError(msg) {
+    const el = document.getElementById('cropError');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+async function saveCropModal() {
+    if (!_cropper) return;
+    const cd = _cropper.getData();
+    const nat = _cropper.getImageData();
+    const body = {
+        x: cd.x / nat.naturalWidth, y: cd.y / nat.naturalHeight,
+        width: cd.width / nat.naturalWidth, height: cd.height / nat.naturalHeight,
+    };
+    try {
+        const resp = await fetch(_cropSaveUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.status !== 'success') {
+            showCropModalError(data.message || 'Bijsnijden mislukt');
+            return;
+        }
+        if (_cropOnSaved) _cropOnSaved(data.image_path);
+        closeCropModal();
+    } catch (err) {
+        showCropModalError('Bijsnijden mislukt: ' + err.message);
+    }
+}
+</script>
+```
+`templates/dump.html`: eigen modal-HTML + `openCrop`/`closeCrop`/`showCropError`/`saveCrop`-functies en de CDN-includes verwijderen; `{% include '_crop_modal.html' %}` opnemen en `openCrop(id)` herschrijven:
+```javascript
+async function openCrop(id) {
+    let src = null;
+    try {
+        const resp = await fetch(`/dump/draft/${id}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        src = imageUrl(data.original_image_path || data.image_path);
+    } catch (e) { return; }
+    if (!src) return;
+    openCropModal(src, `/dump/draft/${id}/crop`, (newPath) => {
+        const cardImg = document.querySelector(`#draft-${id} img`);
+        if (cardImg) cardImg.src = imageUrl(newPath) + '?t=' + Date.now();
+    });
+}
+```
+`templates/edit_recipe.html`: bij de bestaande afbeelding (regel ~59-64) een knop toevoegen + include onderaan het content-block:
+```html
+{% if recipe.image_path %}
+<button type="button"
+        onclick="openCropModal('{{ url_for('static', filename=(recipe.original_image_path or recipe.image_path).replace('static/', '')) }}',
+                               '/recipe/{{ recipe.id }}/crop',
+                               (p) => { const img = document.getElementById('recipeImagePreview'); if (img) img.src = '/' + p + '?t=' + Date.now(); })"
+        class="mt-1 px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✂️ Bijsnijden</button>
+{% endif %}
+...
+{% include '_crop_modal.html' %}
+```
+(geef de bestaande `<img>` op regel ~61 het id `recipeImagePreview` als hij dat nog niet heeft).
+
+- [ ] **Step 4: Run alle tests + dev-check**
+
+Run: `python3 -m pytest tests/ -v` → alles PASS, inclusief de bestaande draft-crop-tests (regressie op de service-refactor). Dev: croppen op `/dump` werkt nog; recept bewerken → ✂️ → croppen → preview ververst → hercrop begint bij origineel.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add weekmenu/models.py weekmenu/migrations.py weekmenu/services/images.py weekmenu/routes/dump.py weekmenu/routes/recipes.py templates/_crop_modal.html templates/dump.html templates/edit_recipe.html tests/test_dump_routes.py
+git commit -m "Crop: ook in receptformulier, gedeelde service en modal-include (migratie v8)"
+```
