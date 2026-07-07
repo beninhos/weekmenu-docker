@@ -16,6 +16,11 @@
 Expliciet besloten: géén weeklabels in de lijst-UI (boodschappen doen is één
 platte lijst) en géén aparte "planlijst"-feature.
 
+Aanvullend besloten (2026-07-07): de oude quick-add-flow (sessie-items via
+URL-parameters, `/quick-add`) wordt **vervangen** door "recept direct op de
+lijst" (zie hieronder); Rutgers hoofdflow is "alles naar AH sturen"
+(auto-afvinken), handmatig vinken blijft voor uitzonderingen.
+
 ## Deel A — Eén boodschappenlijst
 
 ### Model
@@ -24,6 +29,11 @@ Nieuwe tabel **`ShoppingCheck`** (via migratie v8, idempotent patroon):
 `id`, `year`, `week_number`, `ingredient_id` (FK), `checked_at` (datetime),
 `via_ah` (bool, default False), unique op (`year`, `week_number`,
 `ingredient_id`). Een rij = "dit ingrediënt is voor die week afgevinkt".
+
+Nieuwe tabel **`ShoppingExtra`** (zelfde migratie): `id`, `recipe_id` (FK),
+`people_count` (nullable int), `year`, `week_number` (ISO-week van
+toevoegen), `created_at`. Een rij = "los recept op de boodschappenlijst,
+zonder menuplanning".
 
 De lijst zelf blijft **afgeleid** uit de weekmenu's (bestaande
 `_build_shopping_dict(year, week)` + overrides/exclusions per week blijven
@@ -48,6 +58,11 @@ Nieuwe servicefunctie `build_combined_shopping_list()` in
 - Handmatige overrides van weken buiten het venster tellen mee zolang hun
   week niet ouder is dan 4 weken en er geen check-rij is (de aggregatie
   scant daarvoor overrides tot 4 weken terug).
+- **Losse recepten** (`ShoppingExtra`): hun ingrediënten tellen mee in de
+  aggregatie alsof ze in hun (year, week) gepland waren —
+  `amount × multiplier` via dezelfde `_calc_multiplier`-logica als het menu.
+  Afvinken werkt dus vanzelf (per ingrediënt per week). Zelfde 4-weken-regel
+  als handmatige overrides.
 - Sortering en groepering per categorie zoals de bestaande per-week-lijst
   (`CATEGORY_ORDER_SUPERMARKET`).
 
@@ -83,13 +98,21 @@ Nieuwe servicefunctie `build_combined_shopping_list()` in
   daarom geldt: bij succes worden alléén de daadwerkelijk meegestuurde
   (AH-gekoppelde) regels afgevinkt met `via_ah=True`; `not_linked`-items
   blijven open; bij een fout wordt níets afgevinkt.
-- **Oude URL's**: `/shopping-list/<jaar>/<week>` zónder query-parameters →
-  301 naar `/boodschappen`. Mét `recipe_id`-parameters blijft de oude
-  per-week-pagina gewoon renderen: de quick-add-flow
-  (`templates/quick_add.html` regel ~308) linkt daarheen met tijdelijke
-  sessie-items en mag niet breken. De per-week-API-endpoints blijven
-  bestaan (de nieuwe UI gebruikt ze). Navigatie in `base.html` wijst naar
-  `/boodschappen`.
+- **Recept direct op de lijst**: knop "+ Recept" op `/boodschappen` →
+  receptzoeker (hergebruik van het bestaande zoek-/pickerpatroon) + aantal
+  personen → `POST /api/boodschappen/extra` `{recipe_id, people_count}`.
+  Bovenaan de lijst een chips-regel "Losse recepten: <naam> (Np) ✕";
+  verwijderen via `DELETE /api/boodschappen/extra/<id>` (haalt de bijdrage
+  uit de aggregatie; al gezette checks blijven staan).
+- **Alles afvinken**: knop bij de lijst die alle openstaande regels in één
+  keer afvinkt (`via_ah=False`) — vervangt Rutgers huidige handmatige
+  "alles wissen" na een niet-AH-boodschappenronde.
+- **Oude URL's en quick-add**: `/shopping-list/<jaar>/<week>` → 301 naar
+  `/boodschappen` (onvoorwaardelijk). `/quick-add` en de bijbehorende
+  quick-add-API's/template vervallen: route redirect naar `/boodschappen`,
+  template en dode code opruimen. De per-week-API-endpoints voor
+  qty/exclude/add-item blijven bestaan (de nieuwe UI gebruikt ze).
+  Navigatie in `base.html` wijst naar `/boodschappen`.
 
 ## Deel B — Weeknavigatie
 
@@ -119,6 +142,8 @@ Unit-tests (pytest, bestaande suite):
 - Check-endpoint: zet rijen voor alle bijdragende weken; uncheck verwijdert.
 - 14-dagen-filter op afgevinkte items.
 - AH-flow: na (gesimuleerd) succes zijn verzonden items `via_ah=True`.
+- Losse recepten: extra toevoegen → ingrediënten verschijnen open op de
+  lijst; verwijderen → bijdrage weg; alles-afvinken vinkt ook extra-items.
 - Redirect oude URL en cookie-gedrag homepage (geldig, afwezig, ongeldig).
 
 Handmatig op dev: plannen in week N+1 op "zaterdag", lijst toont alles
