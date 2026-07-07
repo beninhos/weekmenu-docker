@@ -210,3 +210,17 @@ def test_home_ignores_invalid_cookie(app, client):
     client.set_cookie('last_viewed_week', 'onzin')
     resp = client.get('/')
     assert f'/week/{iso[0]}/{iso[1]}' in resp.headers['Location']
+
+
+def test_week_menu_invalid_week_for_year_redirects(app, client):
+    resp = client.get('/week/2025/53')  # 2025 heeft geen week 53
+    assert resp.status_code == 302
+    iso = date.today().isocalendar()
+    assert f'/week/{iso[0]}/{iso[1]}' in resp.headers['Location']
+
+
+def test_home_ignores_cookie_week_invalid_for_year(app, client):
+    client.set_cookie('last_viewed_week', '2025-53')
+    resp = client.get('/')
+    iso = date.today().isocalendar()
+    assert f'/week/{iso[0]}/{iso[1]}' in resp.headers['Location']

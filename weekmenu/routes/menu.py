@@ -15,13 +15,17 @@ bp = Blueprint('menu', __name__)
 
 @bp.route('/week/<int:year>/<int:week>')
 def week_menu(year, week):
+    try:
+        monday = date.fromisocalendar(year, week, 1)
+    except ValueError:
+        iso = date.today().isocalendar()
+        return redirect(url_for('menu.week_menu', year=iso[0], week=iso[1]))
+
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     recipes = Recipe.query.order_by(Recipe.name).all()
     recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves} for r in recipes])
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
-
-    monday = date.fromisocalendar(year, week, 1)
     sunday = monday + timedelta(days=6)
     MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli',
                'augustus', 'september', 'oktober', 'november', 'december']

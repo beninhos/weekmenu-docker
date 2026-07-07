@@ -14,6 +14,8 @@ def index():
     try:
         c_year, c_week = (int(p) for p in cookie.split('-'))
         if 1 <= c_week <= 53 and abs(c_year - year) <= 1:
+            # Validate that the week actually exists for that year
+            date.fromisocalendar(c_year, c_week, 1)
             year, week_number = c_year, c_week
     except (ValueError, AttributeError):
         pass
