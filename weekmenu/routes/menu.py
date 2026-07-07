@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, make_response
 
 from weekmenu.extensions import db
-from weekmenu.models import MenuItem, Recipe, Settings, QuickAddItem
+from weekmenu.models import MenuItem, Recipe, Settings
 from weekmenu.constants import DAYS, MEAL_TYPES
 from weekmenu.services.menu import (
     plan_recipe, update_week_menu, clear_week, clear_shopping_list,

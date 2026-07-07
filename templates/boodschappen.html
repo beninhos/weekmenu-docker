@@ -232,13 +232,20 @@ function changeQty(btn, delta) {
     const item    = control.closest('.shopping-item');
     const valEl   = control.querySelector('.qty-value');
     const current = parseInt(valEl.textContent, 10);
+    const ingredientId = item.dataset.ingredientId;
+
+    // Prullenbak: qty=1 en min geklikt → uitsluiten van de lijst
+    if (delta === -1 && current <= 1) {
+        excludeItem(ingredientId);
+        return;
+    }
+
     const next    = Math.max(1, current + delta);
     if (next === current) return;
     valEl.textContent = next;
     const icon = control.querySelector('.qty-minus-icon');
     if (icon) icon.textContent = next <= 1 ? '🗑' : '−';
 
-    const ingredientId = item.dataset.ingredientId;
     const weeks = WEEKS_BY_ING[String(ingredientId)] || [];
     if (!weeks.length) return;
     const [y, w] = weeks[weeks.length - 1];

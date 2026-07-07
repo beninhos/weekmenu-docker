@@ -1,9 +1,8 @@
-import json
 from datetime import date, datetime, timedelta
 
 from weekmenu.extensions import db
 from weekmenu.models import (
-    Cookbook, Ingredient, MenuItem, QuickAddItem, Recipe, RecipeIngredient,
+    Ingredient, MenuItem, QuickAddItem, Recipe, RecipeIngredient,
     ShoppingCheck,
 )
 from weekmenu.services.shopping import build_combined_shopping_list, window_weeks

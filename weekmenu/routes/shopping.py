@@ -13,7 +13,7 @@ from weekmenu.constants import (
     CATEGORY_ORDER_SUPERMARKET, CATEGORY_BG,
 )
 from weekmenu.services.shopping import (
-    _build_shopping_dict, send_dict_to_ah, build_combined_shopping_list, window_weeks
+    _build_shopping_dict, send_dict_to_ah, build_combined_shopping_list,
 )
 from weekmenu.services.units import (
     _calc_ah_qty, _calc_multiplier, _norm_unit,

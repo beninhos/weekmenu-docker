@@ -163,7 +163,7 @@ def build_combined_shopping_list(today=None):
                 weeks_by_ingredient[ing_id].append((y, w))
             row = agg.setdefault((ing_id, unit), {
                 'weeks': [], 'open_amount': 0.0, 'total_amount': 0.0,
-                'open_qty': 0, 'checked': [], 'via_ah': False, 'checked_at': None,
+                'checked': [], 'via_ah': False, 'checked_at': None,
             })
             row['weeks'].append((y, w))
             row['total_amount'] += amount

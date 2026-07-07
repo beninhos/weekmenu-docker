@@ -264,9 +264,6 @@ function fillDayDates(week, year) {
 
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
-    const fmt = d => d.getDate() + ' ' + NL_MONTHS_SHORT[d.getMonth()];
-    const rangeEl = document.getElementById('week-date-range');
-    if (rangeEl) rangeEl.textContent = fmt(mon) + ' – ' + fmt(sun) + ' ' + year;
 }
 
 // ── Menu opslaan ────────────────────────────────────────────────────────────
