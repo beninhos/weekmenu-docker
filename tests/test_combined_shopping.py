@@ -86,3 +86,34 @@ def test_quick_add_recipe_counts_and_old_manual_week_included(app):
     result = build_combined_shopping_list(today=TODAY)
     assert [x for x in result['open'] if x['ingredient_id'] == ing.id]
     assert any(q['recipe_id'] == r.id for q in result['quick_add'])
+
+
+def test_send_dict_to_ah_returns_sent_ids(app, monkeypatch):
+    from weekmenu.services import shopping as shopping_svc
+
+    r, ing = _mk_recipe('Dal', 'linzen-ah', 200)
+    ing.ah_product_id = 12345
+    _plan(r, 2026, 28)
+    r2, ing2 = _mk_recipe('Soep', 'ongekoppeld-ding', 1, unit='stuks')
+    _plan(r2, 2026, 28)
+    db.session.commit()
+
+    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
+
+    class FakeResp:
+        status_code = 404
+        def json(self): return {}
+        def raise_for_status(self): pass
+    class FakeReq:
+        def get(self, *a, **kw): return FakeResp()
+        def patch(self, *a, **kw): return FakeResp()
+        def put(self, *a, **kw): return FakeResp()
+    monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
+
+    from weekmenu.services.shopping import _build_shopping_dict, send_dict_to_ah
+    payload, status, sent_ids = send_dict_to_ah(_build_shopping_dict(2026, 28), {})
+    assert status == 200
+    assert payload['status'] == 'ok'
+    assert ing.id in sent_ids
+    assert ing2.id not in sent_ids
+    assert 'ongekoppeld-ding' in ' '.join(payload['not_linked'])
