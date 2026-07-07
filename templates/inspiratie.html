@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+
+    <div class="flex gap-6 border-b border-[#E8E4DC]">
+        <a href="{{ url_for('inspiratie.inspiratie', tab='ecobooster') }}"
+           class="pb-2 text-sm {% if active_tab == 'ecobooster' %}nav-active{% else %}nav-link{% endif %}">Ecobooster</a>
+        <a href="{{ url_for('inspiratie.inspiratie', tab='seizoen') }}"
+           class="pb-2 text-sm {% if active_tab == 'seizoen' %}nav-active{% else %}nav-link{% endif %}">Seizoen</a>
+    </div>
+
+    {% if active_tab == 'ecobooster' %}
+        {% include '_inspiratie_ecobooster.html' %}
+    {% else %}
+        {% include '_inspiratie_seizoen.html' %}
+    {% endif %}
+
+</div>
+
+{% include '_recipe_detail_modal.html' %}
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<script src="{{ url_for('static', filename='js/recipe-detail-modal.js') }}"></script>
+{% endblock %}

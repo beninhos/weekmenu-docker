@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+        <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-1"
+            style="font-family: var(--font-serif)">Voorraadkast</h2>
+        <p class="text-sm text-[#6B6B6B] mb-5">
+            Ingrediënten die altijd in huis zijn. Ze worden nooit op de boodschappenlijst gezet
+            en tellen mee in de Ecobooster.
+        </p>
+
+        <div id="pantryTable" class="grid grid-cols-3 gap-1 mb-4">
+            {% for p in pantry %}
+            <div class="pantry-row flex items-center justify-between bg-white border border-[#E8E4DC] rounded px-3 py-1.5 text-sm"
+                 data-id="{{ p.ingredient_id }}">
+                <span class="text-[#2C2C2C] truncate">{{ p.ingredient.display }}</span>
+                <button onclick="removePantry(this, {{ p.ingredient_id }})"
+                        class="text-[#C4BEB4] hover:text-red-400 ml-2 shrink-0 text-xs leading-none">✕</button>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="relative max-w-sm">
+            <input type="text" id="pantryInput" autocomplete="off"
+                   placeholder="+ Ingrediënt toevoegen…"
+                   class="w-full rounded-md border border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+            <div id="pantryDropdown"
+                 class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
+        </div>
+    </div>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script>
+(function() {
+    const input    = document.getElementById('pantryInput');
+    const dropdown = document.getElementById('pantryDropdown');
+    let debounce = null, activeIdx = -1;
+
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+        clearTimeout(debounce);
+        if (q.length < 1) { dropdown.classList.add('hidden'); return; }
+        debounce = setTimeout(() => fetchOpts(q), 200);
+    });
+
+    input.addEventListener('keydown', e => {
+        if (dropdown.classList.contains('hidden')) return;
+        const items = dropdown.querySelectorAll('.ac-opt');
+        if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); highlight(items); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); highlight(items); }
+        else if (e.key === 'Enter' && activeIdx >= 0 && items[activeIdx]) { e.preventDefault(); items[activeIdx].click(); }
+        else if (e.key === 'Escape') { dropdown.classList.add('hidden'); activeIdx = -1; }
+    });
+
+    document.addEventListener('click', e => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden'); activeIdx = -1;
+        }
+    });
+
+    function highlight(items) {
+        items.forEach((el, i) => el.classList.toggle('bg-[#FAF8F5]', i === activeIdx));
+    }
+
+    async function fetchOpts(q) {
+        const resp    = await fetch('/api/ingredients/search?q=' + encodeURIComponent(q));
+        const results = await resp.json();
+        if (!results.length) { dropdown.classList.add('hidden'); return; }
+        dropdown.innerHTML = results.map(r => `
+            <div class="ac-opt flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm"
+                 data-id="${r.id}" data-name="${esc(r.name)}">
+                <span class="text-[#2C2C2C]">${esc(r.name)}</span>
+                <span class="text-xs text-[#6B6B6B]">${esc(r.category)}</span>
+            </div>
+        `).join('');
+        dropdown.querySelectorAll('.ac-opt').forEach(opt => {
+            opt.addEventListener('click', async () => {
+                dropdown.classList.add('hidden');
+                input.value = '';
+                activeIdx = -1;
+                const id = opt.dataset.id, name = opt.dataset.name;
+                const resp = await fetch('/api/pantry', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ingredient_id: parseInt(id)})
+                });
+                const data = await resp.json();
+                if ((data.status === 'ok' || data.status === 'exists') && !document.querySelector(`#pantryTable .pantry-row[data-id="${id}"]`)) {
+                    const div = document.createElement('div');
+                    div.className = 'pantry-row flex items-center justify-between bg-white border border-[#E8E4DC] rounded px-3 py-1.5 text-sm';
+                    div.dataset.id = id;
+                    div.innerHTML = `<span class="text-[#2C2C2C] truncate">${esc(name)}</span>
+                        <button onclick="removePantry(this, ${id})" class="text-[#C4BEB4] hover:text-red-400 ml-2 shrink-0 text-xs leading-none">✕</button>`;
+                    document.getElementById('pantryTable').appendChild(div);
+                }
+            });
+        });
+        dropdown.classList.remove('hidden');
+        activeIdx = -1;
+    }
+})();
+
+async function removePantry(btn, ingredientId) {
+    await fetch(`/api/pantry/${ingredientId}`, {method: 'DELETE'});
+    btn.closest('.pantry-row').remove();
+}
+</script>
+{% endblock %}

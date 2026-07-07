@@ -201,6 +201,30 @@ def _migrate_v5(conn):
     '''))
 
 
+def _migrate_v6(conn):
+    """Extra AH-productvelden: was-prijs, bonusmechanisme, merk, AH-categorie."""
+    ing_cols = [row[1] for row in conn.execute(
+        text('PRAGMA table_info(ingredient)')).fetchall()]
+    for col, col_def in [
+        ('ah_product_was_price',       'VARCHAR(20)'),
+        ('ah_product_bonus_mechanism', 'VARCHAR(100)'),
+        ('ah_product_brand',           'VARCHAR(100)'),
+        ('ah_product_category',        'VARCHAR(100)'),
+    ]:
+        if col not in ing_cols:
+            conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
+
+
+def _migrate_v7(conn):
+    """Crop-functie: original_image_path op recipe_draft."""
+    cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_draft)')).fetchall()]
+    if 'original_image_path' not in cols:
+        try:
+            conn.execute(text('ALTER TABLE recipe_draft ADD COLUMN original_image_path VARCHAR(200)'))
+        except OperationalError:
+            pass
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -226,8 +250,12 @@ def migrate_db():
             _migrate_v4(conn)
         if current < 5:
             _migrate_v5(conn)
+        if current < 6:
+            _migrate_v6(conn)
+        if current < 7:
+            _migrate_v7(conn)
 
-        target = 5
+        target = 7
         if current < target:
             if row:
                 conn.execute(

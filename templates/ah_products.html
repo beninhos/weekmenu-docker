@@ -1,5 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+    @keyframes ahFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .ah-fade { animation: ahFadeIn .18s ease-out; }
+    .ingredient-card { transition: box-shadow .2s ease, opacity .2s ease; }
+    #advice-grid, .ah-advice-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: .5rem;
+    }
+    .ah-price { font-variant-numeric: tabular-nums; }
+    .ah-prijsknop { transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+</style>
 <div class="max-w-3xl mx-auto space-y-4">
 
     <!-- Header -->
@@ -62,16 +74,26 @@
                 {% endif %}
                 <div class="flex-1 min-w-0">
                     <p class="font-medium text-[#2C2C2C] text-sm leading-tight">{{ ing.ah_product_name }}</p>
-                    <p class="text-xs text-[#6B6B6B] mt-0.5">{{ ing.ah_product_size }}</p>
-                    <div class="flex items-center gap-2 mt-1">
+                    <p class="text-xs text-[#6B6B6B] mt-0.5">
+                        {% if ing.ah_product_brand %}{{ ing.ah_product_brand }} · {% endif %}{{ ing.ah_product_size }}
+                    </p>
+                    <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
                         {% if ing.ah_product_price %}
                         <span class="text-sm font-semibold text-[#2C2C2C]">€{{ ing.ah_product_price }}</span>
+                        {% endif %}
+                        {% if ing.ah_product_was_price %}
+                        <span class="text-xs text-[#6B6B6B] line-through">€{{ ing.ah_product_was_price }}</span>
                         {% endif %}
                         {% if ing.ah_product_bonus %}
                         <span class="text-xs bg-[#C9A882] text-[#2C2C2C] font-bold px-1.5 py-0.5 rounded">BONUS</span>
                         {% endif %}
-                        <span class="text-xs text-[#6B6B6B]">id: {{ ing.ah_product_id }}</span>
+                        {% if ing.ah_product_bonus_mechanism %}
+                        <span class="text-xs text-[#8B4513] font-medium">{{ ing.ah_product_bonus_mechanism }}</span>
+                        {% endif %}
                     </div>
+                    <p class="text-[10px] text-[#A89F92] mt-0.5">
+                        {% if ing.ah_product_category %}{{ ing.ah_product_category }} · {% endif %}id: {{ ing.ah_product_id }}
+                    </p>
                 </div>
                 <div class="flex flex-col gap-2 flex-shrink-0">
                     <button onclick="refreshIngredient({{ ing.id }}, event)"
@@ -138,6 +160,21 @@
                         ✕
                     </button>
                 </div>
+                <div class="flex items-center gap-3 text-xs">
+                    <button onclick="showAdvice({{ ing.id }})"
+                            class="font-medium text-[#8B4513] border border-[#D4CEC4] rounded px-2 py-1 hover:bg-white transition-colors">
+                        💡 Prijsadvies
+                    </button>
+                    <label class="ml-auto flex items-center gap-1 text-[#6B6B6B]">
+                        Sorteer
+                        <select id="sortSel-{{ ing.id }}" onchange="doSearch({{ ing.id }})"
+                                class="text-xs border-[#D4CEC4] rounded py-0.5">
+                            <option value="relevance">relevantie</option>
+                            <option value="unit">€/eenheid</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="advice-{{ ing.id }}" class="space-y-2"></div>
                 <div id="searchResults-{{ ing.id }}" class="grid grid-cols-2 gap-2"></div>
             </div>
 
@@ -166,42 +203,132 @@ function closeSearch(id) {
     document.getElementById('search-' + id).classList.add('hidden');
 }
 
-async function doSearch(id) {
-    const q = document.getElementById('searchInput-' + id).value.trim();
-    if (!q) return;
-    const resultsEl = document.getElementById('searchResults-' + id);
-    resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Zoeken...</p>';
-    const resp = await fetch('/api/ah/product-search?q=' + encodeURIComponent(q));
-    const products = await resp.json();
-    if (!products.length) {
-        resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Geen resultaten gevonden.</p>';
-        return;
-    }
-    resultsEl.innerHTML = products.map(p => `
+function ahResultCard(id, p) {
+    return `
         <button onclick='selectProduct(${id}, ${JSON.stringify(p).replace(/'/g, "\\'")})'
-                class="flex items-center gap-2 bg-white border border-[#E8E4DC] rounded-lg p-2 hover:border-[#C9A882] hover:bg-[#FAF8F5] transition-colors text-left">
+                class="ah-fade flex items-center gap-2 bg-white border border-[#E8E4DC] rounded-lg p-2 hover:border-[#C9A882] hover:bg-[#FAF8F5] transition-colors text-left">
             ${p.image
                 ? `<img src="${p.image}" class="w-12 h-12 object-contain rounded flex-shrink-0">`
                 : `<div class="w-12 h-12 bg-[#F5F2ED] rounded flex-shrink-0"></div>`}
             <div class="min-w-0">
-                <p class="text-xs font-medium text-[#2C2C2C] leading-tight line-clamp-2">${esc(p.title)}</p>
-                <p class="text-xs text-[#6B6B6B]">${esc(p.size)}</p>
-                <div class="flex items-center gap-1 mt-0.5">
-                    ${p.price ? `<span class="text-xs font-semibold">€${p.price}</span>` : ''}
+                <p class="text-xs font-medium text-[#2C2C2C] leading-tight line-clamp-2">${p.isOrganic ? '🌱 ' : ''}${esc(p.title)}</p>
+                <p class="text-xs text-[#6B6B6B]">${p.brand ? esc(p.brand) + ' · ' : ''}${esc(p.size)}</p>
+                <div class="flex items-center flex-wrap gap-1 mt-0.5">
+                    ${p.price ? `<span class="ah-price text-xs font-semibold">€${p.price}</span>` : ''}
+                    ${p.wasPrice ? `<span class="ah-price text-xs text-[#6B6B6B] line-through">€${p.wasPrice}</span>` : ''}
+                    ${p.unitPriceLabel ? `<span class="ah-price text-xs text-[#8B7355]">${p.unitPriceLabel}</span>` : ''}
                     ${p.isBonus ? '<span class="text-xs bg-[#C9A882] text-[#2C2C2C] font-bold px-1 rounded">BONUS</span>' : ''}
                 </div>
+                ${p.bonusMechanism ? `<p class="text-[10px] text-[#8B4513] leading-tight">${esc(p.bonusMechanism)}</p>` : ''}
             </div>
-        </button>
-    `).join('');
+        </button>`;
+}
+
+async function doSearch(id) {
+    const q = document.getElementById('searchInput-' + id).value.trim();
+    if (!q) return;
+    document.getElementById('advice-' + id).innerHTML = '';
+    const resultsEl = document.getElementById('searchResults-' + id);
+    resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Zoeken...</p>';
+    const resp = await fetch('/api/ah/product-search?q=' + encodeURIComponent(q) + '&size=12');
+    let products = await resp.json();
+    if (!products.length) {
+        resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Geen resultaten gevonden.</p>';
+        return;
+    }
+    if (document.getElementById('sortSel-' + id).value === 'unit') {
+        products = products.slice().sort((a, b) => {
+            if (a.unitPrice == null) return 1;
+            if (b.unitPrice == null) return -1;
+            return a.unitPrice - b.unitPrice;
+        });
+    }
+    resultsEl.innerHTML = products.map(p => ahResultCard(id, p)).join('');
+}
+
+function adviceCard(id, col, p) {
+    return `
+        <div class="bg-white border rounded-lg p-2 flex flex-col" style="border-color:${col.accent}55">
+            <div class="text-xs font-semibold mb-1" style="color:${col.accent}">${col.label}</div>
+            ${p.image ? `<img src="${p.image}" class="w-full h-16 object-contain mb-1">` : ''}
+            <p class="text-xs font-medium text-[#2C2C2C] leading-tight line-clamp-2 flex-1">${p.isOrganic ? '🌱 ' : ''}${esc(p.title)}</p>
+            <div class="mt-1 leading-tight">
+                <span class="ah-price text-base font-bold" style="color:${col.accent}">${p.unitPriceLabel || ('€' + p.price)}</span>
+                <span class="ah-price text-[11px] text-[#6B6B6B] block">€${p.price} • ${esc(p.size)}</span>
+            </div>
+            <button onclick='selectProduct(${id}, ${JSON.stringify(p).replace(/'/g, "\\'")})'
+                    class="ah-prijsknop mt-2 text-xs font-medium text-white rounded px-2 py-1.5 hover:opacity-90"
+                    style="background:${col.accent}">Kies dit</button>
+        </div>`;
+}
+
+async function showAdvice(id) {
+    const q = document.getElementById('searchInput-' + id).value.trim();
+    if (!q) return;
+    const adviceEl = document.getElementById('advice-' + id);
+    document.getElementById('searchResults-' + id).innerHTML = '';
+    adviceEl.innerHTML = '<p class="text-xs text-[#6B6B6B]">Prijsadvies laden…</p>';
+    const resp = await fetch('/api/ah/advice?q=' + encodeURIComponent(q));
+    const d = await resp.json();
+    const cols = [
+        {key: 'cheapest', label: '💰 Goedkoopst', accent: '#16a34a'},
+        {key: 'mid',      label: '⚖️ Tussenin',   accent: '#8B4513'},
+        {key: 'organic',  label: '🌱 Biologisch', accent: '#3f7d3f'},
+    ].filter(c => d[c.key]);
+    if (!cols.length) {
+        adviceEl.innerHTML = '<p class="text-xs text-[#6B6B6B]">Geen vergelijkbaar advies — te weinig producten met een €/eenheid.</p>';
+        return;
+    }
+    adviceEl.innerHTML = `
+        <div class="ah-fade space-y-2">
+            <div class="text-xs text-[#6B6B6B]">Beste prijs per ${d.unit || 'eenheid'} — kies wat bij je past:</div>
+            <div class="ah-advice-grid">
+                ${cols.map(c => adviceCard(id, c, d[c.key])).join('')}
+            </div>
+        </div>`;
 }
 
 async function selectProduct(ingId, product) {
-    await fetch(`/api/ah/ingredient/${ingId}/link`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(product),
-    });
-    location.reload();
+    const card = document.querySelector(`.ingredient-card[data-id="${ingId}"]`);
+    if (card) card.style.opacity = '0.5';
+    try {
+        const resp = await fetch(`/api/ah/ingredient/${ingId}/link`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(product),
+        });
+        if (!resp.ok) throw new Error('Koppelen mislukt');
+        await softRefreshCard(ingId);
+    } catch (e) {
+        if (card) card.style.opacity = '';
+        alert(e.message || 'Koppelen mislukt');
+    }
+}
+
+// Vervang één ingrediëntkaart door de verse server-versie — zonder
+// volledige page-reload, zodat scrollpositie en andere panelen blijven.
+async function softRefreshCard(ingId) {
+    const current = document.querySelector(`.ingredient-card[data-id="${ingId}"]`);
+    if (!current) { location.reload(); return; }
+    const html = await (await fetch('/ah-producten')).text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const fresh = doc.querySelector(`.ingredient-card[data-id="${ingId}"]`);
+    if (!fresh) { location.reload(); return; }
+    fresh.classList.add('ah-fade');
+    current.replaceWith(fresh);
+    refreshStats();
+}
+
+// Werk de "x gekoppeld / y nog te koppelen" tellers bij na een wijziging.
+function refreshStats() {
+    const cards = document.querySelectorAll('.ingredient-card');
+    let linked = 0;
+    cards.forEach(c => { if (c.querySelector('[id^="card-"]')) linked++; });
+    const total = cards.length;
+    const linkedEl = document.getElementById('statLinked');
+    const unlinkedEl = document.getElementById('statUnlinked');
+    if (linkedEl) linkedEl.textContent = `${linked} gekoppeld`;
+    if (unlinkedEl) unlinkedEl.textContent = `${total - linked} nog te koppelen`;
 }
 
 function togglePkg(id) {

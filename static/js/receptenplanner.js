@@ -1,5 +1,12 @@
-/* Receptenplanner page — views (grid/coverflow/list), detail panel, plan popup.
- * Depends on utils.js (esc) and DOMPurify (from CDN, loaded before this script).
+/* Receptenplanner page — views (grid/coverflow/list) + plan popup.
+ *
+ * Detail-modal (openDetail/closeDetail/toggleDetailFavorite/…) komt uit
+ * static/js/recipe-detail-modal.js, dat vóór dit script geladen wordt.
+ * Wij gebruiken:
+ *   - window.openDetail(event, id)        om de modal te openen
+ *   - window.getActiveDetailRecipe()      om de plan-popup aan de actieve recipe te koppelen
+ *   - window.onRecipeFavoriteToggled/Deleted callbacks om onze lokale RECIPES-cache
+ *     synchroon te houden met modal-acties.
  */
 
 const RECIPES = JSON.parse(document.getElementById('planner-recipes').textContent);
@@ -12,23 +19,6 @@ let currentView     = 'grid';
 let currentCookbook = null;
 let filteredRecipes = [...RECIPES];
 let cfIndex         = 0;
-let activeRecipe    = null;
-
-function formatAmt(amount) {
-  if (amount === null || amount === undefined || amount === 0) return '';
-  const r = Math.round(amount * 100) / 100;
-  return Number.isInteger(r) ? String(r) : String(parseFloat(r.toFixed(2)));
-}
-
-function cardImage(r, w, h) {
-  if (r.image_path) {
-    return `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy"
-                 style="width:${w};height:${h};object-fit:cover;display:block;">`;
-  }
-  return `<div style="width:${w};height:${h};display:flex;align-items:center;justify-content:center;">
-    <span style="font-size:2.5rem;font-weight:800;color:#D4CEC4;">${esc((r.name?.[0] ?? '?').toUpperCase())}</span>
-  </div>`;
-}
 
 function switchView(view) {
   ['grid','coverflow','list'].forEach(v => {
@@ -94,7 +84,9 @@ function renderGrid() {
     return;
   }
   container.innerHTML = filteredRecipes.map(r => `
-    <div class="recipe-card-grid" onclick="openDetail(${r.id})">
+    <div class="recipe-card-grid" role="button" tabindex="0"
+         onclick="openDetail(event, ${r.id})"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDetail(null, ${r.id});}">
       ${r.image_path
         ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy">`
         : `<div class="card-placeholder"><span style="font-size:3rem;font-weight:800;color:#D4CEC4;">${esc((r.name?.[0] ?? '?').toUpperCase())}</span></div>`
@@ -133,7 +125,7 @@ function renderCoverflow() {
     div.innerHTML += `<div class="cf-label">${esc(r.name)}</div>`;
     div.addEventListener('click', () => {
       const offset = i - cfIndex;
-      if (offset === 0) openDetail(r.id);
+      if (offset === 0) openDetail(null, r.id);
       else coverflowGoTo(i);
     });
     track.appendChild(div);
@@ -190,7 +182,9 @@ function renderList() {
   }
   container.innerHTML = filteredRecipes.map(r => `
     <div class="flex items-center gap-3 p-3 bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] cursor-pointer hover:border-[#C9A882]"
-         onclick="openDetail(${r.id})">
+         role="button" tabindex="0"
+         onclick="openDetail(event, ${r.id})"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDetail(null, ${r.id});}">
       <div class="flex-shrink-0 rounded-lg overflow-hidden" style="width:56px;height:56px;background:#F5F2ED;">
         ${r.image_path
           ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;">`
@@ -212,86 +206,6 @@ function renderList() {
   `).join('');
 }
 
-function openDetail(recipeId) {
-  if (!recipeId) return;
-  const r = RECIPES.find(x => x.id === recipeId);
-  if (!r) return;
-  activeRecipe = r;
-
-  const img = document.getElementById('dp-img');
-  const ph  = document.getElementById('dp-placeholder');
-  if (r.image_path) {
-    img.src = '/' + r.image_path;
-    img.style.display = 'block';
-    ph.style.display  = 'none';
-  } else {
-    img.style.display = 'none';
-    ph.style.display  = 'flex';
-    document.getElementById('dp-initial').textContent = (r.name?.[0] ?? '?').toUpperCase();
-  }
-
-  document.getElementById('dp-name').textContent     = r.name;
-  document.getElementById('dp-cookbook').textContent = r.cookbook || '';
-  document.getElementById('dp-page').textContent     = r.page ? 'p. ' + r.page : '';
-  document.getElementById('dp-serves').textContent   = r.serves + ' personen';
-
-  const urlEl = document.getElementById('dp-url');
-  if (r.url) {
-    urlEl.href          = r.url;
-    urlEl.style.display = 'inline';
-  } else {
-    urlEl.style.display = 'none';
-  }
-
-  const instrWrap = document.getElementById('dp-instr-wrap');
-  if (r.instructions) {
-    document.getElementById('dp-instr').innerHTML = DOMPurify.sanitize(r.instructions);
-    instrWrap.style.display = 'block';
-  } else {
-    instrWrap.style.display = 'none';
-  }
-
-  document.getElementById('dp-ingredients').innerHTML = r.ingredients.map(ing => `
-    <div class="ing-item flex items-center gap-2 py-0.5">
-      <input type="checkbox" id="ing-${ing.id}" value="${ing.id}" checked
-             style="width:1rem;height:1rem;border-radius:0.25rem;accent-color:#8B4513;flex-shrink:0;cursor:pointer;">
-      <label for="ing-${ing.id}" class="text-sm text-[#2C2C2C] cursor-pointer select-none">
-        ${formatAmt(ing.amount) ? formatAmt(ing.amount) + ' ' : ''}${esc(ing.unit)} ${esc(ing.name)}${ing.preparation ? ' <span class="text-[#6B6B6B] italic">(' + esc(ing.preparation) + ')</span>' : ''}
-      </label>
-    </div>
-  `).join('') || '<p class="text-sm text-[#6B6B6B]">Geen ingrediënten.</p>';
-
-  const favBtn = document.getElementById('dp-fav-btn');
-  favBtn.textContent = r.is_favorite ? '\u2B50' : '\u2606';
-  document.getElementById('dp-edit-btn').href = '/recipe/' + r.id + '/edit';
-
-  document.getElementById('popup-persons').value = DEFAULT_SERVES || r.serves;
-
-  document.getElementById('detail-overlay').style.display = 'block';
-  document.getElementById('detail-panel').classList.add('open');
-}
-
-async function toggleDetailFavorite() {
-  if (!activeRecipe) return;
-  try {
-    const resp = await fetch('/recipe/' + activeRecipe.id + '/toggle_favorite', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }
-    });
-    const data = await resp.json();
-    if (data.status === 'success') {
-      activeRecipe.is_favorite = data.is_favorite;
-      const master = RECIPES.find(x => x.id === activeRecipe.id);
-      if (master) master.is_favorite = data.is_favorite;
-      document.getElementById('dp-fav-btn').textContent = data.is_favorite ? '\u2B50' : '\u2606';
-      if (currentView === 'grid') renderGrid();
-      else if (currentView === 'list') renderList();
-      else if (currentView === 'coverflow') updateCoverflowCaption();
-    }
-  } catch(e) {
-    console.error('Fout bij favoriet toggle:', e);
-  }
-}
-
 async function toggleCardFavorite(recipeId, btn) {
   try {
     const resp = await fetch('/recipe/' + recipeId + '/toggle_favorite', {
@@ -302,8 +216,9 @@ async function toggleCardFavorite(recipeId, btn) {
       const master = RECIPES.find(x => x.id === recipeId);
       if (master) master.is_favorite = data.is_favorite;
       btn.textContent = data.is_favorite ? '\u2B50' : '\u2606';
-      if (activeRecipe && activeRecipe.id === recipeId) {
-        activeRecipe.is_favorite = data.is_favorite;
+      const active = window.getActiveDetailRecipe?.();
+      if (active && active.id === recipeId) {
+        active.is_favorite = data.is_favorite;
         document.getElementById('dp-fav-btn').textContent = data.is_favorite ? '\u2B50' : '\u2606';
       }
     }
@@ -312,33 +227,20 @@ async function toggleCardFavorite(recipeId, btn) {
   }
 }
 
-async function deleteFromDetail() {
-  if (!activeRecipe) return;
-  if (!confirm('Weet je zeker dat je "' + activeRecipe.name + '" wilt verwijderen?')) return;
-  try {
-    const resp = await fetch('/recipe/' + activeRecipe.id, { method: 'DELETE' });
-    if (resp.ok) {
-      const idx = RECIPES.findIndex(x => x.id === activeRecipe.id);
-      if (idx !== -1) RECIPES.splice(idx, 1);
-      closeDetail();
-      applyFilters();
-      showToast('Recept verwijderd');
-    }
-  } catch(e) {
-    console.error('Fout bij verwijderen:', e);
-  }
-}
+// Callbacks van de gedeelde modal-module — houden de lokale RECIPES-cache synchroon.
+window.onRecipeFavoriteToggled = function (id, isFav) {
+  const master = RECIPES.find(x => x.id === id);
+  if (master) master.is_favorite = isFav;
+  if (currentView === 'grid') renderGrid();
+  else if (currentView === 'list') renderList();
+  else if (currentView === 'coverflow') updateCoverflowCaption();
+};
 
-function closeDetail() {
-  document.getElementById('detail-panel').classList.remove('open');
-  document.getElementById('detail-overlay').style.display = 'none';
-  activeRecipe = null;
-}
-
-function toggleAll(checked) {
-  document.querySelectorAll('#dp-ingredients input[type=checkbox]')
-    .forEach(cb => { cb.checked = checked; });
-}
+window.onRecipeDeleted = function (id) {
+  const idx = RECIPES.findIndex(x => x.id === id);
+  if (idx !== -1) RECIPES.splice(idx, 1);
+  applyFilters();
+};
 
 const NL_MONTHS = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
 
@@ -368,9 +270,11 @@ function updateWeekRange() {
 }
 
 function openPlanPopup() {
-  if (!activeRecipe) return;
-  document.getElementById('popup-recipe-name').textContent = activeRecipe.name;
+  const active = window.getActiveDetailRecipe?.();
+  if (!active) return;
+  document.getElementById('popup-recipe-name').textContent = active.name;
   document.getElementById('popup-week').value = CURRENT_WEEK;
+  document.getElementById('popup-persons').value = DEFAULT_SERVES || active.serves;
   document.getElementById('popup-error').style.display = 'none';
   updateWeekRange();
   document.getElementById('plan-popup').classList.add('open');
@@ -381,7 +285,8 @@ function closePlanPopup() {
 }
 
 async function confirmPlanning() {
-  if (!activeRecipe) return;
+  const active = window.getActiveDetailRecipe?.();
+  if (!active) return;
 
   const btn = document.getElementById('popup-confirm-btn');
   btn.disabled = true;
@@ -392,7 +297,7 @@ async function confirmPlanning() {
   ).map(cb => parseInt(cb.value));
 
   const payload = {
-    recipe_id:      activeRecipe.id,
+    recipe_id:      active.id,
     day:            parseInt(document.getElementById('popup-day').value),
     meal_type:      document.getElementById('popup-meal').value,
     week:           parseInt(document.getElementById('popup-week').value),
@@ -436,14 +341,16 @@ function showToast(msg) {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    if (document.getElementById('plan-popup').classList.contains('open')) { closePlanPopup(); return; }
-    if (activeRecipe) { closeDetail(); return; }
+  if (e.key === 'Escape' && document.getElementById('plan-popup').classList.contains('open')) {
+    closePlanPopup();
+    return;
   }
-  if (currentView !== 'coverflow' || activeRecipe) return;
+  // Modal-Escape wordt afgehandeld in recipe-detail-modal.js.
+  const modalOpen = !!window.getActiveDetailRecipe?.();
+  if (currentView !== 'coverflow' || modalOpen) return;
   if (e.key === 'ArrowRight') coverflowNext();
   if (e.key === 'ArrowLeft')  coverflowPrev();
-  if (e.key === 'Enter' && filteredRecipes[cfIndex]) openDetail(filteredRecipes[cfIndex].id);
+  if (e.key === 'Enter' && filteredRecipes[cfIndex]) openDetail(null, filteredRecipes[cfIndex].id);
 });
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -25,18 +25,26 @@ Stel een Gemini API-sleutel in via **Instellingen** om foto-import en URL-scrapi
 
 ## Albert Heijn koppeling
 
-AH gebruikt hCaptcha op de loginpagina die alleen werkt wanneer de browser de pagina ziet als `localhost`. Een ingebouwde Go reverse proxy ([gebaseerd op appie-go](https://github.com/gwillem/appie-go)) serveert de AH-loginpagina op poort 9002. Via een SSH-tunnel ziet je browser die pagina als localhost — waardoor de login werkt.
+Stuur je boodschappenlijst rechtstreeks naar je AH-winkelwagentje.
 
-1. Open een SSH-tunnel vanaf je eigen computer:
-   ```bash
-   ssh -L 9002:localhost:9002 user@server
-   ```
+1. Open een SSH-tunnel: `ssh -L 9002:localhost:9002 user@server`
 2. Ga naar **Instellingen** → **Start AH-koppelaar**
 3. Open `http://localhost:9002` en log in met je AH-account
 
-De app detecteert de koppeling automatisch en vernieuwt tokens op de achtergrond via het opgeslagen refresh token.
+Soms moet je twee keer achter elkaar inloggen: de eerste poging bouwt de sessie-trust op, de tweede lukt. De koppeling wordt automatisch opgepikt; tokens vernieuwen op de achtergrond.
 
-**Technische details:** de Go proxy bindt op poort 9002, herschrijft `appie://login-exit` redirects naar `/callback`, wisselt de OAuth-code in voor tokens en slaat ze op in `/tmp/appie-tokens.json`. Flask leest ze via `GET /api/ah/poll-token`.
+De AH-login is mogelijk dankzij het werk van [appie-go](https://github.com/gwillem/appie-go) van **gwillem**.
+
+## Testomgeving
+
+Een dev-versie naast de live versie:
+
+```bash
+docker compose -f docker-compose.dev.yml -p weekmenu-dev up -d --build
+# → http://localhost:5002
+```
+
+Eigen database, te koppelen met een apart AH-account — testen zonder de live versie te raken.
 
 ## Overige functies
 

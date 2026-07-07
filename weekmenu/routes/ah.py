@@ -6,12 +6,12 @@ from flask import Blueprint, request, jsonify, render_template
 
 from weekmenu.extensions import db
 from weekmenu.models import Ingredient, Settings
-from weekmenu.constants import _AH_TOKEN_URL, _AH_HEADERS
+from weekmenu.constants import _AH_TOKEN_URL, _AH_HEADERS, _AH_CLIENT_ID
 from weekmenu.services.ah import (
     _ah_setting, ah_get_access_token, ah_search_products,
-    ah_login_with_password,
+    ah_login_with_password, ah_price_advice,
 )
-from weekmenu.services.units import _parse_product_size
+from weekmenu.services.units import _parse_product_size, _calc_ah_qty
 
 bp = Blueprint('ah', __name__)
 
@@ -27,7 +27,7 @@ def ah_connect():
     try:
         resp = _req.post(
             _AH_TOKEN_URL,
-            json={'clientId': 'appie', 'code': code},
+            json={'clientId': _AH_CLIENT_ID, 'code': code},
             headers=_AH_HEADERS,
             timeout=10,
         )
@@ -118,20 +118,34 @@ def ah_login_password():
 @bp.route('/api/ah/verify')
 def ah_verify():
     import requests as _req
+    from weekmenu.constants import _AH_GRAPHQL_URL
     token = ah_get_access_token()
     if not token:
         return jsonify({'ok': False, 'reason': 'Geen token opgeslagen'})
+    # AH heeft member-info verplaatst van de REST-route
+    # (mobile-services/v1/member/profile → 404) naar GraphQL.
+    query = (
+        'query FetchMember { member { id emailAddress '
+        'name { first last } } }'
+    )
     try:
-        r = _req.get(
-            'https://api.ah.nl/mobile-services/v1/member/profile',
+        r = _req.post(
+            _AH_GRAPHQL_URL,
+            json={'query': query},
             headers={**_AH_HEADERS, 'Authorization': f'Bearer {token}'},
             timeout=8,
         )
-        if r.status_code == 200:
-            body = r.json()
-            name = body.get('firstName') or body.get('name') or ''
-            return jsonify({'ok': True, 'name': name})
-        return jsonify({'ok': False, 'reason': f'HTTP {r.status_code}'})
+        if r.status_code != 200:
+            return jsonify({'ok': False, 'reason': f'HTTP {r.status_code}'})
+        body = r.json()
+        if body.get('errors'):
+            msg = body['errors'][0].get('message', 'GraphQL-fout')
+            return jsonify({'ok': False, 'reason': msg})
+        member = (body.get('data') or {}).get('member') or {}
+        if not member.get('emailAddress'):
+            return jsonify({'ok': False, 'reason': 'Niet ingelogd (anoniem token)'})
+        name = (member.get('name') or {}).get('first') or ''
+        return jsonify({'ok': True, 'name': name})
     except Exception as e:
         return jsonify({'ok': False, 'reason': str(e)})
 
@@ -143,6 +157,92 @@ def ah_product_search():
         return jsonify([])
     size = min(int(request.args.get('size', 8)), 20)
     return jsonify(ah_search_products(q, size=size))
+
+
+@bp.route('/api/ah/advice')
+def ah_advice():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({'cheapest': None, 'mid': None, 'organic': None,
+                        'unit': '', 'products': []})
+    return jsonify(ah_price_advice(q))
+
+
+# ── AH winkelmand (order-commandocentrum) ────────────────────────────────
+
+@bp.route('/ah-winkelmand')
+def ah_winkelmand():
+    import datetime
+    iso = datetime.date.today().isocalendar()
+    return render_template('ah_winkelmand.html', year=iso[0], week=iso[1])
+
+
+@bp.route('/api/ah/orders')
+def ah_orders():
+    from weekmenu.services.ah import ah_list_orders
+    return jsonify(ah_list_orders())
+
+
+@bp.route('/api/ah/order/<int:order_id>')
+def ah_order_detail(order_id):
+    from weekmenu.services.ah import ah_get_order
+    from weekmenu.services.shopping import _build_shopping_dict
+    order = ah_get_order(order_id)
+    if order is None:
+        return jsonify({'error': 'Order niet bereikbaar'}), 502
+
+    needed, unlinked = [], []
+    week = request.args.get('week', type=int)
+    year = request.args.get('year', type=int)
+    if week and year:
+        in_order = set(order['productIds'])
+        seen = set()
+        for (ing_id, unit), amount in _build_shopping_dict(year, week).items():
+            ing = Ingredient.query.get(ing_id)
+            if not ing:
+                continue
+            if not ing.ah_product_id:
+                if ing.display not in unlinked:
+                    unlinked.append(ing.display)
+                continue
+            if ing.ah_product_id in in_order or ing.ah_product_id in seen:
+                continue
+            seen.add(ing.ah_product_id)
+            needed.append({
+                'ingredientId': ing.id,
+                'productId':    ing.ah_product_id,
+                'name':         ing.display,
+                'productName':  ing.ah_product_name or '',
+                'size':         ing.ah_product_size or '',
+                'price':        ing.ah_product_price or '',
+                'image':        ing.ah_product_image or '',
+                'isBonus':      ing.ah_product_bonus or False,
+                'qty':          _calc_ah_qty(ing, amount, unit),
+            })
+    return jsonify({'order': order, 'needed': needed, 'unlinked': unlinked,
+                    'week': week, 'year': year})
+
+
+# Toevoegen aan een door de gebruiker geopende order. De app opent of zet
+# zelf nooit een order door — dat doet de gebruiker in de AH-app.
+_AH_ORDER_WRITE_ENABLED = True
+
+
+@bp.route('/api/ah/order/<int:order_id>/apply', methods=['POST'])
+def ah_order_apply(order_id):
+    from weekmenu.services.ah import ah_add_to_open_order, ah_get_order
+    if not _AH_ORDER_WRITE_ENABLED:
+        return jsonify({'status': 'error',
+                        'message': 'Bewerken van bestellingen staat uit.'}), 403
+    data = request.get_json(force=True) or {}
+    items = data.get('items', [])
+    if not items:
+        return jsonify({'status': 'error', 'message': 'Geen wijzigingen opgegeven'}), 400
+    try:
+        ah_add_to_open_order(order_id, items)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 502
+    return jsonify({'status': 'ok', 'order': ah_get_order(order_id)})
 
 
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/link', methods=['POST'])
@@ -157,6 +257,10 @@ def ah_link_ingredient(ingredient_id):
     ing.ah_product_image = data.get('image', '')
     ing.ah_product_bonus = bool(data.get('isBonus', False))
     ing.ah_product_color = data.get('bgColor', '')
+    ing.ah_product_was_price = data.get('wasPrice', '')
+    ing.ah_product_bonus_mechanism = data.get('bonusMechanism', '')
+    ing.ah_product_brand = data.get('brand', '')
+    ing.ah_product_category = data.get('category', '')
     ing.ah_product_updated = int(time.time())
     parsed = _parse_product_size(data.get('size', ''))
     if parsed:
@@ -185,6 +289,10 @@ def ah_refresh_ingredient(ingredient_id):
     ing.ah_product_price = p['price']
     ing.ah_product_image = p['image']
     ing.ah_product_bonus = p['isBonus']
+    ing.ah_product_was_price = p.get('wasPrice', '')
+    ing.ah_product_bonus_mechanism = p.get('bonusMechanism', '')
+    ing.ah_product_brand = p.get('brand', '')
+    ing.ah_product_category = p.get('category', '')
     ing.ah_product_updated = int(time.time())
     parsed = _parse_product_size(p['size'])
     if parsed:

@@ -1,0 +1,67 @@
+{# ── Seizoens-items ── #}
+<div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-1"
+        style="font-family: var(--font-serif)">In seizoen — {{ month_name }}</h2>
+    <p class="text-sm text-[#6B6B6B] mb-5">
+        Nederlandse groente & fruit die nu op hun best zijn. Recepten hieronder gebruiken deze ingrediënten.
+    </p>
+
+    <div class="flex flex-wrap gap-2">
+        {% for item in items %}
+            {% if item.matched %}
+            <span class="bg-[#2C2C2C] text-white rounded-full px-3 py-1 text-xs">
+                {{ item.display_name }}
+            </span>
+            {% else %}
+            <span class="bg-white border border-[#D4CEC4] text-[#9B8A7A] rounded-full px-3 py-1 text-xs"
+                  title="Niet gekoppeld aan een ingrediënt in de database">
+                {{ item.display_name }}
+            </span>
+            {% endif %}
+        {% endfor %}
+    </div>
+</div>
+
+{# ── Recepten ── #}
+{% if recipes %}
+<div class="space-y-2">
+    <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B]">Recepten</h3>
+    <div class="space-y-2">
+        {% for r in recipes %}
+        {% set score_color = '#4A7C59' if r.eco_score >= 75 else ('#8B7A3A' if r.eco_score >= 50 else '#6B6B6B') %}
+        <a href="{{ url_for('recipes.edit_recipe', id=r.id) }}" onclick="return openDetail(event, {{ r.id }})"
+           class="bg-white border border-[#E8E4DC] rounded-lg px-4 py-3 flex items-start gap-3 hover:border-[#C9A882] hover:bg-[#FAF8F5] transition-colors no-underline">
+            <div class="flex-grow min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    {% if r.is_favorite %}<span class="text-[#C9A882]" title="Favoriet">★</span>{% endif %}
+                    <span class="font-semibold text-sm text-[#2C2C2C]">{{ r.name }}</span>
+                </div>
+                {% set meta_parts = [] %}
+                {% if r.cookbook %}{% set _ = meta_parts.append(r.cookbook ~ (' · p.' ~ r.page if r.page else '')) %}{% endif %}
+                {% if r.serves %}{% set _ = meta_parts.append(r.serves ~ ' pers.') %}{% endif %}
+                {% if meta_parts %}
+                <div class="text-xs text-[#6B6B6B] mt-0.5">{{ meta_parts | join(' · ') }}</div>
+                {% endif %}
+                {% if r.missing %}
+                <div class="text-xs text-[#9B8A7A] mt-1">mist: {{ r.missing | join(', ') }}</div>
+                {% else %}
+                <div class="text-xs text-[#4A7C59] mt-1">Alles in huis</div>
+                {% endif %}
+            </div>
+            <div class="shrink-0 text-right">
+                <div class="text-sm font-bold" style="color: {{ score_color }}">{{ r.eco_score }}%</div>
+                {% if r.missing_count > 0 %}
+                <div class="text-xs text-[#6B6B6B]">mist {{ r.missing_count }}</div>
+                {% else %}
+                <div class="text-xs text-[#4A7C59]">compleet</div>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="text-sm text-[#6B6B6B] text-center py-6">
+    Geen recepten gevonden die seizoens-ingrediënten gebruiken.
+</div>
+{% endif %}

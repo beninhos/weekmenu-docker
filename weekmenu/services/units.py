@@ -46,6 +46,32 @@ def _parse_product_size(size_str):
     return None
 
 
+def price_per_unit(price, size_str):
+    """Prijs per genormaliseerde eenheid uit prijs (float) + AH-maat.
+
+    Geeft (waarde, eenheid) met gewicht→kg en volume→l, of None als de
+    maat niet te parsen valt. Stuk-achtige eenheden (stuks/plak/bosje…)
+    blijven per-stuk en zijn dus niet 1-op-1 met kg/l te vergelijken.
+    """
+    if not price or price <= 0:
+        return None
+    parsed = _parse_product_size(size_str)
+    if not parsed:
+        return None
+    qty, unit = parsed
+    if qty <= 0:
+        return None
+    if unit == 'g':
+        qty, unit = qty / 1000.0, 'kg'
+    elif unit == 'ml':
+        qty, unit = qty / 1000.0, 'l'
+    elif unit == 'cl':
+        qty, unit = qty / 100.0, 'l'
+    elif unit == 'dl':
+        qty, unit = qty / 10.0, 'l'
+    return (price / qty, unit)
+
+
 def _norm_unit(u):
     """Normaliseer unit string via _UNIT_NORMALIZE lookup."""
     return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())

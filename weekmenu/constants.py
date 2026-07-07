@@ -226,7 +226,19 @@ _AH_TOKEN_URL        = 'https://api.ah.nl/mobile-auth/v1/auth/token'
 _AH_REFRESH_URL      = 'https://api.ah.nl/mobile-auth/v1/auth/token/refresh'
 _AH_SEARCH_URL       = 'https://api.ah.nl/mobile-services/product/search/v2'
 _AH_SHOPPINGLIST_URL = 'https://api.ah.nl/mobile-services/shoppinglist/v2/items'
-_AH_HEADERS          = {'User-Agent': 'Appie/8.22.3', 'x-application': 'AHWEBSHOP'}
+_AH_ORDER_ACTIVE_URL = 'https://api.ah.nl/mobile-services/order/v1/summaries/active?sortBy=DEFAULT'
+_AH_ORDER_ITEMS_URL  = 'https://api.ah.nl/mobile-services/order/v1/items?sortBy=DEFAULT'
+_AH_GRAPHQL_URL      = 'https://api.ah.nl/graphql'
+
+_AH_CLIENT_ID        = 'appie-ios'
+_AH_CLIENT_VERSION   = '9.28'
+_AH_HEADERS          = {
+    'User-Agent':       f'Appie/{_AH_CLIENT_VERSION} (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)',
+    'x-client-name':    _AH_CLIENT_ID,
+    'x-client-version': _AH_CLIENT_VERSION,
+    'x-application':    'AHWEBSHOP',
+    'Accept':           'application/json',
+}
 
 _AH_CAPTCHA_SITEKEY = '617563f1-54b0-496d-a13d-95de4a9c641a'
 _AH_CAPTCHA_PAGE    = 'https://login.ah.nl/login'
@@ -260,3 +272,43 @@ _KNOWN_SITES = {
     'epicurious.com': 'Epicurious',
     'foodnetwork.com': 'Food Network',
 }
+
+# ── Seizoens-groente & fruit ──────────────────────────────────────────────
+# Bron: https://www.groentefruit.nl/seizoen/ (gecheckt 2026-04-17).
+# Keys zijn canonical names (lowercase, zonder diacritics) zodat ze direct
+# matchen met Ingredient.name. Varianten/meervouden horen als IngredientAlias.
+
+SEASONAL_NL = {
+    1:  ['boerenkool', 'knolselderij', 'pastinaak', 'prei', 'rode kool',
+         'witte kool', 'spruitjes', 'winterwortel', 'witlof', 'aardappel',
+         'appel', 'peer'],
+    2:  ['boerenkool', 'knolselderij', 'pastinaak', 'prei', 'rode kool',
+         'spruitjes', 'winterwortel', 'witlof', 'appel', 'peer'],
+    3:  ['prei', 'spruitjes', 'winterwortel', 'witlof', 'pastinaak',
+         'rabarber', 'veldsla'],
+    4:  ['radijs', 'rabarber', 'asperge', 'spinazie', 'veldsla',
+         'postelein', 'witlof'],
+    5:  ['asperge', 'radijs', 'rabarber', 'spinazie', 'tuinbonen',
+         'doperwten', 'komkommer', 'aardbei', 'postelein'],
+    6:  ['asperge', 'aardbei', 'courgette', 'tuinbonen', 'doperwten',
+         'radijs', 'tomaat', 'bloemkool', 'sla', 'komkommer', 'spinazie'],
+    7:  ['courgette', 'bloemkool', 'tomaat', 'aardbei', 'framboos',
+         'bosbes', 'komkommer', 'paprika', 'sla', 'sperziebonen',
+         'bleekselderij'],
+    8:  ['tomaat', 'courgette', 'paprika', 'aubergine', 'sperziebonen',
+         'mais', 'pruim', 'braam', 'framboos', 'bloemkool', 'komkommer',
+         'perzik'],
+    9:  ['pompoen', 'courgette', 'paprika', 'aubergine', 'tomaat', 'appel',
+         'peer', 'druif', 'pruim', 'braam', 'spinazie', 'prei', 'rode kool'],
+    10: ['pompoen', 'knolselderij', 'pastinaak', 'boerenkool', 'prei',
+         'rode kool', 'witte kool', 'appel', 'peer', 'witlof', 'spruitjes'],
+    11: ['pompoen', 'boerenkool', 'knolselderij', 'pastinaak', 'rode kool',
+         'spruitjes', 'witte kool', 'witlof', 'winterwortel', 'appel', 'peer'],
+    12: ['boerenkool', 'knolselderij', 'pastinaak', 'prei', 'rode kool',
+         'spruitjes', 'winterwortel', 'witlof', 'appel', 'peer'],
+}
+
+MONTH_NAMES_NL = [
+    'januari', 'februari', 'maart', 'april', 'mei', 'juni',
+    'juli', 'augustus', 'september', 'oktober', 'november', 'december',
+]

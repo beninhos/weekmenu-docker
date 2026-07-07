@@ -1,10 +1,5 @@
-# Stage 1: Go build voor de AH login proxy
-FROM golang:1.23-alpine AS gobuilder
-WORKDIR /build
-COPY ah-proxy/ .
-RUN go build -o ah-login-proxy .
-
-# Stage 2: Python applicatie
+# Python applicatie (de AH login-proxy draait nu in Python via curl_cffi,
+# zie ah-proxy/proxy.py — geen Go-build meer nodig).
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -12,9 +7,6 @@ WORKDIR /app
 # Installeer benodigde pakketten
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Kopieer de AH login proxy binary
-COPY --from=gobuilder /build/ah-login-proxy /usr/local/bin/ah-login-proxy
 
 # Kopieer de applicatiecode
 COPY . .
