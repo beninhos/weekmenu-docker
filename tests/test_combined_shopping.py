@@ -187,3 +187,26 @@ def test_combined_send_to_ah_checks_sent_items(app, client, monkeypatch):
     assert resp.status_code == 200
     check = ShoppingCheck.query.filter_by(ingredient_id=ing.id).first()
     assert check is not None and check.via_ah is True
+
+
+def test_week_menu_sets_cookie_and_home_follows_it(app, client):
+    resp = client.get('/week/2026/30')
+    assert resp.status_code == 200
+    cookies = resp.headers.getlist('Set-Cookie')
+    assert any('last_viewed_week=2026-30' in c for c in cookies)
+
+    client.set_cookie('last_viewed_week', '2026-30')
+    resp = client.get('/')
+    assert resp.status_code == 302
+    assert '/week/2026/30' in resp.headers['Location']
+
+
+def test_home_ignores_invalid_cookie(app, client):
+    client.set_cookie('last_viewed_week', '2026-60')
+    resp = client.get('/')
+    iso = date.today().isocalendar()
+    assert f'/week/{iso[0]}/{iso[1]}' in resp.headers['Location']
+
+    client.set_cookie('last_viewed_week', 'onzin')
+    resp = client.get('/')
+    assert f'/week/{iso[0]}/{iso[1]}' in resp.headers['Location']

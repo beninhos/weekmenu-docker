@@ -1,7 +1,7 @@
 import json
-from datetime import date
+from datetime import date, timedelta
 
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, make_response
 
 from weekmenu.extensions import db
 from weekmenu.models import MenuItem, Recipe, Settings, QuickAddItem
@@ -20,7 +20,24 @@ def week_menu(year, week):
     recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves} for r in recipes])
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
-    return render_template('week_menu.html',
+
+    monday = date.fromisocalendar(year, week, 1)
+    sunday = monday + timedelta(days=6)
+    MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli',
+               'augustus', 'september', 'oktober', 'november', 'december']
+    week_range = f'ma {monday.day} {MAANDEN[monday.month-1][:3]} – zo {sunday.day} {MAANDEN[sunday.month-1][:3]}'
+    prev_monday = monday - timedelta(days=7)
+    next_monday = monday + timedelta(days=7)
+    iso_now = date.today().isocalendar()
+    extra_ctx = dict(
+        week_range=week_range,
+        prev_year=prev_monday.isocalendar()[0], prev_week=prev_monday.isocalendar()[1],
+        next_year=next_monday.isocalendar()[0], next_week=next_monday.isocalendar()[1],
+        current_year=iso_now[0], current_week=iso_now[1],
+        is_current_week=(year == iso_now[0] and week == iso_now[1]),
+    )
+
+    resp = make_response(render_template('week_menu.html',
                          menu_items=menu_items,
                          recipes=recipes,
                          recipes_json=recipes_json,
@@ -28,7 +45,10 @@ def week_menu(year, week):
                          year=year,
                          days=DAYS,
                          meal_types=MEAL_TYPES,
-                         default_serves=default_serves)
+                         default_serves=default_serves,
+                         **extra_ctx))
+    resp.set_cookie('last_viewed_week', f'{year}-{week}', max_age=1209600, samesite='Lax')
+    return resp
 
 
 @bp.route('/update_menu', methods=['POST'])
