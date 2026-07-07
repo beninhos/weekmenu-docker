@@ -40,7 +40,14 @@ Nieuwe servicefunctie `build_combined_shopping_list()` in
   regel. Elke regel onthoudt intern zijn bijdragende (year, week)-paren.
 - Een regel is **afgevinkt** als álle bijdragende weken een
   `ShoppingCheck`-rij hebben; anders open (de open hoeveelheid = som van de
-  niet-afgevinkte weken).
+  niet-afgevinkte weken). De check is per **ingrediënt** (eenheid-
+  onafhankelijk): staat één ingrediënt door eenheidsverschil als twee regels
+  op de lijst, dan vinken die samen af — bewuste vereenvoudiging.
+- Getoonde AH-hoeveelheid (pakketten) per regel = som van de per-week-qty's
+  (override waar aanwezig, anders `_calc_ah_qty` per week).
+- Handmatige overrides van weken buiten het venster tellen mee zolang hun
+  week niet ouder is dan 4 weken en er geen check-rij is (de aggregatie
+  scant daarvoor overrides tot 4 weken terug).
 - Sortering en groepering per categorie zoals de bestaande per-week-lijst
   (`CATEGORY_ORDER_SUPERMARKET`).
 
@@ -66,13 +73,23 @@ Nieuwe servicefunctie `build_combined_shopping_list()` in
   uit het venster loopt: regels met een override maar zonder check blijven
   meetellen zolang hun week ≤ 4 weken oud is — feestje-boodschappen blijven
   dus staan).
-- **Verstuur naar AH**: knop toont het aantal openstaande items en verstuurt
-  alléén die (bestaand `send_to_ah`-mechanisme incl. order-mode-detectie,
-  gevoed met de gecombineerde open items i.p.v. één week). Na succes worden
-  alle verzonden regels afgevinkt met `via_ah=True`.
-- **Oude URL's**: `/shopping-list/<jaar>/<week>` → 301 naar `/boodschappen`.
-  De bijbehorende per-week-API-endpoints blijven bestaan (de nieuwe UI
-  gebruikt ze). Navigatie in `base.html` wijst naar `/boodschappen`.
+- **Verstuur naar AH**: knop toont het aantal openstaande items. Nieuw
+  endpoint `POST /api/boodschappen/send-to-ah` dat de bestaande
+  `send_to_ah`-logica (order-mode-detectie, merge per AH-productId,
+  qty_overrides) hergebruikt maar gevoed wordt met de **gecombineerde open
+  items** i.p.v. één week — de kern wordt daarvoor uit de route
+  gerefactored naar een servicefunctie die een shopping-dict accepteert.
+  Let op: de AH-call is één gebundeld request zonder per-item-rapportage;
+  daarom geldt: bij succes worden alléén de daadwerkelijk meegestuurde
+  (AH-gekoppelde) regels afgevinkt met `via_ah=True`; `not_linked`-items
+  blijven open; bij een fout wordt níets afgevinkt.
+- **Oude URL's**: `/shopping-list/<jaar>/<week>` zónder query-parameters →
+  301 naar `/boodschappen`. Mét `recipe_id`-parameters blijft de oude
+  per-week-pagina gewoon renderen: de quick-add-flow
+  (`templates/quick_add.html` regel ~308) linkt daarheen met tijdelijke
+  sessie-items en mag niet breken. De per-week-API-endpoints blijven
+  bestaan (de nieuwe UI gebruikt ze). Navigatie in `base.html` wijst naar
+  `/boodschappen`.
 
 ## Deel B — Weeknavigatie
 
@@ -81,16 +98,17 @@ Nieuwe servicefunctie `build_combined_shopping_list()` in
   getoonde week ≠ huidige ISO-week: gele indicator "Je kijkt naar
   volgende/vorige week" + knop "Naar deze week".
 - **Laatst bekeken week onthouden**: `week_menu` zet een cookie
-  `last_viewed_week` (`<year>-<week>`, max-age 14 dagen). De homepage
+  `last_viewed_week` (`<iso-jaar>-<week>`, max-age 14 dagen; ISO-jaar uit
+  `isocalendar()`, niet het kalenderjaar — die verschillen rond de
+  jaarwisseling). De homepage
   (`weekmenu/routes/main.py`) leest die cookie en redirect daarheen; bij
   ontbrekende/ongeldige cookie → huidige week zoals nu.
 
 ## Foutafhandeling
 
 - Check-endpoint op onbekend ingrediënt/regel buiten venster → 404.
-- AH-verzendfouten: bestaand gedrag (foutmelding, niets afvinken bij
-  mislukking; bij gedeeltelijk succes alleen de gelukte items afvinken —
-  volg wat `send_to_ah` per item rapporteert).
+- AH-verzendfouten: foutmelding tonen, níets afvinken (de AH-call is één
+  gebundeld request — er bestaat geen per-item-succes).
 - Cookie met week buiten bereik (bv. week 60) → negeren, huidige week.
 
 ## Testen
