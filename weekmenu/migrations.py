@@ -215,6 +215,16 @@ def _migrate_v6(conn):
             conn.execute(text(f'ALTER TABLE ingredient ADD COLUMN {col} {col_def}'))
 
 
+def _migrate_v7(conn):
+    """Crop-functie: original_image_path op recipe_draft."""
+    cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_draft)')).fetchall()]
+    if 'original_image_path' not in cols:
+        try:
+            conn.execute(text('ALTER TABLE recipe_draft ADD COLUMN original_image_path VARCHAR(200)'))
+        except OperationalError:
+            pass
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -242,8 +252,10 @@ def migrate_db():
             _migrate_v5(conn)
         if current < 6:
             _migrate_v6(conn)
+        if current < 7:
+            _migrate_v7(conn)
 
-        target = 6
+        target = 7
         if current < target:
             if row:
                 conn.execute(

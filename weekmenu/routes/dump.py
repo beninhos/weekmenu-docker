@@ -20,6 +20,7 @@ def serialize_draft(d):
         'instructions': d.instructions,
         'ingredients': json.loads(d.ingredients_json or '[]'),
         'image_path': d.image_path,
+        'original_image_path': d.original_image_path,
         'status': d.status,
     }
 

@@ -179,6 +179,7 @@ class RecipeDraft(db.Model):
     instructions = db.Column(db.Text, nullable=True)
     ingredients_json = db.Column(db.Text, nullable=False, default='[]')
     image_path = db.Column(db.String(200), nullable=True)
+    original_image_path = db.Column(db.String(200), nullable=True)
     source_page = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending|accepted|rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

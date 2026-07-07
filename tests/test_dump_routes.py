@@ -72,3 +72,11 @@ def test_new_recipe_post_with_draft_id_accepts_draft(app, client):
     })
     assert resp.status_code == 302
     assert db.session.get(RecipeDraft, draft.id).status == 'accepted'
+
+
+def test_serialize_draft_includes_original_image_path(app, client):
+    draft = _make_draft(app)
+    draft.original_image_path = 'static/uploads/orig.png'
+    db.session.commit()
+    data = client.get(f'/dump/draft/{draft.id}').get_json()
+    assert data['original_image_path'] == 'static/uploads/orig.png'
