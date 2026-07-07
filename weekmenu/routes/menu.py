@@ -1,7 +1,7 @@
 import json
 from datetime import date
 
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 
 from weekmenu.extensions import db
 from weekmenu.models import MenuItem, Recipe, Settings, QuickAddItem
@@ -75,67 +75,4 @@ def clear_week_menu():
 
 @bp.route('/quick-add')
 def quick_add():
-    today = date.today()
-    week_number = request.args.get('week', today.isocalendar()[1], type=int)
-    year = request.args.get('year', today.year, type=int)
-
-    recipes = Recipe.query.order_by(Recipe.name).all()
-
-    saved_items = QuickAddItem.query.filter_by(
-        week_number=week_number,
-        year=year
-    ).all()
-
-    return render_template('quick_add.html',
-                         recipes=recipes,
-                         week=week_number,
-                         year=year,
-                         saved_items=saved_items)
-
-
-@bp.route('/api/quick-add/save', methods=['POST'])
-def save_quick_add():
-    try:
-        data = request.get_json()
-        week = data['week']
-        year = data['year']
-        items = data['items']
-
-        QuickAddItem.query.filter_by(
-            week_number=week,
-            year=year
-        ).delete()
-
-        for item in items:
-            quick_item = QuickAddItem(
-                recipe_id=item['recipe_id'],
-                people_count=item['people_count'],
-                week_number=week,
-                year=year
-            )
-            db.session.add(quick_item)
-
-        db.session.commit()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-
-@bp.route('/api/quick-add/clear', methods=['POST'])
-def clear_quick_add():
-    try:
-        data = request.get_json()
-        week = data['week']
-        year = data['year']
-
-        QuickAddItem.query.filter_by(
-            week_number=week,
-            year=year
-        ).delete()
-
-        db.session.commit()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+    return redirect(url_for('shopping.boodschappen'), code=302)

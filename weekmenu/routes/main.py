@@ -15,6 +15,4 @@ def index():
 
 @bp.route('/boodschappenlijst')
 def boodschappenlijst_redirect():
-    today = date.today()
-    iso = today.isocalendar()
-    return redirect(url_for('shopping.shopping_list', year=iso[0], week=iso[1]))
+    return redirect(url_for('shopping.boodschappen'))

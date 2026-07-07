@@ -117,3 +117,73 @@ def test_send_dict_to_ah_returns_sent_ids(app, monkeypatch):
     assert ing.id in sent_ids
     assert ing2.id not in sent_ids
     assert 'ongekoppeld-ding' in ' '.join(payload['not_linked'])
+
+
+def test_check_endpoint_checks_all_weeks(app, client):
+    r1, ing = _mk_recipe('A', 'kikkererwten', 200)
+    r2, _ = _mk_recipe('B', 'kikkererwten', 100)
+    iso = date.today().isocalendar()
+    nxt = (date.today() + timedelta(days=7)).isocalendar()
+    _plan(r1, iso[0], iso[1])
+    _plan(r2, nxt[0], nxt[1])
+    db.session.commit()
+
+    resp = client.post(f'/api/boodschappen/item/{ing.id}/check', json={'checked': True})
+    assert resp.status_code == 200
+    assert ShoppingCheck.query.filter_by(ingredient_id=ing.id).count() == 2
+
+    resp = client.post(f'/api/boodschappen/item/{ing.id}/check', json={'checked': False})
+    assert resp.status_code == 200
+    assert ShoppingCheck.query.filter_by(ingredient_id=ing.id).count() == 0
+
+
+def test_check_unknown_ingredient_404(app, client):
+    assert client.post('/api/boodschappen/item/99999/check',
+                       json={'checked': True}).status_code == 404
+
+
+def test_extra_add_and_delete(app, client):
+    r, ing = _mk_recipe('Shakshuka', 'eieren-extra', 3, unit='stuks')
+    db.session.commit()
+    resp = client.post('/api/boodschappen/extra',
+                       json={'recipe_id': r.id, 'people_count': 2})
+    assert resp.status_code == 200
+    qid = resp.get_json()['id']
+    assert QuickAddItem.query.get(qid) is not None
+
+    assert client.delete(f'/api/boodschappen/extra/{qid}').status_code == 200
+    assert QuickAddItem.query.get(qid) is None
+
+
+def test_old_urls_redirect(app, client):
+    resp = client.get('/shopping-list/2026/28')
+    assert resp.status_code == 301
+    assert resp.headers['Location'].endswith('/boodschappen')
+    resp = client.get('/quick-add')
+    assert resp.status_code == 302
+    assert resp.headers['Location'].endswith('/boodschappen')
+
+
+def test_combined_send_to_ah_checks_sent_items(app, client, monkeypatch):
+    from weekmenu.services import shopping as shopping_svc
+    r, ing = _mk_recipe('Dal-ah', 'linzen-combined', 200)
+    ing.ah_product_id = 777
+    iso = date.today().isocalendar()
+    _plan(r, iso[0], iso[1])
+    db.session.commit()
+
+    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
+    class FakeResp:
+        status_code = 404
+        def json(self): return {}
+        def raise_for_status(self): pass
+    class FakeReq:
+        def get(self, *a, **kw): return FakeResp()
+        def patch(self, *a, **kw): return FakeResp()
+        def put(self, *a, **kw): return FakeResp()
+    monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
+
+    resp = client.post('/api/boodschappen/send-to-ah', json={})
+    assert resp.status_code == 200
+    check = ShoppingCheck.query.filter_by(ingredient_id=ing.id).first()
+    assert check is not None and check.via_ah is True
