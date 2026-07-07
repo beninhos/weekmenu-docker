@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+    <div class="flex justify-between items-start mb-2 flex-wrap gap-3">
+        <div>
+            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Boodschappen</h2>
+            <p class="text-sm text-[#6B6B6B]">Alles wat gepland en nog open staat</p>
+        </div>
+        <div class="flex gap-2 flex-wrap justify-end">
+            <button onclick="toggleExtraPicker()"
+                    class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
+                + Recept
+            </button>
+            <button onclick="toggleAddItemPicker()"
+                    class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
+                + Los item
+            </button>
+            <button onclick="checkAll()"
+                    class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
+                Alles afvinken
+            </button>
+            <button onclick="sendToAh()" id="sendAhBtn"
+                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
+                Verstuur naar AH ({{ grouped_open | map(attribute='producten') | map('length') | sum }})
+            </button>
+        </div>
+    </div>
+
+    {% if quick_add %}
+    <div class="flex flex-wrap gap-2 items-center text-sm mt-4 mb-2">
+        <span class="text-[#6B6B6B]">Losse recepten:</span>
+        {% for q in quick_add %}
+        <span class="inline-flex items-center gap-1 border border-[#E8E4DC] rounded-full px-3 py-1">
+            {{ q.recipe_name }} ({{ q.people_count }}p)
+            <button onclick="removeExtra({{ q.id }})" class="text-red-600">✕</button>
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── "+ Recept"-picker (inline, standaard verborgen) ── #}
+    <div id="extraPicker" class="hidden mt-4 mb-4 p-4 bg-white border border-[#E8E4DC] rounded-lg">
+        <div class="flex flex-col md:flex-row gap-2 md:items-center">
+            <input type="text" id="extraRecipeInput" list="extraRecipeList" autocomplete="off"
+                   placeholder="Zoek recept..."
+                   class="flex-grow rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+            <datalist id="extraRecipeList"></datalist>
+            <input type="number" id="extraPeople" min="1" value="4" placeholder="Personen"
+                   class="w-full md:w-28 rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+            <button onclick="addExtra()"
+                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
+                Toevoegen
+            </button>
+        </div>
+    </div>
+
+    {# ── "+ Los item"-picker (inline, standaard verborgen) ── #}
+    <div id="addItemPicker" class="hidden mt-4 mb-4 p-4 bg-white border border-[#E8E4DC] rounded-lg">
+        <div class="flex flex-col md:flex-row gap-2 md:items-center">
+            <div class="relative flex-grow">
+                <input type="text" id="addItemInput" autocomplete="off"
+                       placeholder="Zoek ingrediënt..."
+                       class="w-full rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+                <div id="addItemDropdown" class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
+            </div>
+            <input type="number" id="addItemAmount" min="0.1" step="any" value="1" placeholder="Aantal"
+                   class="w-full md:w-24 rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+            <input type="text" id="addItemUnit" value="stuks" placeholder="Eenheid"
+                   class="w-full md:w-24 rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+            <button onclick="addLosItem()"
+                    class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
+                Toevoegen
+            </button>
+        </div>
+    </div>
+
+    {% for group in grouped_open %}
+        <h3 class="shopping-category text-sm font-semibold text-[#6B6B6B] uppercase tracking-wide mt-6 mb-1">{{ group.category }}</h3>
+        <div class="shopping-group">
+            {% for item in group.producten %}
+            <div class="shopping-item"
+                 data-key="{{ item.name }}|{{ item.unit }}"
+                 data-ingredient-id="{{ item.ingredient_id or '' }}"
+                 data-default-qty="{{ item.default_qty }}"
+                 data-qty="{{ item.qty }}">
+
+                <div class="item-row flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 py-3 border-b border-[#E8E4DC]">
+
+                    {# LINKS — simpele lijst #}
+                    <div class="list-left flex items-center gap-2 w-full md:w-[42%] md:shrink-0">
+                        <input type="checkbox" class="cursor-pointer shrink-0"
+                               onchange="checkItem({{ item.ingredient_id }}, this.checked)">
+                        <span class="item-text text-sm text-[#2C2C2C]">
+                            <span class="font-semibold">{{ item.amount_display }}</span>{% if item.unit %}<span class="text-[#6B6B6B]"> {{ item.unit }}</span>{% endif %} {{ item.name }}
+                        </span>
+                    </div>
+
+                    {# RECHTS — AH-productstijl #}
+                    {% if item.ah_product_id %}
+                    <div class="list-right flex items-center gap-2 w-full md:flex-grow min-w-0">
+                        <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden"
+                             style="background-color:{{ item.ah_product_bg }}">
+                            <div class="shrink-0" style="width:80px;height:80px">
+                                <img src="{{ item.ah_product_image or '' }}"
+                                     class="w-full h-full object-contain p-2"
+                                     style="mix-blend-mode:multiply"
+                                     alt="{{ item.ah_product_name or '' }}">
+                            </div>
+                            <div class="flex-grow min-w-0 px-3">
+                                <div class="text-sm font-semibold text-[#2C2C2C] leading-tight">{{ item.ah_product_name }}</div>
+                                <div class="text-sm mt-0.5 flex items-center gap-1 flex-wrap">
+                                    {% if item.ah_product_price %}<span class="font-bold text-[#2C2C2C]">€{{ item.ah_product_price }}</span>{% endif %}
+                                    {% if item.ah_product_size %}<span class="text-[#6B6B6B]">{{ item.ah_product_size }}</span>{% endif %}
+                                    {% if item.ah_product_bonus %}<span class="bg-[#FDF8F3] text-[#8B4513] font-semibold px-1 rounded" style="font-size:10px">BONUS</span>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {# Qty-control: [🗑/−] [N] [+] #}
+                        <div class="qty-control flex items-center gap-1.5 shrink-0">
+                            <button class="qty-minus flex items-center justify-center rounded-full border border-[#D4CEC4] text-[#6B6B6B] hover:bg-[#F5F2ED]"
+                                    style="width:32px;height:32px;font-size:1rem"
+                                    onclick="changeQty(this,-1)">
+                                <span class="qty-minus-icon">{{ '🗑' if item.qty <= 1 else '−' }}</span>
+                            </button>
+                            <span class="qty-value flex items-center justify-center rounded-full border-2 border-[#2C2C2C] font-semibold text-[#2C2C2C] text-sm tabular-nums"
+                                  style="min-width:2.5rem;height:32px;padding:0 6px">{{ item.qty }}</span>
+                            <button class="qty-plus flex items-center justify-center rounded-full bg-[#2C2C2C] text-white font-bold hover:bg-[#1a1a1a]"
+                                    style="width:32px;height:32px;font-size:1.2rem"
+                                    onclick="changeQty(this,+1)">+</button>
+                        </div>
+                        {# Uitsluiten van boodschappenlijst #}
+                        <button onclick="excludeItem({{ item.ingredient_id }})" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-1" style="font-size:0.75rem">✕</button>
+                    </div>
+                    {% else %}
+                    <div class="list-right flex items-center gap-3 w-full md:flex-grow">
+                        <span class="text-sm text-[#9CA3AF]">Geen AH-koppeling</span>
+                        <button onclick="excludeItem({{ item.ingredient_id }})" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-auto" style="font-size:0.75rem">✕</button>
+                    </div>
+                    {% endif %}
+
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% endfor %}
+
+    {% if not grouped_open %}
+    <p class="text-sm text-[#6B6B6B] py-6 text-center">Geen open items — alles is al afgevinkt.</p>
+    {% endif %}
+
+    {# ── Afgevinkt ── #}
+    <div class="mt-8">
+        <button onclick="document.getElementById('checkedBlock').classList.toggle('hidden')"
+                class="text-sm font-semibold text-[#6B6B6B] hover:text-[#2C2C2C]">
+            ▾ Afgevinkt ({{ checked_items|length }})
+        </button>
+        <div id="checkedBlock" class="hidden mt-2">
+            {% for item in checked_items %}
+            <div class="flex items-center gap-2 py-2 border-b border-[#E8E4DC]">
+                <input type="checkbox" checked class="cursor-pointer shrink-0"
+                       onchange="checkItem({{ item.ingredient_id }}, this.checked)">
+                <span class="text-sm line-through text-[#9CA3AF]">
+                    {{ item.amount_display }}{% if item.unit %} {{ item.unit }}{% endif %} {{ item.name }}
+                </span>
+                {% if item.via_ah %}
+                <span class="bg-green-100 text-green-800 rounded-full px-2 text-xs">via AH</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script>
+const RECIPES = {{ recipes_json | safe }};
+const WEEKS_BY_ING = {{ weeks_by_ingredient_json | safe }};
+
+(function() {
+    const list = document.getElementById('extraRecipeList');
+    list.innerHTML = RECIPES.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}"></option>`).join('');
+})();
+
+async function checkItem(ingredientId, checked) {
+    const resp = await fetch(`/api/boodschappen/item/${ingredientId}/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checked }),
+    });
+    if (resp.ok) location.reload();
+}
+
+async function checkAll() {
+    if (!confirm('Alle openstaande items afvinken?')) return;
+    await fetch('/api/boodschappen/check-all', { method: 'POST' });
+    location.reload();
+}
+
+async function removeExtra(id) {
+    await fetch(`/api/boodschappen/extra/${id}`, { method: 'DELETE' });
+    location.reload();
+}
+
+function toggleExtraPicker() {
+    document.getElementById('extraPicker').classList.toggle('hidden');
+}
+
+function toggleAddItemPicker() {
+    document.getElementById('addItemPicker').classList.toggle('hidden');
+}
+
+async function addExtra() {
+    const name = document.getElementById('extraRecipeInput').value;
+    const recipe = RECIPES.find(r => r.name === name);
+    if (!recipe) { alert('Kies een recept uit de lijst'); return; }
+    const people = parseInt(document.getElementById('extraPeople').value) || recipe.serves || 4;
+    const resp = await fetch('/api/boodschappen/extra', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipe_id: recipe.id, people_count: people }),
+    });
+    if (resp.ok) location.reload();
+}
+
+function collectQtyOverrides() {
+    const qtys = {};
+    document.querySelectorAll('.shopping-item').forEach(item => {
+        const ingId = item.dataset.ingredientId;
+        const valEl = item.querySelector('.qty-value');
+        if (ingId && valEl) qtys[ingId] = parseInt(valEl.textContent, 10);
+    });
+    return qtys;
+}
+
+async function sendToAh() {
+    const btn = document.getElementById('sendAhBtn');
+    btn.disabled = true;
+    const qty_overrides = collectQtyOverrides();
+    const resp = await fetch('/api/boodschappen/send-to-ah', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qty_overrides }),
+    });
+    const data = await resp.json();
+    alert(data.message || (resp.ok ? 'Verstuurd' : 'Mislukt'));
+    if (resp.ok && data.status === 'ok') location.reload(); else btn.disabled = false;
+}
+
+async function excludeItem(ingredientId) {
+    const weeks = WEEKS_BY_ING[String(ingredientId)] || [];
+    for (const [y, w] of weeks) {
+        await fetch(`/api/shopping-list/${y}/${w}/item/${ingredientId}/exclude`,
+                    { method: 'POST' });
+    }
+    location.reload();
+}
+
+// ── Qty controls (lokaal, opgeslagen naar de laatste bijdragende week) ──
+function changeQty(btn, delta) {
+    const control = btn.closest('.qty-control');
+    const item    = control.closest('.shopping-item');
+    const valEl   = control.querySelector('.qty-value');
+    const current = parseInt(valEl.textContent, 10);
+    const ingredientId = item.dataset.ingredientId;
+
+    // Prullenbak: qty=1 en min geklikt → uitsluiten van de lijst
+    if (delta === -1 && current <= 1) {
+        excludeItem(ingredientId);
+        return;
+    }
+
+    const next    = Math.max(1, current + delta);
+    if (next === current) return;
+    valEl.textContent = next;
+    const icon = control.querySelector('.qty-minus-icon');
+    if (icon) icon.textContent = next <= 1 ? '🗑' : '−';
+
+    const weeks = WEEKS_BY_ING[String(ingredientId)] || [];
+    if (!weeks.length) return;
+    const [y, w] = weeks[weeks.length - 1];
+    fetch(`/api/shopping-list/${y}/${w}/item/${ingredientId}/qty`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ qty: next }),
+    }).catch(e => console.warn('Qty opslaan mislukt:', e));
+}
+
+// ── (+) Los item toevoegen (aan de huidige ISO-week) ─────────────────────
+(function() {
+    const input    = document.getElementById('addItemInput');
+    const dropdown = document.getElementById('addItemDropdown');
+    let debounce   = null;
+    let activeIdx  = -1;
+
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+        clearTimeout(debounce);
+        if (q.length < 1) { dropdown.classList.add('hidden'); return; }
+        debounce = setTimeout(() => fetchAddResults(q), 200);
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (dropdown.classList.contains('hidden')) return;
+        const items = dropdown.querySelectorAll('.add-item-option');
+        if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); highlightAdd(items); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); highlightAdd(items); }
+        else if (e.key === 'Enter' && activeIdx >= 0 && items[activeIdx]) { e.preventDefault(); items[activeIdx].click(); }
+        else if (e.key === 'Escape') { dropdown.classList.add('hidden'); activeIdx = -1; }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden'); activeIdx = -1;
+        }
+    });
+
+    function highlightAdd(items) {
+        items.forEach((el, i) => el.classList.toggle('bg-[#FAF8F5]', i === activeIdx));
+    }
+
+    async function fetchAddResults(q) {
+        try {
+            const resp = await fetch('/api/ingredients/search?q=' + encodeURIComponent(q));
+            const results = await resp.json();
+            if (!results.length) {
+                dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">Geen ingrediënt gevonden</div>';
+                dropdown.classList.remove('hidden');
+                return;
+            }
+            dropdown.innerHTML = results.map(r => `
+                <div class="add-item-option flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm"
+                     data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category)}">
+                    <span class="text-[#2C2C2C]">${esc(r.name)}</span>
+                    <span class="text-xs text-[#6B6B6B]">${esc(r.category)}${r.has_ah ? ' · AH' : ''}</span>
+                </div>
+            `).join('');
+            dropdown.querySelectorAll('.add-item-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    input.value = opt.dataset.name;
+                    input.dataset.ingredientId = opt.dataset.id;
+                    dropdown.classList.add('hidden');
+                });
+            });
+            dropdown.classList.remove('hidden');
+            activeIdx = -1;
+        } catch (e) {
+            dropdown.classList.add('hidden');
+        }
+    }
+})();
+
+async function addLosItem() {
+    const input        = document.getElementById('addItemInput');
+    const ingredientId  = input.dataset.ingredientId;
+    if (!ingredientId) { alert('Kies een ingrediënt uit de suggesties'); return; }
+    const amount = parseFloat(document.getElementById('addItemAmount').value) || 1;
+    const unit   = document.getElementById('addItemUnit').value.trim() || 'stuks';
+
+    try {
+        const resp = await fetch(`/api/shopping-list/{{ current_year }}/{{ current_week }}/add-item`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ingredient_id: parseInt(ingredientId), amount, unit }),
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            alert(data.message || 'Item toevoegen mislukt');
+        }
+    } catch (e) {
+        console.error('Item toevoegen mislukt:', e);
+    }
+}
+</script>
+{% endblock %}

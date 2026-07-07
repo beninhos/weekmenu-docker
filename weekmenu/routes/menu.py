@@ -1,13 +1,13 @@
 import json
-from datetime import date
+from datetime import date, timedelta
 
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, make_response
 
 from weekmenu.extensions import db
-from weekmenu.models import MenuItem, Recipe, Settings, QuickAddItem
+from weekmenu.models import MenuItem, Recipe, Settings
 from weekmenu.constants import DAYS, MEAL_TYPES
 from weekmenu.services.menu import (
-    plan_recipe, update_week_menu, clear_week, clear_shopping_list,
+    plan_recipe, update_week_menu, clear_week,
 )
 
 bp = Blueprint('menu', __name__)
@@ -15,12 +15,33 @@ bp = Blueprint('menu', __name__)
 
 @bp.route('/week/<int:year>/<int:week>')
 def week_menu(year, week):
+    try:
+        monday = date.fromisocalendar(year, week, 1)
+    except ValueError:
+        iso = date.today().isocalendar()
+        return redirect(url_for('menu.week_menu', year=iso[0], week=iso[1]))
+
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     recipes = Recipe.query.order_by(Recipe.name).all()
     recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves} for r in recipes])
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
-    return render_template('week_menu.html',
+    sunday = monday + timedelta(days=6)
+    MAANDEN = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli',
+               'augustus', 'september', 'oktober', 'november', 'december']
+    week_range = f'ma {monday.day} {MAANDEN[monday.month-1][:3]} – zo {sunday.day} {MAANDEN[sunday.month-1][:3]}'
+    prev_monday = monday - timedelta(days=7)
+    next_monday = monday + timedelta(days=7)
+    iso_now = date.today().isocalendar()
+    extra_ctx = dict(
+        week_range=week_range,
+        prev_year=prev_monday.isocalendar()[0], prev_week=prev_monday.isocalendar()[1],
+        next_year=next_monday.isocalendar()[0], next_week=next_monday.isocalendar()[1],
+        current_year=iso_now[0], current_week=iso_now[1],
+        is_current_week=(year == iso_now[0] and week == iso_now[1]),
+    )
+
+    resp = make_response(render_template('week_menu.html',
                          menu_items=menu_items,
                          recipes=recipes,
                          recipes_json=recipes_json,
@@ -28,7 +49,10 @@ def week_menu(year, week):
                          year=year,
                          days=DAYS,
                          meal_types=MEAL_TYPES,
-                         default_serves=default_serves)
+                         default_serves=default_serves,
+                         **extra_ctx))
+    resp.set_cookie('last_viewed_week', f'{year}-{week}', max_age=1209600, samesite='Lax')
+    return resp
 
 
 @bp.route('/update_menu', methods=['POST'])
@@ -75,67 +99,4 @@ def clear_week_menu():
 
 @bp.route('/quick-add')
 def quick_add():
-    today = date.today()
-    week_number = request.args.get('week', today.isocalendar()[1], type=int)
-    year = request.args.get('year', today.year, type=int)
-
-    recipes = Recipe.query.order_by(Recipe.name).all()
-
-    saved_items = QuickAddItem.query.filter_by(
-        week_number=week_number,
-        year=year
-    ).all()
-
-    return render_template('quick_add.html',
-                         recipes=recipes,
-                         week=week_number,
-                         year=year,
-                         saved_items=saved_items)
-
-
-@bp.route('/api/quick-add/save', methods=['POST'])
-def save_quick_add():
-    try:
-        data = request.get_json()
-        week = data['week']
-        year = data['year']
-        items = data['items']
-
-        QuickAddItem.query.filter_by(
-            week_number=week,
-            year=year
-        ).delete()
-
-        for item in items:
-            quick_item = QuickAddItem(
-                recipe_id=item['recipe_id'],
-                people_count=item['people_count'],
-                week_number=week,
-                year=year
-            )
-            db.session.add(quick_item)
-
-        db.session.commit()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-
-@bp.route('/api/quick-add/clear', methods=['POST'])
-def clear_quick_add():
-    try:
-        data = request.get_json()
-        week = data['week']
-        year = data['year']
-
-        QuickAddItem.query.filter_by(
-            week_number=week,
-            year=year
-        ).delete()
-
-        db.session.commit()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 400
+    return redirect(url_for('shopping.boodschappen'), code=302)

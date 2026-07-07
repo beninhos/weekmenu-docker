@@ -10,6 +10,7 @@ class Recipe(db.Model):
     cookbook_id = db.Column(db.Integer, db.ForeignKey('cookbook.id'), nullable=True)
     page = db.Column(db.Integer)
     image_path = db.Column(db.String(200), nullable=True)
+    original_image_path = db.Column(db.String(200), nullable=True)
     is_favorite = db.Column(db.Boolean, default=False)
     last_used = db.Column(db.DateTime, nullable=True)
     usage_count = db.Column(db.Integer, default=0)
@@ -183,3 +184,17 @@ class RecipeDraft(db.Model):
     source_page = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending|accepted|rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ShoppingCheck(db.Model):
+    __tablename__ = 'shopping_check'
+    __table_args__ = (
+        db.UniqueConstraint('year', 'week_number', 'ingredient_id',
+                            name='uq_check_week_ingredient'),
+    )
+    id            = db.Column(db.Integer, primary_key=True)
+    year          = db.Column(db.Integer, nullable=False)
+    week_number   = db.Column(db.Integer, nullable=False)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    checked_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    via_ah        = db.Column(db.Boolean, default=False, nullable=False)

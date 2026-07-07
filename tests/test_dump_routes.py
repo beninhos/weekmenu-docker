@@ -149,3 +149,42 @@ def test_crop_invalid_coords_and_missing_image(app, client):
     kaal = _make_draft(app)  # zonder afbeelding
     assert client.post(f'/dump/draft/{kaal.id}/crop',
                        json={'x': 0, 'y': 0, 'width': 1, 'height': 1}).status_code == 400
+
+
+def test_recipe_crop_creates_new_image_and_keeps_original(app, client):
+    from PIL import Image
+    from weekmenu.models import Recipe
+
+    uploads = os.path.join(app.static_folder, 'uploads')
+    os.makedirs(uploads, exist_ok=True)
+    Image.new('RGB', (100, 80), (10, 120, 10)).save(os.path.join(uploads, 'recept.png'))
+    recipe = Recipe(name='Croprecept', image_path='static/uploads/recept.png')
+    db.session.add(recipe)
+    db.session.commit()
+
+    resp = client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0.25, 'y': 0.25, 'width': 0.5, 'height': 0.5})
+    assert resp.status_code == 200
+    new_path = resp.get_json()['image_path']
+
+    r = db.session.get(Recipe, recipe.id)
+    assert r.image_path == new_path and new_path.endswith('.jpg')
+    assert r.original_image_path == 'static/uploads/recept.png'
+    out = Image.open(os.path.join(app.static_folder, new_path.replace('static/', '', 1)))
+    assert out.size == (50, 40)
+
+    resp2 = client.post(f'/recipe/{recipe.id}/crop',
+                        json={'x': 0, 'y': 0, 'width': 1, 'height': 1})
+    assert resp2.status_code == 200
+    r = db.session.get(Recipe, recipe.id)
+    out2 = Image.open(os.path.join(app.static_folder, r.image_path.replace('static/', '', 1)))
+    assert out2.size == (100, 80)
+
+
+def test_recipe_crop_without_image_400(app, client):
+    from weekmenu.models import Recipe
+    recipe = Recipe(name='Kaal')
+    db.session.add(recipe)
+    db.session.commit()
+    assert client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0, 'y': 0, 'width': 1, 'height': 1}).status_code == 400
