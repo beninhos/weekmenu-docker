@@ -25,7 +25,8 @@ lijst" (zie hieronder); Rutgers hoofdflow is "alles naar AH sturen"
 
 ### Model
 
-Nieuwe tabel **`ShoppingCheck`** (via migratie v8, idempotent patroon):
+Nieuwe tabel **`ShoppingCheck`** (nieuwe tabel → `db.create_all()` maakt
+hem aan, geen ALTER-migratie nodig; zelfde aanpak als DumpJob/RecipeDraft):
 `id`, `year`, `week_number`, `ingredient_id` (FK), `checked_at` (datetime),
 `via_ah` (bool, default False), unique op (`year`, `week_number`,
 `ingredient_id`). Een rij = "dit ingrediënt is voor die week afgevinkt".
@@ -56,9 +57,12 @@ Nieuwe servicefunctie `build_combined_shopping_list()` in
   op de lijst, dan vinken die samen af — bewuste vereenvoudiging.
 - Getoonde AH-hoeveelheid (pakketten) per regel = som van de per-week-qty's
   (override waar aanwezig, anders `_calc_ah_qty` per week).
-- Handmatige overrides van weken buiten het venster tellen mee zolang hun
-  week niet ouder is dan 4 weken en er geen check-rij is (de aggregatie
-  scant daarvoor overrides tot 4 weken terug).
+- Handmatige items van weken buiten het venster tellen mee zolang hun week
+  niet ouder is dan 4 weken en er geen check-rij is: de aggregatie neemt
+  weken tot 4 weken terug mee als daar `QuickAddItem`- of
+  `CustomShoppingIngredient`-rijen staan (dat zijn de handmatige
+  toevoegingen; qty-overrides zijn alleen aantal-correcties en triggeren
+  dit niet).
 - **Losse recepten** (`QuickAddItem`): tellen via het bestaande pad in
   `_build_shopping_dict` al mee in hun (year, week). Afvinken werkt dus
   vanzelf (per ingrediënt per week). Zelfde 4-weken-regel als handmatige
