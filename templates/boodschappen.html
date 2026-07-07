@@ -41,10 +41,13 @@
     {# ── "+ Recept"-picker (inline, standaard verborgen) ── #}
     <div id="extraPicker" class="hidden mt-4 mb-4 p-4 bg-white border border-[#E8E4DC] rounded-lg">
         <div class="flex flex-col md:flex-row gap-2 md:items-center">
-            <input type="text" id="extraRecipeInput" list="extraRecipeList" autocomplete="off"
-                   placeholder="Zoek recept..."
-                   class="flex-grow rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
-            <datalist id="extraRecipeList"></datalist>
+            <div class="relative flex-grow">
+                <input type="text" id="extraRecipeInput" autocomplete="off"
+                       placeholder="Zoek recept..."
+                       class="w-full rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
+                <div id="extraRecipeDropdown"
+                     class="hidden absolute z-20 mt-1 w-full bg-white border border-[#E8E4DC] rounded-lg shadow-lg max-h-60 overflow-y-auto"></div>
+            </div>
             <input type="number" id="extraPeople" min="1" value="4" placeholder="Personen"
                    class="w-full md:w-28 rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
             <button onclick="addExtra()"
@@ -177,8 +180,41 @@ const RECIPES = {{ recipes_json | safe }};
 const WEEKS_BY_ING = {{ weeks_by_ingredient_json | safe }};
 
 (function() {
-    const list = document.getElementById('extraRecipeList');
-    list.innerHTML = RECIPES.map(r => `<option value="${r.name.replace(/"/g, '&quot;')}"></option>`).join('');
+    const input    = document.getElementById('extraRecipeInput');
+    const dropdown = document.getElementById('extraRecipeDropdown');
+
+    function render(q) {
+        const needle = q.toLowerCase();
+        const hits = RECIPES.filter(r => r.name.toLowerCase().includes(needle)).slice(0, 12);
+        if (!hits.length) {
+            dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">Geen recept gevonden</div>';
+        } else {
+            dropdown.innerHTML = hits.map(r => `
+                <div class="extra-recipe-option px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm text-[#2C2C2C]"
+                     data-id="${r.id}" data-name="${esc(r.name)}" data-serves="${r.serves || ''}">${esc(r.name)}</div>
+            `).join('');
+            dropdown.querySelectorAll('.extra-recipe-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    input.value = opt.dataset.name;
+                    input.dataset.recipeId = opt.dataset.id;
+                    if (opt.dataset.serves) document.getElementById('extraPeople').value = opt.dataset.serves;
+                    dropdown.classList.add('hidden');
+                });
+            });
+        }
+        dropdown.classList.remove('hidden');
+    }
+
+    input.addEventListener('input', () => {
+        delete input.dataset.recipeId;
+        const q = input.value.trim();
+        if (q.length < 1) { dropdown.classList.add('hidden'); return; }
+        render(q);
+    });
+    input.addEventListener('focus', () => { if (input.value.trim()) render(input.value.trim()); });
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) dropdown.classList.add('hidden');
+    });
 })();
 
 async function checkItem(ingredientId, checked) {
@@ -210,14 +246,18 @@ function toggleAddItemPicker() {
 }
 
 async function addExtra() {
-    const name = document.getElementById('extraRecipeInput').value;
-    const recipe = RECIPES.find(r => r.name === name);
-    if (!recipe) { alert('Kies een recept uit de lijst'); return; }
-    const people = parseInt(document.getElementById('extraPeople').value) || recipe.serves || 4;
+    const input = document.getElementById('extraRecipeInput');
+    let recipeId = input.dataset.recipeId ? parseInt(input.dataset.recipeId) : null;
+    if (!recipeId) {
+        const match = RECIPES.find(r => r.name.toLowerCase() === input.value.trim().toLowerCase());
+        if (match) recipeId = match.id;
+    }
+    if (!recipeId) { alert('Kies een recept uit de suggesties'); return; }
+    const people = parseInt(document.getElementById('extraPeople').value) || 4;
     const resp = await fetch('/api/boodschappen/extra', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipe_id: recipe.id, people_count: people }),
+        body: JSON.stringify({ recipe_id: recipeId, people_count: people }),
     });
     if (resp.ok) location.reload();
 }
@@ -247,11 +287,7 @@ async function sendToAh() {
 }
 
 async function excludeItem(ingredientId) {
-    const weeks = WEEKS_BY_ING[String(ingredientId)] || [];
-    for (const [y, w] of weeks) {
-        await fetch(`/api/shopping-list/${y}/${w}/item/${ingredientId}/exclude`,
-                    { method: 'POST' });
-    }
+    await fetch(`/api/boodschappen/item/${ingredientId}/remove`, { method: 'POST' });
     location.reload();
 }
 
