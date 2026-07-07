@@ -38,8 +38,10 @@ Nieuw endpoint in `weekmenu/routes/dump.py`:
   2. Valideer: alle vier waarden aanwezig, 0 ≤ x,y < 1, 0 < width,height ≤ 1,
      x+width ≤ 1, y+height ≤ 1; anders 400.
   3. Open het bronbestand met Pillow, crop naar pixelcoördinaten
-     (afronden op int), sla op als JPEG kwaliteit 85 onder
-     `static/uploads/<md5>.jpg`.
+     (afronden op int, minimaal 1×1 pixel), `convert('RGB')` (PNG/WebP met
+     alpha), sla op als JPEG kwaliteit 85 onder `static/uploads/<md5>.jpg`.
+     Kan Pillow het bronformaat niet openen (bijv. AVIF zonder plugin) →
+     400 "Dit afbeeldingsformaat kan niet bijgesneden worden".
   4. Zet `original_image_path` (indien nog leeg) op de oude `image_path`,
      zet `image_path` op het nieuwe pad, commit.
   5. Response: `{status: 'success', image_path: <nieuw pad>}`.
@@ -77,7 +79,7 @@ Het origineel blijft altijd staan (zowel het bestand als het pad in
 - Unit-tests op het crop-endpoint: geldige crop (nieuw bestand met verwachte
   pixel-afmetingen, `image_path` bijgewerkt, `original_image_path` gezet),
   tweede crop snijdt weer uit origineel, ongeldige coördinaten → 400,
-  draft zonder afbeelding → 400.
+  draft zonder afbeelding → 400, PNG-bron (met alpha) → geldige JPEG.
 - Handmatig op dev (poort 5002): croppen op pc (muis) en telefoon (touch),
   hercroppen, accept van een gecropte draft.
 
