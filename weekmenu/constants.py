@@ -1,21 +1,25 @@
 import re
 
+from flask_babel import lazy_gettext as _l
+
 # ── Dagen & maaltijden ────────────────────────────────────────────────────
+# Only the labels are translated. The codes (0-6 and the Dutch meal keys) are
+# persisted — meal_type is a column on the menu table — so they never change.
 
 DAYS = [
-    (0, 'Maandag'),
-    (1, 'Dinsdag'),
-    (2, 'Woensdag'),
-    (3, 'Donderdag'),
-    (4, 'Vrijdag'),
-    (5, 'Zaterdag'),
-    (6, 'Zondag')
+    (0, _l('Monday')),
+    (1, _l('Tuesday')),
+    (2, _l('Wednesday')),
+    (3, _l('Thursday')),
+    (4, _l('Friday')),
+    (5, _l('Saturday')),
+    (6, _l('Sunday'))
 ]
 
 MEAL_TYPES = [
-    ('ontbijt', 'Ontbijt'),
-    ('lunch', 'Lunch'),
-    ('diner', 'Diner')
+    ('ontbijt', _l('Breakfast')),
+    ('lunch', _l('Lunch')),
+    ('diner', _l('Dinner'))
 ]
 
 # ── Productcategorieën ────────────────────────────────────────────────────

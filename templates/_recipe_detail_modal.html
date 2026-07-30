@@ -40,7 +40,7 @@
 
 <div id="detail-overlay" onclick="closeDetail()"></div>
 <div id="detail-panel" role="dialog" aria-modal="true" aria-labelledby="dp-name">
-  <button onclick="closeDetail()" aria-label="Sluiten"
+  <button onclick="closeDetail()" aria-label="{{ _('Close') }}"
           class="absolute top-3 right-3 bg-white bg-opacity-90 rounded-full w-8 h-8 flex items-center justify-center text-[#6B6B6B] hover:text-[#2C2C2C] shadow text-lg font-bold z-10"
           style="line-height:1;">&times;</button>
 
@@ -55,14 +55,14 @@
     <h2 id="dp-name" class="text-xl font-extrabold text-[#2C2C2C] mb-1 leading-tight"></h2>
 
     <div class="flex gap-2 mb-3">
-      <button id="dp-fav-btn" onclick="toggleDetailFavorite()" title="Favoriet"
+      <button id="dp-fav-btn" onclick="toggleDetailFavorite()" title="{{ _('Favourite') }}"
               class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-[#F5F2ED] text-base transition-colors">
       </button>
-      <a id="dp-edit-btn" href="#" title="Bewerken"
+      <a id="dp-edit-btn" href="#" title="{{ _('Edit') }}"
          class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-[#F5F2ED] transition-colors" style="text-decoration:none;">
         <svg class="w-4 h-4" fill="none" stroke="#6B6B6B" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
       </a>
-      <button id="dp-del-btn" onclick="deleteFromDetail()" title="Verwijderen"
+      <button id="dp-del-btn" onclick="deleteFromDetail()" title="{{ _('Delete') }}"
               class="w-8 h-8 flex items-center justify-center rounded-md border border-[#E8E4DC] hover:bg-red-50 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="#6B6B6B" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
       </button>
@@ -72,29 +72,27 @@
       <span id="dp-cookbook"></span>
       <span id="dp-page"></span>
       <a id="dp-url" href="#" target="_blank" rel="noopener noreferrer"
-         class="text-[#8B4513] hover:underline" style="display:none;">Online recept ↗</a>
+         class="text-[#8B4513] hover:underline" style="display:none;">{{ _('Online recipe ↗') }}</a>
       <span id="dp-serves" class="bg-[#F5F2ED] text-[#8B4513] rounded-full px-2 py-0.5 text-xs font-medium"></span>
     </div>
 
     <div id="dp-instr-wrap" class="mb-4" style="display:none;">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Bereidingswijze</h3>
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">{{ _('Method') }}</h3>
       <div id="dp-instr" class="text-sm text-[#2C2C2C] leading-relaxed overflow-y-auto pr-1" style="max-height:9rem;"></div>
     </div>
 
     <div class="mb-5 flex-1">
       <div class="flex justify-between items-center mb-2">
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B]">Ingrediënten</h3>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B]">{{ _('Ingredients') }}</h3>
         <div class="flex gap-3 text-xs">
-          <button onclick="toggleAll(true)"  class="text-[#8B4513] hover:underline">Alles aan</button>
-          <button onclick="toggleAll(false)" class="text-[#6B6B6B] hover:underline">Alles uit</button>
+          <button onclick="toggleAll(true)"  class="text-[#8B4513] hover:underline">{{ _('All on') }}</button>
+          <button onclick="toggleAll(false)" class="text-[#6B6B6B] hover:underline">{{ _('All off') }}</button>
         </div>
       </div>
       <div id="dp-ingredients" class="space-y-0.5 overflow-y-auto pr-1" style="max-height:14rem;"></div>
     </div>
 
     <button id="dp-plan-btn" onclick="openPlanPopup()"
-            class="w-full bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-3 px-4 rounded-lg transition-colors mt-auto">
-      Plan dit recept
-    </button>
+            class="w-full bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-3 px-4 rounded-lg transition-colors mt-auto">{{ _('Plan this recipe') }}</button>
   </div>
 </div>

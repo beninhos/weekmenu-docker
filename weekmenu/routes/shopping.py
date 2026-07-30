@@ -1,3 +1,5 @@
+from flask_babel import gettext as _
+from weekmenu.i18n import category_label
 import json
 from datetime import date, datetime
 
@@ -71,7 +73,7 @@ def _set_checks(ingredient_id, checked, via_ah=False):
 def boodschappen_check(ingredient_id):
     body = request.get_json(silent=True) or {}
     if not _set_checks(ingredient_id, bool(body.get('checked', True))):
-        return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
+        return jsonify({'status': 'error', 'message': _('Item not found')}), 404
     return jsonify({'status': 'success'})
 
 
@@ -85,7 +87,7 @@ def boodschappen_remove(ingredient_id):
     data = build_combined_shopping_list()
     weeks = data['weeks_by_ingredient'].get(ingredient_id)
     if not weeks:
-        return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
+        return jsonify({'status': 'error', 'message': _('Item not found')}), 404
     for (y, w) in weeks:
         CustomShoppingIngredient.query.filter_by(
             year=y, week_number=w, ingredient_id=ingredient_id).delete()
@@ -125,7 +127,7 @@ def boodschappen_extra_add():
     body = request.get_json(silent=True) or {}
     recipe = Recipe.query.get(body.get('recipe_id') or 0)
     if not recipe:
-        return jsonify({'status': 'error', 'message': 'Recept niet gevonden'}), 404
+        return jsonify({'status': 'error', 'message': _('Recipe not found')}), 404
     iso = date.today().isocalendar()
     qi = QuickAddItem(recipe_id=recipe.id,
                       people_count=body.get('people_count') or recipe.serves or 4,
@@ -209,11 +211,11 @@ def add_shopping_item(year, week):
     data = request.get_json(force=True) or {}
     ingredient_id = data.get('ingredient_id')
     if not ingredient_id:
-        return jsonify({'status': 'error', 'message': 'ingredient_id is verplicht'}), 400
+        return jsonify({'status': 'error', 'message': _('ingredient_id is required')}), 400
 
     ing = Ingredient.query.get(ingredient_id)
     if not ing:
-        return jsonify({'status': 'error', 'message': 'Ingrediënt niet gevonden'}), 404
+        return jsonify({'status': 'error', 'message': _('Ingredient not found')}), 404
 
     raw_amount = float(data.get('amount', 1))
     raw_unit = data.get('unit', 'stuks')
@@ -242,6 +244,7 @@ def add_shopping_item(year, week):
             'ingredient_id': ing.id,
             'name': ing.display,
             'category': ing.category,
+            'category_label': category_label(ing.category),
             'amount': amount,
             'unit': unit,
             'ah_product_id': ing.ah_product_id,

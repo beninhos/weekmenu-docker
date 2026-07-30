@@ -6,15 +6,15 @@
         <div class="flex gap-2 flex-wrap justify-end">
             <button onclick="clearAll()"
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
-                ✕ Wissen
+                {{ _('✕ Clear') }}
             </button>
             <button onclick="sendToAH()" id="btnSendAH"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
-                Naar AH
+                {{ _('To AH') }}
             </button>
             <button onclick="window.print()"
                     class="hidden md:block bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
-                Printen
+                {{ _('Print') }}
             </button>
         </div>
     </div>
@@ -23,13 +23,13 @@
     <!-- (+) Item toevoegen -->
     <div class="relative mb-4">
         <input type="text" id="addItemInput" autocomplete="off"
-               placeholder="+ Item toevoegen..."
+               placeholder="{{ _('+ Add item...') }}"
                class="w-full rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
         <div id="addItemDropdown" class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
     </div>
 
     {% for group in grouped_shopping_list %}
-        <h3 class="shopping-category hidden">{{ group.category }}</h3>
+        <h3 class="shopping-category hidden">{{ group.category|category_label }}</h3>
         <div class="shopping-group">
             {% for item in group.producten %}
             <div class="shopping-item"
@@ -55,7 +55,7 @@
                         {# Gekleurde productblok: afbeelding + naam + prijs #}
                         <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden cursor-pointer"
                              onclick="toggleSearch(this)"
-                             title="Klik om product te wijzigen"
+                             title="{{ _('Click to change product') }}"
                              style="background-color:{{ item.ah_product_bg }}">
                             <div class="shrink-0" style="width:80px;height:80px">
                                 <img src="{{ item.ah_product_image or '' }}"
@@ -93,7 +93,7 @@
                     <div class="list-right flex items-center gap-3 w-full md:flex-grow">
                         <button class="ah-badge text-sm text-[#6B6B6B] hover:text-[#8B4513] border border-dashed border-[#D4CEC4] hover:border-[#C9A882] rounded-lg px-3 py-2"
                                 onclick="toggleSearch(this)">
-                            + Koppel AH product
+                            {{ _('+ Link AH product') }}
                         </button>
                         <button onclick="removeItem(this)" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-auto" style="font-size:0.75rem">✕</button>
                     </div>
@@ -107,15 +107,15 @@
                         <input type="text"
                                class="ah-search-input flex-grow text-sm border border-[#E8E4DC] rounded px-2 py-1 focus:outline-none focus:border-[#C9A882]"
                                value="{{ item.name }}"
-                               placeholder="Zoek AH product…"
+                               placeholder="{{ _('Search AH product…') }}"
                                onkeydown="if(event.key==='Enter') doSearch(this)">
                         <button onclick="doSearch(this.previousElementSibling)"
-                                class="text-sm bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">Zoek</button>
+                                class="text-sm bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">{{ _('Search') }}</button>
                         <button onclick="toggleSearch(this.closest('.shopping-item').querySelector('.ah-badge'))"
                                 class="text-sm text-[#6B6B6B] hover:text-[#6B6B6B] px-2">✕</button>
                     </div>
                     <div class="ah-results overflow-y-auto" style="max-height:200px">
-                        <div class="text-xs text-[#6B6B6B] p-3 text-center">Typ een zoekterm en druk op Zoek</div>
+                        <div class="text-xs text-[#6B6B6B] p-3 text-center">{{ _('Type a search term and press Search') }}</div>
                     </div>
                 </div>
 
@@ -148,7 +148,7 @@ async function excludeItem(item) {
         try {
             await fetch(`/api/shopping-list/{{ year }}/{{ week }}/item/${ingId}/exclude`, { method: 'POST' });
         } catch (e) {
-            console.warn('Exclude mislukt:', e);
+            console.warn('{{ _("Exclude failed:") }}', e);
         }
     }
     // Animatie: fade out + collapse
@@ -250,7 +250,7 @@ async function _saveQty(ingredientId, qty, isDefault) {
             body:    JSON.stringify({ qty, is_default: isDefault }),
         });
     } catch (e) {
-        console.warn('Qty opslaan mislukt:', e);
+        console.warn('{{ _("Saving quantity failed:") }}', e);
     }
 }
 
@@ -277,7 +277,7 @@ async function doSearch(input) {
         const resp     = await fetch('/api/ah/product-search?q=' + encodeURIComponent(query) + '&size=10');
         const products = await resp.json();
         if (!products.length) {
-            resultsEl.innerHTML = '<div class="text-xs text-[#6B6B6B] p-3 text-center">Geen resultaten</div>';
+            resultsEl.innerHTML = '<div class="text-xs text-[#6B6B6B] p-3 text-center">{{ _("No results") }}</div>';
             return;
         }
         resultsEl.innerHTML = products.map(p => `
@@ -318,7 +318,7 @@ async function linkProduct(row, product) {
             panel.classList.add('hidden');
         }
     } catch (e) {
-        console.error('Koppelen mislukt:', e);
+        console.error('{{ _("Linking failed") }}:', e);
     }
 }
 
@@ -397,15 +397,15 @@ function updateBadge(item, product) {
             const resp = await fetch('/api/ingredients/search?q=' + encodeURIComponent(q));
             const results = await resp.json();
             if (!results.length) {
-                dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">Geen ingrediënt gevonden</div>';
+                dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">{{ _("No ingredient found") }}</div>';
                 dropdown.classList.remove('hidden');
                 return;
             }
             dropdown.innerHTML = results.map(r => `
                 <div class="add-item-option flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm"
-                     data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category)}">
+                     data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category_label || r.category)}">
                     <span class="text-[#2C2C2C]">${esc(r.name)}</span>
-                    <span class="text-xs text-[#6B6B6B]">${esc(r.category)}${r.has_ah ? ' · AH' : ''}</span>
+                    <span class="text-xs text-[#6B6B6B]">${esc(r.category_label || r.category)}${r.has_ah ? ' · AH' : ''}</span>
                 </div>
             `).join('');
             dropdown.querySelectorAll('.add-item-option').forEach(opt => {

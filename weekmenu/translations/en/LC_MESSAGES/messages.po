@@ -1,0 +1,1452 @@
+# English translations for PROJECT.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-07-30 22:21+0200\n"
+"PO-Revision-Date: 2026-07-30 22:22+0200\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: templates/_crop_modal.html:6
+msgid "Crop image"
+msgstr "Crop image"
+
+#: templates/_crop_modal.html:10 templates/cookbooks.html:119
+#: templates/edit_cookbook.html:53 templates/edit_recipe.html:134
+#: templates/new_cookbook.html:47 templates/new_recipe.html:171
+#: templates/week_menu.html:189
+msgid "Cancel"
+msgstr "Cancel"
+
+#: templates/_crop_modal.html:11 templates/ah_products.html:134
+#: templates/edit_cookbook.html:49 templates/edit_recipe.html:138
+#: templates/new_cookbook.html:43 templates/new_recipe.html:175
+#: templates/settings.html:44 templates/settings.html:105
+#: templates/settings.html:212
+msgid "Save"
+msgstr "Save"
+
+#: templates/_crop_modal.html:27
+msgid "Cropping unavailable (library not loaded)"
+msgstr "Cropping unavailable (library not loaded)"
+
+#: templates/_crop_modal.html:63
+msgid "Crop failed"
+msgstr "Crop failed"
+
+#: templates/_crop_modal.html:69
+msgid "Crop failed: "
+msgstr "Crop failed: "
+
+#: templates/_inspiratie_ecobooster.html:4 templates/inspiratie.html:7
+msgid "Ecobooster"
+msgstr "Ecobooster"
+
+#: templates/_inspiratie_ecobooster.html:5
+msgid "What needs using up? Find recipes that use your ingredients."
+msgstr "What needs using up? Find recipes that use your ingredients."
+
+#: templates/_inspiratie_ecobooster.html:11 templates/pantry.html:23
+msgid "+ Add ingredient…"
+msgstr "+ Add ingredient…"
+
+#: templates/_inspiratie_ecobooster.html:19
+msgid "Search recipes"
+msgstr "Search recipes"
+
+#: templates/_inspiratie_ecobooster.html:25
+#: templates/_inspiratie_seizoen.html:28 templates/base.html:172
+#: templates/base.html:199 templates/recipes.html:5 templates/settings.html:54
+#: templates/settings.html:225
+msgid "Recipes"
+msgstr "Recipes"
+
+#: templates/_inspiratie_ecobooster.html:29
+msgid "No recipes found with these ingredients."
+msgstr "No recipes found with these ingredients."
+
+#: templates/_inspiratie_seizoen.html:6
+msgid ""
+"Dutch fruit and vegetables at their best right now. The recipes below use"
+" these ingredients."
+msgstr ""
+
+#: templates/_inspiratie_seizoen.html:17
+msgid "Not linked to an ingredient in the database"
+msgstr "Not linked to an ingredient in the database"
+
+#: templates/_inspiratie_seizoen.html:36 templates/_recipe_detail_modal.html:58
+msgid "Favourite"
+msgstr "Favourite"
+
+#: templates/_inspiratie_seizoen.html:48
+msgid "All in stock"
+msgstr "All in stock"
+
+#: templates/_inspiratie_seizoen.html:56
+msgid "complete"
+msgstr "complete"
+
+#: templates/_inspiratie_seizoen.html:65
+msgid "No recipes found that use seasonal ingredients."
+msgstr "No recipes found that use seasonal ingredients."
+
+#: templates/_recipe_detail_modal.html:43
+msgid "Close"
+msgstr "Close"
+
+#: templates/_recipe_detail_modal.html:61 templates/cookbook_recipes.html:67
+#: templates/recipes.html:56
+msgid "Edit"
+msgstr "Edit"
+
+#: templates/_recipe_detail_modal.html:65 templates/cookbook_recipes.html:71
+#: templates/cookbooks.html:71 templates/recipes.html:58
+#: templates/settings.html:92
+msgid "Delete"
+msgstr "Delete"
+
+#: templates/_recipe_detail_modal.html:75 templates/cookbook_recipes.html:52
+#: templates/recipes.html:41
+msgid "Online recipe ↗"
+msgstr "Online recipe ↗"
+
+#: templates/_recipe_detail_modal.html:80 templates/edit_recipe.html:52
+#: templates/new_recipe.html:118
+msgid "Method"
+msgstr "Method"
+
+#: templates/_recipe_detail_modal.html:86 templates/edit_recipe.html:84
+#: templates/new_recipe.html:131 templates/recipes.html:62
+#: templates/settings.html:233
+msgid "Ingredients"
+msgstr "Ingredients"
+
+#: templates/_recipe_detail_modal.html:88
+msgid "All on"
+msgstr "All on"
+
+#: templates/_recipe_detail_modal.html:89
+msgid "All off"
+msgstr "All off"
+
+#: templates/_recipe_detail_modal.html:96
+msgid "Plan this recipe"
+msgstr "Plan this recipe"
+
+#: templates/ah_products.html:20
+msgid "AH Products"
+msgstr "AH Products"
+
+#: templates/ah_products.html:21
+msgid ""
+"Link your preferred AH product per ingredient. Set once, always used by "
+"\"Send to AH\"."
+msgstr ""
+
+#: templates/ah_products.html:23
+msgid "← Settings"
+msgstr "← Settings"
+
+#: templates/ah_products.html:28
+msgid "Filter ingredients..."
+msgstr "Filter ingredients..."
+
+#: templates/ah_products.html:42 templates/ah_products.html:331
+msgid "still to link"
+msgstr "still to link"
+
+#: templates/ah_products.html:60
+msgid "✓ linked"
+msgstr "✓ linked"
+
+#: templates/ah_products.html:62
+msgid "not linked"
+msgstr "not linked"
+
+#: templates/ah_products.html:100
+msgid "Refresh product info"
+msgstr "Refresh product info"
+
+#: templates/ah_products.html:106
+msgid "Change"
+msgstr "Change"
+
+#: templates/ah_products.html:114
+msgid "▸ Configure packaging"
+msgstr "▸ Configure packaging"
+
+#: templates/ah_products.html:118
+msgid "Pack contains:"
+msgstr "Pack contains:"
+
+#: templates/ah_products.html:123
+msgid "unit"
+msgstr "unit"
+
+#: templates/ah_products.html:131
+msgid "recipe unit"
+msgstr "recipe unit"
+
+#: templates/ah_products.html:150
+msgid "Search on AH..."
+msgstr "Search on AH..."
+
+#: templates/ah_products.html:156 templates/shopping_list.html:113
+msgid "Search"
+msgstr "Search"
+
+#: templates/ah_products.html:166
+msgid "💡 Price advice"
+msgstr "💡 Price advice"
+
+#: templates/ah_products.html:169
+msgid "Sort"
+msgstr "Sort"
+
+#: templates/ah_products.html:172
+msgid "relevance"
+msgstr "relevance"
+
+#: templates/ah_products.html:173
+msgid "€/unit"
+msgstr "€/unit"
+
+#: templates/ah_products.html:236 templates/shopping_list.html:280
+#: weekmenu/routes/ah.py:286
+msgid "No results"
+msgstr "No results"
+
+#: templates/ah_products.html:261
+msgid "Choose this"
+msgstr "Choose this"
+
+#: templates/ah_products.html:279
+msgid "No comparable advice — too few products with a €/unit."
+msgstr "No comparable advice — too few products with a €/unit."
+
+#: templates/ah_products.html:300 templates/ah_products.html:304
+#: templates/shopping_list.html:321
+msgid "Linking failed"
+msgstr "Linking failed"
+
+#: templates/ah_winkelmand.html:23 templates/base.html:178
+#: templates/base.html:205
+msgid "AH basket"
+msgstr "AH basket"
+
+#: templates/ah_winkelmand.html:24
+msgid ""
+"Assemble your changes and confirm them in one go. You check out yourself "
+"in the AH app."
+msgstr ""
+
+#: templates/ah_winkelmand.html:26
+msgid "⟳ Refresh"
+msgstr "⟳ Refresh"
+
+#: templates/ah_winkelmand.html:30
+msgid "Week menu:"
+msgstr "Week menu:"
+
+#: templates/ah_winkelmand.html:102
+msgid "You have an unconfirmed draft. Switching orders will discard it. Continue?"
+msgstr "You have an unconfirmed draft. Switching orders will discard it. Continue?"
+
+#: templates/ah_winkelmand.html:114
+msgid "Order unreachable."
+msgstr "Order unreachable."
+
+#: templates/ah_winkelmand.html:163
+msgid ""
+"This order is open — you can add and adjust here. You submit it yourself "
+"in the AH app."
+msgstr ""
+
+#: templates/ah_winkelmand.html:165
+msgid ""
+"This order has been submitted (read-only). Want to add something? Open it"
+" yourself in the AH app."
+msgstr ""
+
+#: templates/ah_winkelmand.html:195
+msgid "This order is still empty."
+msgstr "This order is still empty."
+
+#: templates/ah_winkelmand.html:215
+msgid "remove"
+msgstr "remove"
+
+#: templates/ah_winkelmand.html:232
+msgid "Will be added to your open order. You submit it yourself in the AH app."
+msgstr "Will be added to your open order. You submit it yourself in the AH app."
+
+#: templates/ah_winkelmand.html:282
+msgid "Apply"
+msgstr "Apply"
+
+#: templates/ah_winkelmand.html:282
+msgid "change(s) to your open order from"
+msgstr "change(s) to your open order from"
+
+#: templates/ah_winkelmand.html:282
+msgid "(The app does not submit the order — you do that yourself in the AH app.)"
+msgstr "(The app does not submit the order — you do that yourself in the AH app.)"
+
+#: templates/ah_winkelmand.html:285
+msgid "Confirming…"
+msgstr "Confirming…"
+
+#: templates/base.html:6
+msgid "Weekmenu Planner"
+msgstr "Weekmenu Planner"
+
+#: templates/base.html:165 templates/settings.html:16
+#: templates/week_menu.html:14
+msgid "Week menu"
+msgstr "Week menu"
+
+#: templates/base.html:170 templates/base.html:197
+msgid "My week"
+msgstr "My week"
+
+#: templates/base.html:174 templates/base.html:201
+msgid "Inspiration"
+msgstr "Inspiration"
+
+#: templates/base.html:176 templates/base.html:203
+#: templates/boodschappen.html:6
+msgid "Groceries"
+msgstr "Groceries"
+
+#: templates/base.html:180 templates/base.html:207
+msgid "AH products"
+msgstr "AH products"
+
+#: templates/base.html:182 templates/base.html:209 templates/pantry.html:7
+msgid "Pantry"
+msgstr "Pantry"
+
+#: templates/base.html:184 templates/base.html:211 templates/settings.html:4
+msgid "Settings"
+msgstr "Settings"
+
+#: templates/base.html:223
+msgid "Are you sure you want to delete this recipe?"
+msgstr "Are you sure you want to delete this recipe?"
+
+#: templates/boodschappen.html:7
+msgid "Everything planned and still outstanding"
+msgstr "Everything planned and still outstanding"
+
+#: templates/boodschappen.html:12
+msgid "+ Recipe"
+msgstr "+ Recipe"
+
+#: templates/boodschappen.html:16
+msgid "+ Loose item"
+msgstr "+ Loose item"
+
+#: templates/boodschappen.html:20
+msgid "Check all"
+msgstr "Check all"
+
+#: templates/boodschappen.html:31
+msgid "Loose recipes:"
+msgstr "Loose recipes:"
+
+#: templates/boodschappen.html:46
+msgid "Search recipe..."
+msgstr "Search recipe..."
+
+#: templates/boodschappen.html:51 templates/receptenplanner.html:253
+msgid "Servings"
+msgstr "Servings"
+
+#: templates/boodschappen.html:55 templates/boodschappen.html:75
+msgid "Add"
+msgstr "Add"
+
+#: templates/boodschappen.html:65
+msgid "Search ingredient..."
+msgstr "Search ingredient..."
+
+#: templates/boodschappen.html:69 templates/new_recipe.html:145
+msgid "Quantity"
+msgstr "Quantity"
+
+#: templates/boodschappen.html:71 templates/new_recipe.html:149
+msgid "Unit"
+msgstr "Unit"
+
+#: templates/boodschappen.html:139
+msgid "No AH link"
+msgstr "No AH link"
+
+#: templates/boodschappen.html:151
+msgid "No outstanding items — everything is checked off."
+msgstr "No outstanding items — everything is checked off."
+
+#: templates/boodschappen.html:169
+msgid "via AH"
+msgstr "via AH"
+
+#: templates/boodschappen.html:190
+msgid "No recipe found"
+msgstr "No recipe found"
+
+#: templates/boodschappen.html:230
+msgid "Check off all outstanding items?"
+msgstr "Check off all outstanding items?"
+
+#: templates/boodschappen.html:255
+msgid "Pick a recipe from the suggestions"
+msgstr "Pick a recipe from the suggestions"
+
+#: templates/boodschappen.html:321 templates/shopping_list.html:253
+msgid "Saving quantity failed:"
+msgstr "Saving quantity failed:"
+
+#: templates/boodschappen.html:362 templates/shopping_list.html:400
+msgid "No ingredient found"
+msgstr "No ingredient found"
+
+#: templates/cookbook_recipes.html:17 templates/new_recipe.html:4
+#: templates/recipes.html:9
+msgid "New Recipe"
+msgstr "New Recipe"
+
+#: templates/cookbook_recipes.html:20
+msgid "Back to Cookbooks"
+msgstr "Back to Cookbooks"
+
+#: templates/cookbook_recipes.html:80
+msgid "No recipes added to this cookbook yet."
+msgstr "No recipes added to this cookbook yet."
+
+#: templates/cookbooks.html:10 templates/settings.html:68
+#: templates/settings.html:229
+msgid "Cookbooks"
+msgstr "Cookbooks"
+
+#: templates/cookbooks.html:11 templates/new_cookbook.html:5
+msgid "New Cookbook"
+msgstr "New Cookbook"
+
+#: templates/cookbooks.html:28
+msgid "No image"
+msgstr "No image"
+
+#: templates/cookbooks.html:36
+msgid "Archived"
+msgstr "Archived"
+
+#: templates/cookbooks.html:46
+msgid "Options"
+msgstr "Options"
+
+#: templates/cookbooks.html:55
+msgid "Rename"
+msgstr "Rename"
+
+#: templates/cookbooks.html:58 templates/cookbooks.html:111
+msgid "Move recipes"
+msgstr "Move recipes"
+
+#: templates/cookbooks.html:92
+msgid "No cookbooks added yet. Click \"New Cookbook\" to get started."
+msgstr "No cookbooks added yet. Click \"New Cookbook\" to get started."
+
+#: templates/cookbooks.html:98
+msgid "Archived cookbooks"
+msgstr "Archived cookbooks"
+
+#: templates/cookbooks.html:122
+msgid "Move"
+msgstr "Move"
+
+#: templates/cookbooks.html:149
+msgid "New name for the cookbook:"
+msgstr "New name for the cookbook:"
+
+#: templates/cookbooks.html:167
+msgid "There are no other cookbooks to move recipes to."
+msgstr "There are no other cookbooks to move recipes to."
+
+#: templates/cookbooks.html:172
+msgid "Move all recipes from"
+msgstr "Move all recipes from"
+
+#: templates/cookbooks.html:172
+msgid "to:"
+msgstr "to:"
+
+#: templates/cookbooks.html:195
+msgid "restore"
+msgstr "restore"
+
+#: templates/cookbooks.html:195
+msgid "archive"
+msgstr "archive"
+
+#: templates/cookbooks.html:196
+msgid "Do you want to"
+msgstr "Do you want to"
+
+#: templates/cookbooks.html:196
+msgid "this cookbook?"
+msgstr "this cookbook?"
+
+#: templates/cookbooks.html:208
+msgid "Are you sure you want to delete"
+msgstr "Are you sure you want to delete"
+
+#: templates/dump.html:4
+msgid "Recipe dump"
+msgstr "Recipe dump"
+
+#: templates/dump.html:5
+msgid ""
+"Drop photos of cookbook pages or a PDF here. The recipes are recognised "
+"automatically and appear below for review."
+msgstr ""
+
+#: templates/dump.html:12
+msgid "Drag photos or a PDF here"
+msgstr "Drag photos or a PDF here"
+
+#: templates/dump.html:13
+msgid "or click to choose"
+msgstr "or click to choose"
+
+#: templates/dump.html:20
+msgid "Try again"
+msgstr "Try again"
+
+#: templates/dump.html:25
+msgid "Cookbook for saved recipes:"
+msgstr "Cookbook for saved recipes:"
+
+#: templates/dump.html:27
+msgid "— None —"
+msgstr "— None —"
+
+#: templates/dump.html:75 templates/dump.html:167
+msgid "Recognising recipes..."
+msgstr "Recognising recipes..."
+
+#: templates/dump.html:86
+msgid "Job not found"
+msgstr "Job not found"
+
+#: templates/dump.html:93
+msgid "Done:"
+msgstr "Done:"
+
+#: templates/dump.html:93
+msgid "recipe(s) recognised."
+msgstr "recipe(s) recognised."
+
+#: templates/edit_cookbook.html:5
+msgid "Edit Cookbook"
+msgstr "Edit Cookbook"
+
+#: templates/edit_cookbook.html:10 templates/edit_recipe.html:8
+#: templates/new_cookbook.html:20 templates/new_recipe.html:58
+msgid "Name"
+msgstr "Name"
+
+#: templates/edit_cookbook.html:17 templates/new_cookbook.html:27
+msgid "Abbreviation (for week menu)"
+msgstr "Abbreviation (for week menu)"
+
+#: templates/edit_cookbook.html:18 templates/new_cookbook.html:28
+msgid "e.g. SWJ"
+msgstr "e.g. SWJ"
+
+#: templates/edit_cookbook.html:20
+msgid "Short (max 10 characters) for the week menu."
+msgstr "Short (max 10 characters) for the week menu."
+
+#: templates/edit_cookbook.html:24 templates/new_cookbook.html:34
+msgid "Cookbook Image"
+msgstr "Cookbook Image"
+
+#: templates/edit_cookbook.html:28
+msgid "Current image:"
+msgstr "Current image:"
+
+#: templates/edit_recipe.html:4
+msgid "Edit Recipe"
+msgstr "Edit Recipe"
+
+#: templates/edit_recipe.html:14 templates/new_recipe.html:64
+msgid "Default servings"
+msgstr "Default servings"
+
+#: templates/edit_recipe.html:17 templates/new_recipe.html:67
+msgid "Default number of servings this recipe is intended for (optional)"
+msgstr "Default number of servings this recipe is intended for (optional)"
+
+#: templates/edit_recipe.html:21 templates/new_recipe.html:71
+msgid "Cookbook"
+msgstr "Cookbook"
+
+#: templates/edit_recipe.html:25 templates/new_recipe.html:75
+msgid "Select a cookbook"
+msgstr "Select a cookbook"
+
+#: templates/edit_recipe.html:32 templates/new_recipe.html:79
+msgid "+ New cookbook"
+msgstr "+ New cookbook"
+
+#: templates/edit_recipe.html:35 templates/new_recipe.html:82
+msgid "New cookbook name"
+msgstr "New cookbook name"
+
+#: templates/edit_recipe.html:40 templates/new_recipe.html:106
+msgid "Page"
+msgstr "Page"
+
+#: templates/edit_recipe.html:46 templates/new_recipe.html:112
+msgid "URL (online recipe)"
+msgstr "URL (online recipe)"
+
+#: templates/edit_recipe.html:58 templates/new_recipe.html:96
+msgid "Recipe image"
+msgstr "Recipe image"
+
+#: templates/edit_recipe.html:70
+msgid "✂️ Crop"
+msgstr "✂️ Crop"
+
+#: templates/edit_recipe.html:95
+msgid "Always in stock — changes the pantry for the whole app"
+msgstr "Always in stock — changes the pantry for the whole app"
+
+#: templates/edit_recipe.html:127 templates/new_recipe.html:164
+msgid "+ Add ingredient"
+msgstr "+ Add ingredient"
+
+#: templates/inspiratie.html:9
+msgid "Season"
+msgstr "Season"
+
+#: templates/new_cookbook.html:30
+msgid ""
+"Short (max 10 characters) for the week menu. Generated automatically if "
+"left empty."
+msgstr ""
+
+#: templates/new_cookbook.html:37
+msgid "Choose an image for the cookbook cover (optional)"
+msgstr "Choose an image for the cookbook cover (optional)"
+
+#: templates/new_recipe.html:11
+msgid "Cookbook photo"
+msgstr "Cookbook photo"
+
+#: templates/new_recipe.html:15
+msgid "Import from URL"
+msgstr "Import from URL"
+
+#: templates/new_recipe.html:27
+msgid "Choose photos (max 3)"
+msgstr "Choose photos (max 3)"
+
+#: templates/new_recipe.html:33
+msgid "Read recipe"
+msgstr "Read recipe"
+
+#: templates/new_recipe.html:49
+msgid "Import"
+msgstr "Import"
+
+#: templates/new_recipe.html:88
+msgid "Yes"
+msgstr "Yes"
+
+#: templates/new_recipe.html:90
+msgid "No"
+msgstr "No"
+
+#: templates/new_recipe.html:101
+msgid "Imported image"
+msgstr "Imported image"
+
+#: templates/new_recipe.html:135
+msgid "Ingredient"
+msgstr "Ingredient"
+
+#: templates/new_recipe.html:200
+msgid "Create cookbook"
+msgstr "Create cookbook"
+
+#: templates/new_recipe.html:377
+msgid "Photo import unavailable (API key missing)"
+msgstr "Photo import unavailable (API key missing)"
+
+#: templates/new_recipe.html:393
+msgid "Fetching recipe..."
+msgstr "Fetching recipe..."
+
+#: templates/new_recipe.html:446
+msgid "Imported:"
+msgstr "Imported:"
+
+#: templates/new_recipe.html:446
+msgid "ingredients. Check the fields and save."
+msgstr "ingredients. Check the fields and save."
+
+#: templates/pantry.html:8
+msgid ""
+"Ingredients you always have in stock. They are never added to the "
+"shopping list and count towards the Ecobooster."
+msgstr ""
+
+#: templates/receptenplanner.html:130
+msgid "Recipe planner"
+msgstr "Recipe planner"
+
+#: templates/receptenplanner.html:132
+msgid "Cards"
+msgstr "Cards"
+
+#: templates/receptenplanner.html:134
+msgid "Grid"
+msgstr "Grid"
+
+#: templates/receptenplanner.html:136
+msgid "Cover flow"
+msgstr "Cover flow"
+
+#: templates/receptenplanner.html:138
+msgid "Cover"
+msgstr "Cover"
+
+#: templates/receptenplanner.html:140 templates/receptenplanner.html:142
+msgid "List"
+msgstr "List"
+
+#: templates/receptenplanner.html:150
+msgid "Search by name or cookbook..."
+msgstr "Search by name or cookbook..."
+
+#: templates/receptenplanner.html:156
+msgid "All cookbooks"
+msgstr "All cookbooks"
+
+#: templates/receptenplanner.html:162
+msgid "New recipe"
+msgstr "New recipe"
+
+#: templates/receptenplanner.html:167 templates/recipes.html:13
+msgid "📥 Photo dump"
+msgstr "📥 Photo dump"
+
+#: templates/receptenplanner.html:196
+msgid "Details &amp; plan →"
+msgstr "Details &amp; plan →"
+
+#: templates/receptenplanner.html:199
+msgid "Use the arrow keys or click the arrows"
+msgstr "Use the arrow keys or click the arrows"
+
+#: templates/receptenplanner.html:213 templates/week_menu.html:165
+msgid "Plan recipe"
+msgstr "Plan recipe"
+
+#: templates/receptenplanner.html:223
+msgid "Week"
+msgstr "Week"
+
+#: templates/receptenplanner.html:231
+msgid "Day"
+msgstr "Day"
+
+#: templates/receptenplanner.html:233 weekmenu/constants.py:10
+#: weekmenu/i18n.py:78
+msgid "Monday"
+msgstr "Monday"
+
+#: templates/receptenplanner.html:234 weekmenu/constants.py:11
+#: weekmenu/i18n.py:78
+msgid "Tuesday"
+msgstr "Tuesday"
+
+#: templates/receptenplanner.html:235 weekmenu/constants.py:12
+#: weekmenu/i18n.py:78
+msgid "Wednesday"
+msgstr "Wednesday"
+
+#: templates/receptenplanner.html:236 weekmenu/constants.py:13
+#: weekmenu/i18n.py:78
+msgid "Thursday"
+msgstr "Thursday"
+
+#: templates/receptenplanner.html:237 weekmenu/constants.py:14
+#: weekmenu/i18n.py:79
+msgid "Friday"
+msgstr "Friday"
+
+#: templates/receptenplanner.html:238 weekmenu/constants.py:15
+#: weekmenu/i18n.py:79
+msgid "Saturday"
+msgstr "Saturday"
+
+#: templates/receptenplanner.html:239 weekmenu/constants.py:16
+#: weekmenu/i18n.py:79
+msgid "Sunday"
+msgstr "Sunday"
+
+#: templates/receptenplanner.html:244
+msgid "Meal"
+msgstr "Meal"
+
+#: templates/receptenplanner.html:246 weekmenu/constants.py:20
+msgid "Breakfast"
+msgstr "Breakfast"
+
+#: templates/receptenplanner.html:247 weekmenu/constants.py:21
+msgid "Lunch"
+msgstr "Lunch"
+
+#: templates/receptenplanner.html:248 weekmenu/constants.py:22
+msgid "Dinner"
+msgstr "Dinner"
+
+#: templates/receptenplanner.html:261
+msgid "Confirm"
+msgstr "Confirm"
+
+#: templates/settings.html:20
+msgid "Default servings (when a recipe has none)"
+msgstr "Default servings (when a recipe has none)"
+
+#: templates/settings.html:26
+msgid "Leave empty to set no default."
+msgstr "Leave empty to set no default."
+
+#: templates/settings.html:30
+msgid "Interface language"
+msgstr "Interface language"
+
+#: templates/settings.html:38
+msgid ""
+"Ingredient names, units and AH categories stay Dutch — they are matched "
+"against the Albert Heijn catalogue."
+msgstr ""
+
+#: templates/settings.html:55
+msgid "All recipes, also reachable via Cookbooks."
+msgstr "All recipes, also reachable via Cookbooks."
+
+#: templates/settings.html:59
+msgid "Recipes →"
+msgstr "Recipes →"
+
+#: templates/settings.html:69
+msgid "Manage your cookbooks: add, rename, archive."
+msgstr "Manage your cookbooks: add, rename, archive."
+
+#: templates/settings.html:73
+msgid "Cookbooks →"
+msgstr "Cookbooks →"
+
+#: templates/settings.html:80
+msgid "Photo recognition (Gemini)"
+msgstr "Photo recognition (Gemini)"
+
+#: templates/settings.html:81
+msgid ""
+"Photograph cookbook pages and have the recipe recognised automatically "
+"via Google Gemini. Free up to 250 requests per day."
+msgstr ""
+
+#: templates/settings.html:87
+msgid "✓ API key configured"
+msgstr "✓ API key configured"
+
+#: templates/settings.html:99
+msgid "Enter your Gemini API key. You can create one for free via"
+msgstr "Enter your Gemini API key. You can create one for free via"
+
+#: templates/settings.html:99
+msgid "Google AI Studio"
+msgstr "Google AI Studio"
+
+#: templates/settings.html:115
+msgid "Albert Heijn"
+msgstr "Albert Heijn"
+
+#: templates/settings.html:118
+msgid "AH Products →"
+msgstr "AH Products →"
+
+#: templates/settings.html:126
+msgid "✓ Connected"
+msgstr "✓ Connected"
+
+#: templates/settings.html:135
+msgid "Test connection"
+msgstr "Test connection"
+
+#: templates/settings.html:139
+msgid "Disconnect"
+msgstr "Disconnect"
+
+#: templates/settings.html:148
+msgid "Link your AH account to send the shopping list straight to the Appie app."
+msgstr "Link your AH account to send the shopping list straight to the Appie app."
+
+#: templates/settings.html:153
+msgid "Start AH linker"
+msgstr "Start AH linker"
+
+#: templates/settings.html:163
+msgid "Open an SSH tunnel on your computer:"
+msgstr "Open an SSH tunnel on your computer:"
+
+#: templates/settings.html:171
+msgid "Copy"
+msgstr "Copy"
+
+#: templates/settings.html:180
+msgid "Go to this URL in your browser and log in:"
+msgstr "Go to this URL in your browser and log in:"
+
+#: templates/settings.html:188
+msgid "Open"
+msgstr "Open"
+
+#: templates/settings.html:191
+msgid "Log in with your AH account, then close the tab."
+msgstr "Log in with your AH account, then close the tab."
+
+#: templates/settings.html:200
+msgid "Waiting for link…"
+msgstr "Waiting for link…"
+
+#: templates/settings.html:201
+msgid "Check now"
+msgstr "Check now"
+
+#: templates/settings.html:206
+msgid "Enter refresh_token manually"
+msgstr "Enter refresh_token manually"
+
+#: templates/settings.html:221
+msgid "Database"
+msgstr "Database"
+
+#: templates/settings.html:240
+msgid "Data management"
+msgstr "Data management"
+
+#: templates/settings.html:246
+msgid "Export as JSON"
+msgstr "Export as JSON"
+
+#: templates/settings.html:247
+msgid ""
+"Download all recipes, ingredients and cookbooks as a JSON file (without "
+"images)."
+msgstr ""
+
+#: templates/settings.html:251
+msgid "Export JSON"
+msgstr "Export JSON"
+
+#: templates/settings.html:260
+msgid "Export as ZIP (with images)"
+msgstr "Export as ZIP (with images)"
+
+#: templates/settings.html:261
+msgid ""
+"Download all recipes, cookbooks and images as a single ZIP file. Ideal "
+"for full backups."
+msgstr ""
+
+#: templates/settings.html:265
+msgid "Export ZIP"
+msgstr "Export ZIP"
+
+#: templates/settings.html:275
+msgid "Import JSON"
+msgstr "Import JSON"
+
+#: templates/settings.html:276
+msgid ""
+"Load a previously exported JSON file. Existing recipes and cookbooks are "
+"not overwritten."
+msgstr ""
+
+#: templates/settings.html:280
+msgid "Choose JSON..."
+msgstr "Choose JSON..."
+
+#: templates/settings.html:293
+msgid "Import ZIP (with images)"
+msgstr "Import ZIP (with images)"
+
+#: templates/settings.html:294
+msgid ""
+"Load a previously exported ZIP file including images. Existing recipes "
+"are skipped."
+msgstr ""
+
+#: templates/settings.html:298
+msgid "Choose ZIP..."
+msgstr "Choose ZIP..."
+
+#: templates/shopping_list.html:9
+msgid "✕ Clear"
+msgstr "✕ Clear"
+
+#: templates/shopping_list.html:13
+msgid "To AH"
+msgstr "To AH"
+
+#: templates/shopping_list.html:17
+msgid "Print"
+msgstr "Print"
+
+#: templates/shopping_list.html:26
+msgid "+ Add item..."
+msgstr "+ Add item..."
+
+#: templates/shopping_list.html:58
+msgid "Click to change product"
+msgstr "Click to change product"
+
+#: templates/shopping_list.html:96
+msgid "+ Link AH product"
+msgstr "+ Link AH product"
+
+#: templates/shopping_list.html:110
+msgid "Search AH product…"
+msgstr "Search AH product…"
+
+#: templates/shopping_list.html:118
+msgid "Type a search term and press Search"
+msgstr "Type a search term and press Search"
+
+#: templates/shopping_list.html:151
+msgid "Exclude failed:"
+msgstr "Exclude failed:"
+
+#: templates/week_menu.html:20
+msgid "&#10005; Clear week"
+msgstr "&#10005; Clear week"
+
+#: templates/week_menu.html:30
+msgid "Previous week"
+msgstr "Previous week"
+
+#: templates/week_menu.html:36
+msgid "Next week"
+msgstr "Next week"
+
+#: templates/week_menu.html:41
+msgid "You are viewing a different week"
+msgstr "You are viewing a different week"
+
+#: templates/week_menu.html:44
+msgid "Go to this week"
+msgstr "Go to this week"
+
+#: templates/week_menu.html:52
+msgid "Saved"
+msgstr "Saved"
+
+#: templates/week_menu.html:94
+msgid "Search recipe…"
+msgstr "Search recipe…"
+
+#: templates/week_menu.html:106
+msgid "ppl"
+msgstr "ppl"
+
+#: templates/week_menu.html:138
+msgid "Quick plan"
+msgstr "Quick plan"
+
+#: templates/week_menu.html:142
+msgid "Favourites"
+msgstr "Favourites"
+
+#: templates/week_menu.html:148
+msgid "Recently used"
+msgstr "Recently used"
+
+#: templates/week_menu.html:154
+msgid "Popular"
+msgstr "Popular"
+
+#: templates/week_menu.html:166
+msgid "Pick a day and meal for"
+msgstr "Pick a day and meal for"
+
+#: templates/week_menu.html:462
+msgid "No recipes yet"
+msgstr "No recipes yet"
+
+#: templates/week_menu.html:524
+msgid ""
+"Are you sure you want to clear the entire week menu? This also deletes "
+"the shopping list."
+msgstr ""
+
+#: templates/week_menu.html:535
+msgid "Error while clearing: "
+msgstr "Error while clearing: "
+
+#: weekmenu/i18n.py:33
+msgid "Fruit, Veg & Potatoes"
+msgstr "Fruit, Veg & Potatoes"
+
+#: weekmenu/i18n.py:34
+msgid "Meat & Poultry"
+msgstr "Meat & Poultry"
+
+#: weekmenu/i18n.py:35
+msgid "Fish & Seafood"
+msgstr "Fish & Seafood"
+
+#: weekmenu/i18n.py:36
+msgid "Vegetarian & Plant-Based"
+msgstr "Vegetarian & Plant-Based"
+
+#: weekmenu/i18n.py:37
+msgid "Dairy, Plant-Based & Eggs"
+msgstr "Dairy, Plant-Based & Eggs"
+
+#: weekmenu/i18n.py:38
+msgid "Cheese & Deli"
+msgstr "Cheese & Deli"
+
+#: weekmenu/i18n.py:39
+msgid "Herbs & Spices"
+msgstr "Herbs & Spices"
+
+#: weekmenu/i18n.py:40
+msgid "Oils, Sauces & Condiments"
+msgstr "Oils, Sauces & Condiments"
+
+#: weekmenu/i18n.py:41
+msgid "Pasta, Rice & Grains"
+msgstr "Pasta, Rice & Grains"
+
+#: weekmenu/i18n.py:42
+msgid "Tinned Goods & Pulses"
+msgstr "Tinned Goods & Pulses"
+
+#: weekmenu/i18n.py:43
+msgid "Nuts, Seeds & Dried Fruit"
+msgstr "Nuts, Seeds & Dried Fruit"
+
+#: weekmenu/i18n.py:44
+msgid "Bread & Bakery"
+msgstr "Bread & Bakery"
+
+#: weekmenu/i18n.py:45
+msgid "Breakfast, Baking & Desserts"
+msgstr "Breakfast, Baking & Desserts"
+
+#: weekmenu/i18n.py:46
+msgid "Frozen"
+msgstr "Frozen"
+
+#: weekmenu/i18n.py:47
+msgid "Drinks"
+msgstr "Drinks"
+
+#: weekmenu/i18n.py:48
+msgid "Snacks & Confectionery"
+msgstr "Snacks & Confectionery"
+
+#: weekmenu/i18n.py:49
+msgid "Non-Food & Household"
+msgstr "Non-Food & Household"
+
+#: weekmenu/i18n.py:50
+msgid "Other"
+msgstr "Other"
+
+#: weekmenu/i18n.py:57
+msgid "pcs"
+msgstr "pcs"
+
+#: weekmenu/i18n.py:58
+msgid "pc"
+msgstr "pc"
+
+#: weekmenu/i18n.py:59
+msgid "tbsp"
+msgstr "tbsp"
+
+#: weekmenu/i18n.py:60
+msgid "tsp"
+msgstr "tsp"
+
+#: weekmenu/i18n.py:61
+msgid "slice"
+msgstr "slice"
+
+#: weekmenu/i18n.py:62
+msgid "slices"
+msgstr "slices"
+
+#: weekmenu/i18n.py:63
+msgid "clove"
+msgstr "clove"
+
+#: weekmenu/i18n.py:64
+msgid "cloves"
+msgstr "cloves"
+
+#: weekmenu/i18n.py:65
+msgid "bunch"
+msgstr "bunch"
+
+#: weekmenu/i18n.py:66 weekmenu/i18n.py:67
+msgid "tin"
+msgstr "tin"
+
+#: weekmenu/i18n.py:68
+msgid "pack"
+msgstr "pack"
+
+#: weekmenu/i18n.py:69
+msgid "bag"
+msgstr "bag"
+
+#: weekmenu/i18n.py:70
+msgid "jar"
+msgstr "jar"
+
+#: weekmenu/i18n.py:71
+msgid "bottle"
+msgstr "bottle"
+
+#: weekmenu/i18n.py:72
+msgid "pinch"
+msgstr "pinch"
+
+#: weekmenu/i18n.py:73
+msgid "splash"
+msgstr "splash"
+
+#: weekmenu/i18n.py:74
+msgid "handful"
+msgstr "handful"
+
+#: weekmenu/routes/ah.py:27
+msgid "No code provided"
+msgstr "No code provided"
+
+#: weekmenu/routes/ah.py:106
+msgid "Email and password are required"
+msgstr "Email and password are required"
+
+#: weekmenu/routes/ah.py:125
+msgid "No token stored"
+msgstr "No token stored"
+
+#: weekmenu/routes/ah.py:147
+msgid "Not logged in (anonymous token)"
+msgstr "Not logged in (anonymous token)"
+
+#: weekmenu/routes/ah.py:193
+msgid "Order unreachable"
+msgstr "Order unreachable"
+
+#: weekmenu/routes/ah.py:237
+msgid "Editing orders is disabled."
+msgstr "Editing orders is disabled."
+
+#: weekmenu/routes/ah.py:241
+msgid "No changes provided"
+msgstr "No changes provided"
+
+#: weekmenu/routes/ah.py:283
+msgid "No product linked"
+msgstr "No product linked"
+
+#: weekmenu/routes/dump.py:129 weekmenu/routes/recipes.py:471
+msgid "No image to crop"
+msgstr "No image to crop"
+
+#: weekmenu/routes/dump.py:133 weekmenu/routes/recipes.py:475
+msgid "Source image not found"
+msgstr "Source image not found"
+
+#: weekmenu/routes/import_export.py:65 weekmenu/routes/import_export.py:195
+msgid "No file selected"
+msgstr "No file selected"
+
+#: weekmenu/routes/import_export.py:199
+msgid "Invalid ZIP file"
+msgstr "Invalid ZIP file"
+
+#: weekmenu/routes/import_export.py:208
+msgid "weekmenu_export.json not found in ZIP"
+msgstr "weekmenu_export.json not found in ZIP"
+
+#: weekmenu/routes/recipes.py:118
+msgid "This cookbook already exists"
+msgstr "This cookbook already exists"
+
+#: weekmenu/routes/recipes.py:181
+msgid "Name may not be empty"
+msgstr "Name may not be empty"
+
+#: weekmenu/routes/recipes.py:183
+msgid "A cookbook with this name already exists"
+msgstr "A cookbook with this name already exists"
+
+#: weekmenu/routes/recipes.py:195
+msgid "No target cookbook provided"
+msgstr "No target cookbook provided"
+
+#: weekmenu/routes/recipes.py:214
+msgid "Cookbook still has recipes. Delete or move them first."
+msgstr "Cookbook still has recipes. Delete or move them first."
+
+#: weekmenu/routes/recipes.py:522
+msgid "Name is required"
+msgstr "Name is required"
+
+#: weekmenu/routes/recipes.py:603
+msgid "No photos received"
+msgstr "No photos received"
+
+#: weekmenu/routes/settings.py:32
+msgid "Settings saved"
+msgstr "Settings saved"
+
+#: weekmenu/routes/settings.py:68
+msgid "No API key provided"
+msgstr "No API key provided"
+
+#: weekmenu/routes/shopping.py:75 weekmenu/routes/shopping.py:89
+msgid "Item not found"
+msgstr "Item not found"
+
+#: weekmenu/routes/shopping.py:129
+msgid "Recipe not found"
+msgstr "Recipe not found"
+
+#: weekmenu/routes/shopping.py:213
+msgid "ingredient_id is required"
+msgstr "ingredient_id is required"
+
+#: weekmenu/routes/shopping.py:217
+msgid "Ingredient not found"
+msgstr "Ingredient not found"
+
+#: weekmenu/services/ah.py:439
+msgid "No AH account linked"
+msgstr "No AH account linked"
+
+#: weekmenu/services/ah.py:456
+msgid ""
+"This order has been submitted. Open it yourself in the AH app first, then"
+" you can add items here."
+msgstr ""
+
+#: weekmenu/services/ah.py:509
+msgid ""
+"A Capsolver API key is required. Create a free account at capsolver.com "
+"and enter the key in settings."
+msgstr ""
+
+#: weekmenu/services/dump.py:54
+msgid "Unexpected response format from Gemini"
+msgstr "Unexpected response format from Gemini"
+
+#: weekmenu/services/dump.py:101
+msgid "No usable files (photos or PDF) received"
+msgstr "No usable files (photos or PDF) received"
+
+#: weekmenu/services/dump.py:135 weekmenu/services/gemini.py:356
+#: weekmenu/services/gemini.py:507
+msgid "Gemini is briefly unavailable (rate limit). Try again in a minute."
+msgstr "Gemini is briefly unavailable (rate limit). Try again in a minute."
+
+#: weekmenu/services/dump.py:147 weekmenu/services/gemini.py:442
+msgid "Gemini API key not configured"
+msgstr "Gemini API key not configured"
+
+#: weekmenu/services/gemini.py:255
+msgid ""
+"This Albert Heijn recipe could not be fetched. Check the URL or try again"
+" later."
+msgstr ""
+
+#: weekmenu/services/gemini.py:270
+msgid "No URL provided"
+msgstr "No URL provided"
+
+#: weekmenu/services/gemini.py:285
+msgid "The page did not respond in time. Please try again."
+msgstr "The page did not respond in time. Please try again."
+
+#: weekmenu/services/gemini.py:287
+msgid "This website blocks automated fetching (403). Try another site."
+msgstr "This website blocks automated fetching (403). Try another site."
+
+#: weekmenu/services/gemini.py:289
+msgid "Page not found (404). Check the URL."
+msgstr "Page not found (404). Check the URL."
+
+#: weekmenu/services/gemini.py:292
+msgid "The URL could not be reached. Check the URL."
+msgstr "The URL could not be reached. Check the URL."
+
+#: weekmenu/services/gemini.py:295
+msgid ""
+"This website blocks automated fetching (bot detection). Paste the recipe "
+"in manually."
+msgstr ""
+
+#: weekmenu/services/gemini.py:315
+msgid ""
+"No recipe information found on this page. The site does not provide "
+"structured recipe data."
+msgstr ""
+
+#: weekmenu/services/gemini.py:445
+msgid "No photos selected"
+msgstr "No photos selected"
+
+#: weekmenu/services/images.py:35
+msgid "This image format cannot be cropped"
+msgstr "This image format cannot be cropped"
+
+#: weekmenu/services/pantry.py:20
+msgid "ingredient_id required"
+msgstr "ingredient_id required"
+
+#: weekmenu/services/shopping.py:227
+msgid "No AH account linked. Go to Settings."
+msgstr "No AH account linked. Go to Settings."
+
+#: weekmenu/services/shopping.py:254
+msgid "No linked AH products in the list. Link them first via AH products."
+msgstr "No linked AH products in the list. Link them first via AH products."
+
+
+msgid "Pantry cupboard"
+msgstr "Pantry cupboard"

@@ -4,9 +4,9 @@
 
     <div class="flex gap-6 border-b border-[#E8E4DC]">
         <a href="{{ url_for('inspiratie.inspiratie', tab='ecobooster') }}"
-           class="pb-2 text-sm {% if active_tab == 'ecobooster' %}nav-active{% else %}nav-link{% endif %}">Ecobooster</a>
+           class="pb-2 text-sm {% if active_tab == 'ecobooster' %}nav-active{% else %}nav-link{% endif %}">{{ _('Ecobooster') }}</a>
         <a href="{{ url_for('inspiratie.inspiratie', tab='seizoen') }}"
-           class="pb-2 text-sm {% if active_tab == 'seizoen' %}nav-active{% else %}nav-link{% endif %}">Seizoen</a>
+           class="pb-2 text-sm {% if active_tab == 'seizoen' %}nav-active{% else %}nav-link{% endif %}">{{ _('Season') }}</a>
     </div>
 
     {% if active_tab == 'ecobooster' %}

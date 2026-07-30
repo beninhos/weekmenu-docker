@@ -2,15 +2,15 @@
 {% block content %}
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten</h2>
+        <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ _('Recipes') }}</h2>
         <div class="flex gap-2">
             <a href="{{ url_for('recipes.new_recipe') }}"
                class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
-                Nieuw Recept
+                {{ _('New Recipe') }}
             </a>
             <a href="{{ url_for('dump.dump_page') }}"
                class="border border-[#2C2C2C] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#2C2C2C] hover:text-white">
-                📥 Foto-dump
+                {{ _('📥 Photo dump') }}
             </a>
         </div>
     </div>
@@ -38,7 +38,7 @@
                             <span>p. {{ recipe.page }}</span>
                             {% elif recipe.url %}
                             <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer"
-                               class="text-[#8B4513] hover:text-[#8B4513] underline">Online recept ↗</a>
+                               class="text-[#8B4513] hover:text-[#8B4513] underline">{{ _('Online recipe ↗') }}</a>
                             {% endif %}
                             <span class="text-[#8B4513]">{{ recipe.serves or 4 }} personen</span>
                             {% if recipe.usage_count and recipe.usage_count > 0 %}
@@ -53,13 +53,13 @@
                             {{ '⭐' if recipe.is_favorite else '☆' }}
                         </button>
                         <a href="{{ url_for('recipes.edit_recipe', id=recipe.id) }}"
-                           class="text-[#8B4513] hover:text-[#8B4513]">Bewerken</a>
+                           class="text-[#8B4513] hover:text-[#8B4513]">{{ _('Edit') }}</a>
                         <button onclick="deleteRecipe({{ recipe.id }})"
-                                class="text-red-500 hover:text-red-700">Verwijderen</button>
+                                class="text-red-500 hover:text-red-700">{{ _('Delete') }}</button>
                     </div>
                 </div>
                 <div class="mt-4">
-                    <h4 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h4>
+                    <h4 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">{{ _('Ingredients') }}</h4>
                     <ul class="list-disc list-inside">
                         {% for ri in recipe.ingredients %}
                         <li>{{ ri.amount }} {{ ri.unit }} {{ ri.ingredient.name }}</li>

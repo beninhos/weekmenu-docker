@@ -20,14 +20,14 @@
 
     <div class="flex items-center justify-between">
         <div>
-            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">AH winkelmand</h2>
-            <p class="text-sm text-[#6B6B6B] mt-1">Stel wijzigingen samen en bevestig ze in één keer. Afrekenen doe je zelf in de AH-app.</p>
+            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ _('AH basket') }}</h2>
+            <p class="text-sm text-[#6B6B6B] mt-1">{{ _('Assemble your changes and confirm them in one go. You check out yourself in the AH app.') }}</p>
         </div>
-        <button onclick="reload()" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C] border border-[#E8E4DC] rounded px-3 py-1.5 hover:bg-[#FAF8F5]">⟳ Ververs</button>
+        <button onclick="reload()" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C] border border-[#E8E4DC] rounded px-3 py-1.5 hover:bg-[#FAF8F5]">{{ _('⟳ Refresh') }}</button>
     </div>
 
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] px-4 py-2 flex items-center gap-3 text-sm">
-        <span class="text-[#6B6B6B]">Weekmenu:</span>
+        <span class="text-[#6B6B6B]">{{ _('Week menu:') }}</span>
         <button onclick="changeWeek(-1)" class="px-2 py-0.5 rounded hover:bg-white text-[#6B6B6B]">‹</button>
         <span id="weekLabel" class="font-medium text-[#2C2C2C]">week {{ week }}, {{ year }}</span>
         <button onclick="changeWeek(1)" class="px-2 py-0.5 rounded hover:bg-white text-[#6B6B6B]">›</button>
@@ -99,7 +99,7 @@ function newMomentTile() {
 
 function selectOrder(id) {
     if (id === state.selected) return;
-    if (Object.keys(state.draft).length && !confirm('Je hebt een onbevestigd concept. Wisselen van order wist dat. Doorgaan?')) return;
+    if (Object.keys(state.draft).length && !confirm('{{ _("You have an unconfirmed draft. Switching orders will discard it. Continue?") }}')) return;
     state.selected = id;
     state.draft = {};
     renderTiles();
@@ -111,7 +111,7 @@ async function loadOrder(id) {
     el.innerHTML = '<p class="text-sm text-[#6B6B6B]">Order laden…</p>';
     let d;
     try { d = await (await fetch(`/api/ah/order/${id}?week=${state.week}&year=${state.year}`)).json(); }
-    catch (e) { el.innerHTML = '<p class="text-sm text-red-700">Order niet bereikbaar.</p>'; return; }
+    catch (e) { el.innerHTML = '<p class="text-sm text-red-700">{{ _("Order unreachable.") }}</p>'; return; }
     if (d.error) { el.innerHTML = `<p class="text-sm text-red-700">${esc(d.error)}</p>`; return; }
 
     state.order = d.order;
@@ -160,9 +160,9 @@ function renderDetail() {
     renderConcept();
 
     const stateBanner = state.editable
-        ? `<div class="bg-[#EAF3EA] border border-[#CBE3CB] rounded-lg px-3 py-2 text-xs text-[#3f7d3f] mb-1">Deze bestelling staat open — je kunt hier toevoegen/aanpassen. Doorzetten doe je zelf in de AH-app.</div>`
+        ? `<div class="bg-[#EAF3EA] border border-[#CBE3CB] rounded-lg px-3 py-2 text-xs text-[#3f7d3f] mb-1">{{ _("This order is open — you can add and adjust here. You submit it yourself in the AH app.") }}</div>`
         : `<div class="bg-[#FAF6EE] border border-[#E8D9B8] rounded-lg px-3 py-2 text-xs text-[#8B5E13] mb-1 flex items-center justify-between gap-2">
-               <span>Deze bestelling is doorgezet (alleen-lezen). Wil je iets toevoegen? Open hem zelf in de AH-app.</span>
+               <span>{{ _("This order has been submitted (read-only). Want to add something? Open it yourself in the AH app.") }}</span>
                <a href="https://www.ah.nl/" target="_blank" rel="noopener" class="underline whitespace-nowrap">open AH ↗</a>
            </div>`;
 
@@ -192,7 +192,7 @@ function renderDetail() {
         ${stateBanner}${neededHtml}${unlinkedHtml}
         <div class="mt-4 bg-white border border-[#E8E4DC] rounded-lg p-3">
             <h3 class="text-sm font-semibold text-[#2C2C2C]">In je mandje (${o.itemCount})</h3>
-            ${o.groups.length ? groupsHtml : '<p class="text-sm text-[#6B6B6B] mt-2">Deze order is nog leeg.</p>'}
+            ${o.groups.length ? groupsHtml : '<p class="text-sm text-[#6B6B6B] mt-2">{{ _("This order is still empty.") }}</p>'}
         </div>
         <div class="bg-[#F5F2ED] border border-[#E8E4DC] rounded-lg px-4 py-3 flex items-center gap-4 text-sm">
             <span class="text-[#6B6B6B]">${o.itemCount} items</span>
@@ -212,7 +212,7 @@ function renderConcept() {
     const rows = changes.map(c => {
         let label;
         if (c.kind === 'add') label = `<span class="ah-changed">+ ${c.to}×</span> ${esc(c.name)}`;
-        else if (c.kind === 'remove') label = `<span class="text-[#b91c1c]">− verwijderen</span> ${esc(c.name)}`;
+        else if (c.kind === 'remove') label = `<span class="text-[#b91c1c]">− {{ _("remove") }}</span> ${esc(c.name)}`;
         else label = `<span class="ah-changed">${c.from}× → ${c.to}×</span> ${esc(c.name)}`;
         return `<div class="flex items-center gap-2 text-sm py-0.5">
             <button onclick="setDraft(${c.pid}, ${c.from})" title="Uit concept halen" class="text-[#6B6B6B] hover:text-[#b91c1c]">×</button>
@@ -229,7 +229,7 @@ function renderConcept() {
                 class="w-full text-sm font-semibold text-white bg-[#8B4513] rounded px-3 py-2 hover:bg-[#723910]">
             ${changes.length} wijziging${changes.length === 1 ? '' : 'en'} doorvoeren in je open order
         </button>
-        <p class="text-[11px] text-[#8B5E13] mt-1 text-center">Wordt toegevoegd aan je geopende bestelling. Doorzetten doe je zelf in de AH-app.</p>
+        <p class="text-[11px] text-[#8B5E13] mt-1 text-center">{{ _("Will be added to your open order. You submit it yourself in the AH app.") }}</p>
     </div>`;
 }
 
@@ -279,10 +279,10 @@ async function confirmDraft() {
     const o = state.order;
     const tile = state.orders.find(x => x.orderId === state.selected);
     const when = tile ? (tile.dateDisplay || '') : '';
-    if (!confirm(`${changes.length} wijziging(en) doorvoeren in je open bestelling van ${when}?\n\n(De app zet de order niet door — dat doe je zelf in de AH-app.)`)) return;
+    if (!confirm(`{{ _("Apply") }} ${changes.length} {{ _("change(s) to your open order from") }} ${when}?\n\n{{ _("(The app does not submit the order — you do that yourself in the AH app.)") }}`)) return;
 
     const btn = document.getElementById('confirmBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Bezig met bevestigen…'; }
+    if (btn) { btn.disabled = true; btn.textContent = '{{ _("Confirming…") }}'; }
     document.getElementById('orderDetail').style.opacity = '0.5';
     const items = changes.map(c => ({ productId: c.pid, quantity: c.to }));
     try {

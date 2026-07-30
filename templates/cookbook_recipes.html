@@ -14,12 +14,10 @@
         <div class="space-x-2">
             <a href="{{ url_for('recipes.new_recipe') }}" 
                class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded">
-                Nieuw Recept
+                {{ _('New Recipe') }}
             </a>
             <a href="{{ url_for('recipes.list_cookbooks') }}" 
-               class="border border-[#D4CEC4] text-[#2C2C2C] font-medium py-2 px-4 rounded hover:bg-[#F5F2ED]">
-                Terug naar Kookboeken
-            </a>
+               class="border border-[#D4CEC4] text-[#2C2C2C] font-medium py-2 px-4 rounded hover:bg-[#F5F2ED]">{{ _('Back to Cookbooks') }}</a>
         </div>
     </div>
 
@@ -51,7 +49,7 @@
                             <span>p. {{ recipe.page }}</span>
                             {% elif recipe.url %}
                             <a href="{{ recipe.url }}" target="_blank" rel="noopener noreferrer"
-                               class="text-[#8B4513] hover:text-[#8B4513] underline">Online recept ↗</a>
+                               class="text-[#8B4513] hover:text-[#8B4513] underline">{{ _('Online recipe ↗') }}</a>
                             {% endif %}
                             <span class="text-[#8B4513]">• {{ recipe.serves or 4 }} pers.</span>
                         </div>
@@ -66,11 +64,11 @@
                     </button>
                     <a href="{{ url_for('recipes.edit_recipe', id=recipe.id) }}" 
                        class="bg-[#2C2C2C] hover:bg-[#2C2C2C] text-white py-1 px-3 rounded text-sm">
-                        Bewerken
+                        {{ _('Edit') }}
                     </a>
                     <button onclick="deleteRecipe({{ recipe.id }})"
                             class="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm">
-                        Verwijderen
+                        {{ _('Delete') }}
                     </button>
                 </div>
             </div>
@@ -79,7 +77,7 @@
     </div>
     {% else %}
     <div class="bg-[#F5F2ED] border-l-4 border-[#C9A882] text-[#8B4513] p-4 mb-4" role="alert">
-        <p>Nog geen recepten toegevoegd voor dit kookboek.</p>
+        <p>{{ _('No recipes added to this cookbook yet.') }}</p>
     </div>
     {% endif %}
 </div>

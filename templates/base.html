@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="{{ get_locale() }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weekmenu Planner</title>
+    <title>{% block title %}{{ _("Weekmenu Planner") }}{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -162,26 +162,26 @@
         <div class="container mx-auto px-4 py-4 flex justify-between items-center">
             <a href="{{ url_for('main.index') }}" style="text-decoration:none;" class="flex items-center gap-2">
                 <img src="{{ url_for('static', filename='favicon-light.svg') }}" alt="" style="width:28px;height:28px;border-radius:6px;">
-                <span style="font-family: var(--font-serif); font-size: 1.25rem; color: var(--color-ink); letter-spacing: -0.02em;">Weekmenu</span>
+                <span style="font-family: var(--font-serif); font-size: 1.25rem; color: var(--color-ink); letter-spacing: -0.02em;">{{ _('Week menu') }}</span>
             </a>
 
             <div class="hidden md:flex items-center gap-6">
                 <a href="{{ url_for('main.index') }}"
-                   class="text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Mijn week</a>
+                   class="text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">{{ _('My week') }}</a>
                 <a href="{{ url_for('recipes.receptenplanner') }}"
-                   class="text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Recepten</a>
+                   class="text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">{{ _('Recipes') }}</a>
                 <a href="{{ url_for('inspiratie.inspiratie') }}"
-                   class="text-sm {% if request.endpoint == 'inspiratie.inspiratie' %}nav-active{% else %}nav-link{% endif %}">Inspiratie</a>
+                   class="text-sm {% if request.endpoint == 'inspiratie.inspiratie' %}nav-active{% else %}nav-link{% endif %}">{{ _('Inspiration') }}</a>
                 <a href="{{ url_for('shopping.boodschappen') }}"
-                   class="text-sm {% if request.endpoint == 'shopping.boodschappen' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
+                   class="text-sm {% if request.endpoint == 'shopping.boodschappen' %}nav-active{% else %}nav-link{% endif %}">{{ _('Groceries') }}</a>
                 <a href="{{ url_for('ah.ah_winkelmand') }}"
-                   class="text-sm {% if request.endpoint == 'ah.ah_winkelmand' %}nav-active{% else %}nav-link{% endif %}">AH winkelmand</a>
+                   class="text-sm {% if request.endpoint == 'ah.ah_winkelmand' %}nav-active{% else %}nav-link{% endif %}">{{ _('AH basket') }}</a>
                 <a href="{{ url_for('ah.ah_products') }}"
-                   class="text-sm {% if request.endpoint == 'ah.ah_products' %}nav-active{% else %}nav-link{% endif %}">AH producten</a>
+                   class="text-sm {% if request.endpoint == 'ah.ah_products' %}nav-active{% else %}nav-link{% endif %}">{{ _('AH products') }}</a>
                 <a href="{{ url_for('pantry.pantry') }}"
-                   class="text-sm {% if request.endpoint == 'pantry.pantry' %}nav-active{% else %}nav-link{% endif %}">Voorraad</a>
+                   class="text-sm {% if request.endpoint == 'pantry.pantry' %}nav-active{% else %}nav-link{% endif %}">{{ _('Pantry') }}</a>
                 <a href="{{ url_for('settings.settings_page') }}"
-                   class="text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
+                   class="text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">{{ _('Settings') }}</a>
             </div>
 
             <button onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
@@ -194,27 +194,36 @@
         </div>
         <div id="mobile-menu" class="hidden md:hidden border-t px-4 pb-3 pt-2 space-y-2" style="border-color: var(--color-border);">
             <a href="{{ url_for('main.index') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">Mijn week</a>
+               class="block py-2 text-sm {% if request.endpoint == 'main.index' %}nav-active{% else %}nav-link{% endif %}">{{ _('My week') }}</a>
             <a href="{{ url_for('recipes.receptenplanner') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">Recepten</a>
+               class="block py-2 text-sm {% if request.endpoint == 'recipes.receptenplanner' %}nav-active{% else %}nav-link{% endif %}">{{ _('Recipes') }}</a>
             <a href="{{ url_for('inspiratie.inspiratie') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'inspiratie.inspiratie' %}nav-active{% else %}nav-link{% endif %}">Inspiratie</a>
+               class="block py-2 text-sm {% if request.endpoint == 'inspiratie.inspiratie' %}nav-active{% else %}nav-link{% endif %}">{{ _('Inspiration') }}</a>
             <a href="{{ url_for('shopping.boodschappen') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'shopping.boodschappen' %}nav-active{% else %}nav-link{% endif %}">Boodschappen</a>
+               class="block py-2 text-sm {% if request.endpoint == 'shopping.boodschappen' %}nav-active{% else %}nav-link{% endif %}">{{ _('Groceries') }}</a>
             <a href="{{ url_for('ah.ah_winkelmand') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'ah.ah_winkelmand' %}nav-active{% else %}nav-link{% endif %}">AH winkelmand</a>
+               class="block py-2 text-sm {% if request.endpoint == 'ah.ah_winkelmand' %}nav-active{% else %}nav-link{% endif %}">{{ _('AH basket') }}</a>
             <a href="{{ url_for('ah.ah_products') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'ah.ah_products' %}nav-active{% else %}nav-link{% endif %}">AH producten</a>
+               class="block py-2 text-sm {% if request.endpoint == 'ah.ah_products' %}nav-active{% else %}nav-link{% endif %}">{{ _('AH products') }}</a>
             <a href="{{ url_for('pantry.pantry') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'pantry.pantry' %}nav-active{% else %}nav-link{% endif %}">Voorraad</a>
+               class="block py-2 text-sm {% if request.endpoint == 'pantry.pantry' %}nav-active{% else %}nav-link{% endif %}">{{ _('Pantry') }}</a>
             <a href="{{ url_for('settings.settings_page') }}"
-               class="block py-2 text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">Instellingen</a>
+               class="block py-2 text-sm {% if request.endpoint == 'settings.settings_page' %}nav-active{% else %}nav-link{% endif %}">{{ _('Settings') }}</a>
         </div>
     </nav>
 
     <main class="container mx-auto p-4 mt-2">
         {% block content %}{% endblock %}
     </main>
+    <script>
+    // Strings needed by the standalone files in static/js. Those are not
+    // rendered through Jinja, so their translations are handed over here.
+    // window.t(key) falls back to the key itself if it is missing.
+    window.I18N = {
+        confirmDeleteRecipe: {{ _("Are you sure you want to delete this recipe?")|tojson }}
+    };
+    window.t = function (key) { return (window.I18N && window.I18N[key]) || key; };
+    </script>
     <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js');</script>
 </body>
 </html>

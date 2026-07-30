@@ -7,10 +7,8 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
 
 <div class="mb-6">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Kookboeken</h1>
-        <a href="{{ url_for('recipes.new_cookbook') }}" class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded">
-            Nieuw Kookboek
-        </a>
+        <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ _('Cookbooks') }}</h1>
+        <a href="{{ url_for('recipes.new_cookbook') }}" class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded">{{ _('New Cookbook') }}</a>
     </div>
 
     {% macro cookbook_card(cookbook) %}
@@ -27,7 +25,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
                         <svg class="mx-auto h-12 w-12 text-[#6B6B6B]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.754 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                         </svg>
-                        <p class="mt-2 text-sm text-[#6B6B6B]">Geen afbeelding</p>
+                        <p class="mt-2 text-sm text-[#6B6B6B]">{{ _('No image') }}</p>
                     </div>
                 </div>
                 {% endif %}
@@ -35,7 +33,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
             <div class="p-4">
                 <h3 class="font-semibold text-[#2C2C2C] mb-1">{{ cookbook.name }}</h3>
                 {% if cookbook.is_archived %}
-                <span class="inline-block text-xs bg-[#FDF8F3] text-[#2C2C2C] px-2 py-0.5 rounded mb-1">Gearchiveerd</span>
+                <span class="inline-block text-xs bg-[#FDF8F3] text-[#2C2C2C] px-2 py-0.5 rounded mb-1">{{ _('Archived') }}</span>
                 {% endif %}
                 <p class="text-sm text-[#6B6B6B]">
                     {% set recipe_count = cookbook.recipes|length %}
@@ -45,9 +43,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
         </a>
         <div class="px-4 pb-4 relative">
             <button onclick="toggleDropdown(event, 'dropdown-{{ cookbook.id }}')"
-                    class="bg-[#F5F2ED] border border-[#D4CEC4] text-[#2C2C2C] text-sm py-1 px-3 rounded inline-flex items-center gap-1 hover:bg-[#E8E4DC]">
-                Opties
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="bg-[#F5F2ED] border border-[#D4CEC4] text-[#2C2C2C] text-sm py-1 px-3 rounded inline-flex items-center gap-1 hover:bg-[#E8E4DC]">{{ _('Options') }}<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
@@ -56,14 +52,10 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
                  class="hidden absolute left-4 bottom-10 bg-[#FAF8F5] border border-[#E8E4DC] rounded z-10 w-52 text-sm">
 
                 <button onclick="startRename({{ cookbook.id }}, '{{ cookbook.name|e }}')"
-                        class="block w-full text-left px-4 py-2 hover:bg-[#F5F2ED]">
-                    Hernoemen
-                </button>
+                        class="block w-full text-left px-4 py-2 hover:bg-[#F5F2ED]">{{ _('Rename') }}</button>
 
                 <button onclick="startMigrate({{ cookbook.id }}, '{{ cookbook.name|e }}')"
-                        class="block w-full text-left px-4 py-2 hover:bg-[#F5F2ED]">
-                    Recepten verplaatsen
-                </button>
+                        class="block w-full text-left px-4 py-2 hover:bg-[#F5F2ED]">{{ _('Move recipes') }}</button>
 
                 <button onclick="toggleArchive({{ cookbook.id }}, {{ cookbook.is_archived|lower }})"
                         class="block w-full text-left px-4 py-2 hover:bg-[#F5F2ED]">
@@ -76,7 +68,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
                 {% if recipe_count == 0 %}
                 <button onclick="deleteCookbook({{ cookbook.id }}, '{{ cookbook.name|e }}')"
                         class="block w-full text-left px-4 py-2 hover:bg-red-50 text-red-600">
-                    Verwijderen
+                    {{ _('Delete') }}
                 </button>
                 {% else %}
                 <span class="block w-full text-left px-4 py-2 text-[#6B6B6B] cursor-not-allowed"
@@ -97,13 +89,13 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
     </div>
     {% else %}
     <div class="bg-[#F5F2ED] border-l-4 border-[#C9A882] text-[#8B4513] p-4 mb-4" role="alert">
-        <p>Nog geen kookboeken toegevoegd. Klik op "Nieuw Kookboek" om te beginnen.</p>
+        <p>{{ _('No cookbooks added yet. Click "New Cookbook" to get started.') }}</p>
     </div>
     {% endif %}
 
     {% if archived_cookbooks %}
     <div class="mt-10">
-        <h2 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">Gearchiveerde kookboeken</h2>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">{{ _('Archived cookbooks') }}</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {% for cookbook in archived_cookbooks %}
             {{ cookbook_card(cookbook) }}
@@ -116,7 +108,7 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
 <!-- Modal: recepten verplaatsen -->
 <dialog id="migrateModal" class="rounded-lg shadow-xl p-0 w-96">
     <div class="p-6">
-        <h3 class="font-bold text-lg mb-2">Recepten verplaatsen</h3>
+        <h3 class="font-bold text-lg mb-2">{{ _('Move recipes') }}</h3>
         <p class="text-sm text-[#6B6B6B] mb-4" id="migrateDescription"></p>
         <select id="migrateTarget"
                 class="w-full border border-[#D4CEC4] rounded px-3 py-2 text-sm mb-5">
@@ -124,12 +116,10 @@ dialog::backdrop { background: rgba(0,0,0,0.35); }
         <div class="flex justify-end gap-3">
             <button onclick="document.getElementById('migrateModal').close()"
                     class="px-4 py-2 text-sm rounded bg-[#F5F2ED] border border-[#D4CEC4] hover:bg-[#E8E4DC]">
-                Annuleren
+                {{ _('Cancel') }}
             </button>
             <button onclick="confirmMigrate()"
-                    class="px-4 py-2 text-sm rounded bg-[#2C2C2C] text-white hover:bg-[#1a1a1a]">
-                Verplaatsen
-            </button>
+                    class="px-4 py-2 text-sm rounded bg-[#2C2C2C] text-white hover:bg-[#1a1a1a]">{{ _('Move') }}</button>
         </div>
     </div>
 </dialog>
@@ -156,7 +146,7 @@ function closeDropdowns() {
 
 function startRename(id, currentName) {
     closeDropdowns();
-    const newName = prompt('Nieuwe naam voor het kookboek:', currentName);
+    const newName = prompt('{{ _("New name for the cookbook:") }}', currentName);
     if (!newName || newName.trim() === currentName) return;
 
     const formData = new FormData();
@@ -174,12 +164,12 @@ function startMigrate(id, name) {
     closeDropdowns();
     const others = ALL_COOKBOOKS.filter(c => c.id !== id);
     if (others.length === 0) {
-        alert('Er zijn geen andere kookboeken om recepten naar te verplaatsen.');
+        alert('{{ _("There are no other cookbooks to move recipes to.") }}');
         return;
     }
     _migrateSourceId = id;
     document.getElementById('migrateDescription').textContent =
-        `Verplaats alle recepten van "${name}" naar:`;
+        `{{ _("Move all recipes from") }} "${name}" {{ _("to:") }}`;
     const sel = document.getElementById('migrateTarget');
     sel.innerHTML = others.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     document.getElementById('migrateModal').showModal();
@@ -202,8 +192,8 @@ function confirmMigrate() {
 
 function toggleArchive(id, isArchived) {
     closeDropdowns();
-    const action = isArchived ? 'herstellen' : 'archiveren';
-    if (!confirm(`Wil je dit kookboek ${action}?`)) return;
+    const action = isArchived ? {{ _("restore")|tojson }} : {{ _("archive")|tojson }};
+    if (!confirm(`{{ _("Do you want to") }} ${action} {{ _("this cookbook?") }}`)) return;
 
     fetch(`/cookbook/${id}/archive`, { method: 'POST' })
         .then(r => r.json())
@@ -215,7 +205,7 @@ function toggleArchive(id, isArchived) {
 
 function deleteCookbook(id, name) {
     closeDropdowns();
-    if (!confirm(`Weet je zeker dat je "${name}" wilt verwijderen?`)) return;
+    if (!confirm(`{{ _("Are you sure you want to delete") }} "${name}"?`)) return;
 
     fetch(`/cookbook/${id}/delete`, { method: 'POST' })
         .then(r => r.json())

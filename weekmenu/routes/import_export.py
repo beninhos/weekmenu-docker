@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 import io
 import json
 import os
@@ -61,7 +62,7 @@ def import_data():
     try:
         file = request.files.get('file')
         if not file:
-            return jsonify({'status': 'error', 'message': 'Geen bestand geselecteerd'}), 400
+            return jsonify({'status': 'error', 'message': _('No file selected')}), 400
 
         data = json.loads(file.read().decode('utf-8'))
         counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0}
@@ -191,11 +192,11 @@ def import_zip():
     try:
         file = request.files.get('file')
         if not file:
-            return jsonify({'status': 'error', 'message': 'Geen bestand geselecteerd'}), 400
+            return jsonify({'status': 'error', 'message': _('No file selected')}), 400
 
         buf = io.BytesIO(file.read())
         if not zipfile.is_zipfile(buf):
-            return jsonify({'status': 'error', 'message': 'Ongeldig ZIP-bestand'}), 400
+            return jsonify({'status': 'error', 'message': _('Invalid ZIP file')}), 400
 
         buf.seek(0)
         counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0, 'images': 0}
@@ -204,7 +205,7 @@ def import_zip():
 
         with zipfile.ZipFile(buf, 'r') as zf:
             if 'weekmenu_export.json' not in zf.namelist():
-                return jsonify({'status': 'error', 'message': 'weekmenu_export.json niet gevonden in ZIP'}), 400
+                return jsonify({'status': 'error', 'message': _('weekmenu_export.json not found in ZIP')}), 400
 
             data = json.loads(zf.read('weekmenu_export.json').decode('utf-8'))
 

@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 import json
 import os
 import threading
@@ -46,11 +47,11 @@ def parse_batch_response(text):
     try:
         data = json.loads(_sanitize_json(text))
     except json.JSONDecodeError as e:
-        raise ValueError(f'Onleesbaar antwoord van Gemini: {str(e)[:100]}')
+        raise ValueError(f'Unreadable response from Gemini: {str(e)[:100]}')
     if isinstance(data, dict):
         data = [data]
     if not isinstance(data, list):
-        raise ValueError('Onverwacht antwoordformaat van Gemini')
+        raise ValueError(_('Unexpected response format from Gemini'))
 
     recipes = []
     for item in data:
@@ -97,7 +98,7 @@ def start_dump_job(files):
         saved.append(path)
 
     if not saved:
-        raise ValueError("Geen bruikbare bestanden (foto's of PDF) ontvangen")
+        raise ValueError(_("No usable files (photos or PDF) received"))
 
     job = DumpJob(id=job_id, status='processing')
     db.session.add(job)
@@ -131,7 +132,7 @@ def process_dump_job(app, job_id):
         except Exception as e:
             msg = str(e)
             if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
-                msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
+                msg = _('Gemini is briefly unavailable (rate limit). Try again in a minute.')
             job.status = 'error'
             job.error_message = msg[:500]
         db.session.commit()
@@ -143,7 +144,7 @@ def _process(job):
 
     api_key = _get_gemini_api_key()
     if not api_key:
-        raise ValueError('Gemini API key niet geconfigureerd')
+        raise ValueError(_('Gemini API key not configured'))
 
     job_dir = _job_dir(job.id)
     file_paths = sorted(

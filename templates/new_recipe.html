@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
-    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-6">Nieuw Recept</h2>
+    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-6">{{ _('New Recipe') }}</h2>
 
     <!-- Import opties: Foto / URL -->
     <div class="bg-[#FAF8F5] border border-[#E8E4DC] rounded-lg p-4 mb-6">
         <div class="flex gap-3 mb-4">
             <button type="button" onclick="showImportMode('photo')" id="tabPhoto"
                     class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#8B4513] bg-[#8B4513] text-white">
-                Foto van kookboek
+                {{ _('Cookbook photo') }}
             </button>
             <button type="button" onclick="showImportMode('url')" id="tabUrl"
                     class="flex-1 py-2 px-4 rounded-lg text-sm font-medium border-2 border-[#D4CEC4] text-[#6B6B6B] hover:border-[#8B4513]">
-                Importeer via URL
+                {{ _('Import from URL') }}
             </button>
         </div>
 
@@ -24,13 +24,13 @@
                 <button type="button" onclick="document.getElementById('photoInput').click()"
                         id="photoSelectBtn"
                         class="w-full py-3 border-2 border-dashed border-[#D4CEC4] rounded-lg text-[#6B6B6B] hover:border-[#8B4513] hover:text-[#8B4513] text-sm">
-                    Kies foto's (max 3)
+                    {{ _('Choose photos (max 3)') }}
                 </button>
             </div>
             <div id="photoPreview" class="hidden grid grid-cols-3 gap-2"></div>
             <button type="button" onclick="importFromPhoto()" id="photoImportBtn"
                     class="hidden w-full bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
-                Lees recept
+                {{ _('Read recipe') }}
             </button>
             <div id="photoStatus" class="hidden text-sm flex items-center gap-2">
                 <img id="photoBanana" src="/static/uploads/dancing-banana.gif" class="hidden h-10">
@@ -46,7 +46,7 @@
                 <button type="button" onclick="importFromUrl()"
                         id="importBtn"
                         class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
-                    Importeren
+                    {{ _('Import') }}
                 </button>
             </div>
             <div id="importStatus" class="hidden mt-2 text-sm"></div>
@@ -55,67 +55,67 @@
 
     <form method="POST" enctype="multipart/form-data" class="space-y-6">
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Naam</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Name') }}</label>
             <input type="text" name="name" id="fieldName" required
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Standaard aantal personen</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Default servings') }}</label>
             <input type="number" name="serves" id="fieldServes" min="1" max="12"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
-            <p class="text-[#6B6B6B] text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
+            <p class="text-[#6B6B6B] text-xs mt-1">{{ _('Default number of servings this recipe is intended for (optional)') }}</p>
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Kookboek</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Cookbook') }}</label>
             <select name="cookbook" id="fieldCookbook"
                     onchange="toggleNewCookbook(this)"
                     class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
-                <option value="">Selecteer een kookboek</option>
+                <option value="">{{ _('Select a cookbook') }}</option>
                 {% for cookbook in cookbooks %}
                 <option value="{{ cookbook.id }}">{{ cookbook.name }}</option>
                 {% endfor %}
-                <option value="__new__">+ Nieuw kookboek</option>
+                <option value="__new__">{{ _('+ New cookbook') }}</option>
             </select>
             <input type="text" name="new_cookbook_name" id="newCookbookInput"
-                   placeholder="Naam nieuw kookboek"
+                   placeholder="{{ _('New cookbook name') }}"
                    class="hidden mt-2 block w-full rounded-md border-[#D4CEC4] shadow-sm">
             <div id="cookbookSuggestion" class="hidden mt-2 p-3 bg-[#FDF8F3] border border-[#C9A882] rounded-lg text-sm flex items-center justify-between gap-2">
                 <span id="cookbookSuggestionText"></span>
                 <div class="flex gap-2 shrink-0">
                     <button type="button" onclick="acceptCookbookSuggestion()"
-                            class="px-3 py-1 bg-[#8B4513] text-white rounded text-xs font-medium">Ja</button>
+                            class="px-3 py-1 bg-[#8B4513] text-white rounded text-xs font-medium">{{ _('Yes') }}</button>
                     <button type="button" onclick="dismissCookbookSuggestion()"
-                            class="px-3 py-1 border border-[#D4CEC4] text-[#6B6B6B] rounded text-xs">Nee</button>
+                            class="px-3 py-1 border border-[#D4CEC4] text-[#6B6B6B] rounded text-xs">{{ _('No') }}</button>
                 </div>
             </div>
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Receptafbeelding</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Recipe image') }}</label>
             <input type="file" name="image" accept="image/*"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
             <input type="hidden" name="image_path_imported" id="fieldImagePath">
             <input type="hidden" name="draft_id" id="fieldDraftId" value="">
-            <img id="importedImagePreview" src="" alt="Geïmporteerde afbeelding"
+            <img id="importedImagePreview" src="" alt="{{ _('Imported image') }}"
                  class="hidden mt-2 rounded max-h-40 object-cover">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Pagina</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Page') }}</label>
             <input type="number" name="page"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">URL (online recept)</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('URL (online recipe)') }}</label>
             <input type="url" name="url" id="fieldUrl" placeholder="https://..."
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Bereidingswijze</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Method') }}</label>
             <div id="quill-editor" class="mt-1 bg-white rounded-md" style="min-height:160px;"></div>
             <textarea name="instructions" id="fieldInstructions" class="hidden"></textarea>
         </div>
@@ -128,11 +128,11 @@
         </datalist>
 
         <div>
-            <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">{{ _('Ingredients') }}</h3>
             <div id="ingredients" class="space-y-2">
                 <div class="grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row">
                     <div class="col-span-11 md:col-span-4 order-1 md:order-1 relative">
-                        <input type="text" name="ingredient[]" placeholder="Ingrediënt" autocomplete="off"
+                        <input type="text" name="ingredient[]" placeholder="{{ _('Ingredient') }}" autocomplete="off"
                                class="ingredient-ac block w-full rounded-md border-[#D4CEC4] shadow-sm">
                         <input type="hidden" name="ingredient_id[]" value="">
                         <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
@@ -142,11 +142,11 @@
                                 class="w-8 h-8 flex items-center justify-center rounded text-red-400 hover:text-red-600 text-xl font-bold">×</button>
                     </div>
                     <div class="col-span-6 md:col-span-2 order-3 md:order-2">
-                        <input type="number" step="0.1" inputmode="decimal" name="amount[]" placeholder="Aantal"
+                        <input type="number" step="0.1" inputmode="decimal" name="amount[]" placeholder="{{ _('Quantity') }}"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-6 md:col-span-2 order-4 md:order-3">
-                        <input type="text" name="unit[]" placeholder="Eenheid" list="unit-list"
+                        <input type="text" name="unit[]" placeholder="{{ _('Unit') }}" list="unit-list"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
                     <div class="col-span-12 md:col-span-3 order-5 md:order-4">
@@ -161,18 +161,18 @@
 
             <button type="button" onclick="addIngredientRow()"
                     class="mt-4 text-[#8B4513] hover:text-[#8B4513] text-sm">
-                + Ingrediënt toevoegen
+                {{ _('+ Add ingredient') }}
             </button>
         </div>
 
         <div class="flex justify-end space-x-4">
             <a href="{{ url_for('recipes.receptenplanner') }}"
                class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#F5F2ED]">
-                Annuleren
+                {{ _('Cancel') }}
             </a>
             <button type="submit"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
-                Opslaan
+                {{ _('Save') }}
             </button>
         </div>
     </form>
@@ -197,7 +197,7 @@ let pendingSuggestion = null;
 function showCookbookSuggestion(name) {
     pendingSuggestion = name;
     const banner = document.getElementById('cookbookSuggestion');
-    document.getElementById('cookbookSuggestionText').textContent = `Kookboek '${name}' aanmaken?`;
+    document.getElementById('cookbookSuggestionText').textContent = `{{ _("Create cookbook") }} '${name}'?`;
     banner.classList.remove('hidden');
 }
 
@@ -374,7 +374,7 @@ async function importFromPhoto() {
         if (!data.configured) {
             const btn = document.getElementById('photoSelectBtn');
             btn.disabled = true;
-            btn.textContent = 'Foto import niet beschikbaar (API key ontbreekt)';
+            btn.textContent = '{{ _("Photo import unavailable (API key missing)") }}';
             btn.className = 'w-full py-3 border-2 border-dashed border-[#E8E4DC] rounded-lg text-[#9CA3AF] cursor-not-allowed text-sm';
         }
     } catch (e) {}
@@ -390,7 +390,7 @@ async function importFromUrl() {
     btn.disabled = true;
     btn.textContent = 'Bezig...';
     statusDiv.className = 'mt-2 text-sm text-[#6B6B6B]';
-    statusDiv.textContent = 'Recept ophalen...';
+    statusDiv.textContent = '{{ _("Fetching recipe...") }}';
     statusDiv.classList.remove('hidden');
 
     try {
@@ -443,7 +443,7 @@ async function importFromUrl() {
         }
 
         statusDiv.className = 'mt-2 text-sm text-[#8B4513]';
-        statusDiv.textContent = `Geïmporteerd: ${data.ingredients.length} ingrediënten. Controleer de velden en sla op.`;
+        statusDiv.textContent = `{{ _("Imported:") }} ${data.ingredients.length} {{ _("ingredients. Check the fields and save.") }}`;
     } catch (error) {
         statusDiv.className = 'mt-2 text-sm text-red-600';
         statusDiv.textContent = 'Fout: ' + error.message;

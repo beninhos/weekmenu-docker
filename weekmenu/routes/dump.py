@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 import json
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
@@ -125,11 +126,11 @@ def dump_draft_crop(id):
         return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
     src_rel = d.original_image_path or d.image_path
     if not src_rel:
-        return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
+        return jsonify({'status': 'error', 'message': _('No image to crop')}), 400
     try:
         new_path = crop_image(src_rel, *coords)
     except FileNotFoundError:
-        return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
+        return jsonify({'status': 'error', 'message': _('Source image not found')}), 404
     except ValueError as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
     if not d.original_image_path:
