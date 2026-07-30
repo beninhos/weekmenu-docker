@@ -11,13 +11,13 @@
 <div class="mb-4">
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h1 class="page-title">Weekmenu</h1>
+            <h1 class="page-title">{{ _('Week menu') }}</h1>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
             <button onclick="clearWeek()"
                     class="btn-secondary inline-flex items-center gap-1.5 text-sm"
                     style="color: #b91c1c;">
-                &#10005; Week wissen
+                {{ _('&#10005; Clear week') }}
             </button>
         </div>
     </div>
@@ -27,21 +27,21 @@
 <div class="mb-4">
     <div class="flex items-center justify-center gap-1">
         <a href="{{ url_for('menu.week_menu', year=prev_year, week=prev_week) }}"
-           class="text-2xl px-3 py-1 rounded hover:bg-[#EDE9E1]" aria-label="Vorige week">‹</a>
+           class="text-2xl px-3 py-1 rounded hover:bg-[#EDE9E1]" aria-label="{{ _('Previous week') }}">‹</a>
         <div class="text-center px-1">
             <div class="text-xl font-bold leading-tight">Week {{ week }}</div>
             <div class="text-sm text-[#6B6B6B]">{{ week_range }}</div>
         </div>
         <a href="{{ url_for('menu.week_menu', year=next_year, week=next_week) }}"
-           class="text-2xl px-3 py-1 rounded hover:bg-[#EDE9E1]" aria-label="Volgende week">›</a>
+           class="text-2xl px-3 py-1 rounded hover:bg-[#EDE9E1]" aria-label="{{ _('Next week') }}">›</a>
     </div>
     {% if not is_current_week %}
     <div class="flex items-center justify-center gap-2 mt-2">
         <span class="text-xs bg-amber-100 text-amber-800 rounded-full px-3 py-1">
-            Je kijkt naar een andere week</span>
+            {{ _('You are viewing a different week') }}</span>
         <a href="{{ url_for('menu.week_menu', year=current_year, week=current_week) }}"
            class="text-xs border border-[#E8E4DC] rounded px-3 py-1 hover:bg-[#F5F2ED]">
-            Naar deze week</a>
+            {{ _('Go to this week') }}</a>
     </div>
     {% endif %}
 </div>
@@ -49,7 +49,7 @@
 <!-- Save-status toast -->
 <div id="saveStatus" class="hidden fixed top-4 right-4 px-4 py-2 rounded-lg shadow-lg text-sm z-50"
      style="background: var(--color-ink); color: var(--color-paper);">
-    Opgeslagen
+    {{ _('Saved') }}
 </div>
 
 <!-- Dag-kaarten grid -->
@@ -91,7 +91,7 @@
                        style="border: 1px solid var(--color-linen); background: white; color: var(--color-ink);"
                        data-day="{{ day_index }}"
                        data-meal="{{ meal_code }}"
-                       placeholder="Zoek recept…"
+                       placeholder="{{ _('Search recipe…') }}"
                        value="{% for item in menu_items %}{% if item.day_of_week == day_index and item.meal_type == meal_code %}{% for recipe in recipes %}{% if recipe.id == item.recipe_id %}{{ recipe.name }}{% endif %}{% endfor %}{% endif %}{% endfor %}"
                        autocomplete="off">
 
@@ -103,7 +103,7 @@
                            data-day="{{ day_index }}"
                            data-meal="{{ meal_code }}"
                            min="1" max="20">
-                    <span class="text-xs" style="color: var(--color-pencil);">pers.</span>
+                    <span class="text-xs" style="color: var(--color-pencil);">{{ _('ppl') }}</span>
                 </div>
 
                 {% for item in menu_items %}
@@ -135,23 +135,23 @@
 
 <!-- Quick Access sectie -->
 <div class="mt-8">
-    <h2 class="section-title mb-4">Snel plannen</h2>
+    <h2 class="section-title mb-4">{{ _('Quick plan') }}</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="card p-4">
             <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--color-ink);">
-                <span style="color: var(--color-sepia);">★</span> Favorieten
+                <span style="color: var(--color-sepia);">★</span> {{ _('Favourites') }}
             </h3>
             <div id="favorites-list" class="space-y-0.5"></div>
         </div>
         <div class="card p-4">
             <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--color-ink);">
-                <span style="color: var(--color-pencil);">🕒</span> Recent gebruikt
+                <span style="color: var(--color-pencil);">🕒</span> {{ _('Recently used') }}
             </h3>
             <div id="recent-list" class="space-y-0.5"></div>
         </div>
         <div class="card p-4">
             <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--color-ink);">
-                <span style="color: var(--color-pencil);">📊</span> Populair
+                <span style="color: var(--color-pencil);">📊</span> {{ _('Popular') }}
             </h3>
             <div id="popular-list" class="space-y-0.5"></div>
         </div>
@@ -162,8 +162,8 @@
 <div id="recipeModal" class="fixed inset-0 hidden z-50" style="background: rgba(44,44,44,0.5);">
     <div class="flex items-center justify-center min-h-screen p-4">
         <div class="rounded-xl p-6 max-w-md w-full shadow-2xl" style="background: white;">
-            <h3 class="text-base font-semibold mb-1" style="color: var(--color-ink);">Recept plannen</h3>
-            <p class="text-sm mb-5" style="color: var(--color-pencil);">Kies dag en maaltijd voor <strong id="selectedRecipe"></strong>:</p>
+            <h3 class="text-base font-semibold mb-1" style="color: var(--color-ink);">{{ _('Plan recipe') }}</h3>
+            <p class="text-sm mb-5" style="color: var(--color-pencil);">{{ _('Pick a day and meal for') }} <strong id="selectedRecipe"></strong>:</p>
 
             <div class="space-y-3">
                 {% for day_index, day_name in days %}
@@ -186,7 +186,7 @@
 
             <div class="flex justify-end mt-6">
                 <button id="cancelModal" class="btn-secondary px-4 py-2 text-sm">
-                    Annuleren
+                    {{ _('Cancel') }}
                 </button>
             </div>
         </div>
@@ -459,7 +459,7 @@ function displayRecipeList(containerId, recipeList, showCount) {
     if (!container) return;
 
     if (recipeList.length === 0) {
-        container.innerHTML = '<p class="text-xs py-1" style="color:var(--color-pencil)">Nog geen recepten</p>';
+        container.innerHTML = '<p class="text-xs py-1" style="color:var(--color-pencil)">{{ _("No recipes yet") }}</p>';
         return;
     }
 
@@ -521,7 +521,7 @@ document.querySelectorAll('.meal-select-btn').forEach(btn => {
 // ── Week wissen ────────────────────────────────────────────────────────────
 
 async function clearWeek() {
-    if (!confirm('Weet je zeker dat je het complete weekmenu wilt wissen? Dit verwijdert ook de boodschappenlijst.')) return;
+    if (!confirm('{{ _("Are you sure you want to clear the entire week menu? This also deletes the shopping list.") }}')) return;
     try {
         const response = await fetch('/clear_week_menu', {
             method: 'POST',
@@ -532,7 +532,7 @@ async function clearWeek() {
         if (data.status === 'success') location.reload();
         else alert('Fout: ' + (data.message || 'Onbekende fout'));
     } catch (error) {
-        alert('Fout bij wissen: ' + error.message);
+        alert('{{ _("Error while clearing: ") }}' + error.message);
     }
 }
 

@@ -3,12 +3,12 @@
 <div id="cropModal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
      onclick="if (event.target === this) closeCropModal()">
     <div class="bg-white rounded-lg p-4 max-w-[90vw] max-h-[90vh] flex flex-col gap-3">
-        <h3 class="font-bold">Afbeelding bijsnijden</h3>
+        <h3 class="font-bold">{{ _('Crop image') }}</h3>
         <div class="overflow-hidden max-h-[70vh]"><img id="cropImage" class="max-w-full block"></div>
         <p id="cropError" class="hidden text-sm text-red-600"></p>
         <div class="flex gap-2 justify-end">
-            <button onclick="closeCropModal()" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">Annuleren</button>
-            <button onclick="saveCropModal()" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">Opslaan</button>
+            <button onclick="closeCropModal()" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">{{ _('Cancel') }}</button>
+            <button onclick="saveCropModal()" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">{{ _('Save') }}</button>
         </div>
     </div>
 </div>
@@ -24,7 +24,7 @@ function openCropModal(srcUrl, saveUrl, onSaved) {
     if (_cropper) { _cropper.destroy(); _cropper = null; }
     img.onload = () => {
         if (typeof Cropper === 'undefined') {
-            showCropModalError('Bijsnijden niet beschikbaar (library niet geladen)');
+            showCropModalError('{{ _("Cropping unavailable (library not loaded)") }}');
             return;
         }
         _cropper = new Cropper(img, { viewMode: 1, autoCropArea: 0.8 });
@@ -60,13 +60,13 @@ async function saveCropModal() {
         });
         const data = await resp.json();
         if (!resp.ok || data.status !== 'success') {
-            showCropModalError(data.message || 'Bijsnijden mislukt');
+            showCropModalError(data.message || '{{ _("Crop failed") }}');
             return;
         }
         if (_cropOnSaved) _cropOnSaved(data.image_path);
         closeCropModal();
     } catch (err) {
-        showCropModalError('Bijsnijden mislukt: ' + err.message);
+        showCropModalError('{{ _("Crop failed: ") }}' + err.message);
     }
 }
 </script>

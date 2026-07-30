@@ -1,4 +1,5 @@
 """Gemini API integration: key lookup, HTML/JSON helpers, recipe extraction."""
+from flask_babel import gettext as _
 import hashlib
 import json
 import os
@@ -37,7 +38,7 @@ Regels:
 - "name" is de ingrediëntnaam zonder hoeveelheid of eenheid
 - "instructions" als enkele string met stappen gescheiden door newlines
 - "prep_time" in minuten (int of null)
-- Als er geen recept gevonden kan worden: {{"error": "Geen recept gevonden"}}
+- Als er geen recept gevonden kan worden: {{"error": _("No recipe found")}}
 """
 
 
@@ -230,8 +231,7 @@ def _try_ah_api_recipe(url):
     if not recipe or not (recipe.get('title') or recipe.get('ingredients')):
         current_app.logger.warning('AH-recept %s: geen bruikbaar recept via API (%s)', recipe_id, url)
         return {'status': 'error',
-                'message': 'Dit Albert Heijn-recept kon niet worden opgehaald. '
-                           'Controleer de URL of probeer het later opnieuw.'}, 400
+                'message': _('This Albert Heijn recipe could not be fetched. Check the URL or try again later.')}, 400
 
     data = _map_ah_recipe(url, recipe)
     current_app.logger.info('AH-recept %s opgehaald via API: %r (%d ingrediënten)',
@@ -246,7 +246,7 @@ def scrape_recipe_from_url(url):
 
     url = (url or '').strip()
     if not url:
-        return {'status': 'error', 'message': 'Geen URL opgegeven'}, 400
+        return {'status': 'error', 'message': _('No URL provided')}, 400
 
     # AH/Allerhande blokkeert HTML-scrapen (Akamai). Gebruik de GraphQL API.
     ah_result = _try_ah_api_recipe(url)
@@ -261,17 +261,17 @@ def scrape_recipe_from_url(url):
         msg = str(e)
         code = getattr(getattr(e, 'response', None), 'status_code', None)
         if 'timed out' in msg.lower() or 'timeout' in msg.lower():
-            return {'status': 'error', 'message': 'De pagina reageerde niet op tijd. Probeer het opnieuw.'}, 400
+            return {'status': 'error', 'message': _('The page did not respond in time. Please try again.')}, 400
         if code == 403:
-            return {'status': 'error', 'message': 'Deze website blokkeert automatisch ophalen (403). Probeer een andere site.'}, 400
+            return {'status': 'error', 'message': _('This website blocks automated fetching (403). Try another site.')}, 400
         if code == 404:
-            return {'status': 'error', 'message': 'Pagina niet gevonden (404). Controleer de URL.'}, 400
+            return {'status': 'error', 'message': _('Page not found (404). Check the URL.')}, 400
         if code:
-            return {'status': 'error', 'message': f'De pagina kon niet worden opgehaald (HTTP {code}).'}, 400
-        return {'status': 'error', 'message': 'De URL kon niet worden bereikt. Controleer de URL.'}, 400
+            return {'status': 'error', 'message': f'The page could not be fetched (HTTP {code}).'}, 400
+        return {'status': 'error', 'message': _('The URL could not be reached. Check the URL.')}, 400
 
     if _is_bot_challenge_page(html):
-        return {'status': 'error', 'message': 'Deze website blokkeert automatisch ophalen (bot-detectie). Plak het recept handmatig over.'}, 400
+        return {'status': 'error', 'message': _('This website blocks automated fetching (bot detection). Paste the recipe in manually.')}, 400
 
     try:
         scraper = scrape_html(html, org_url=url)
@@ -292,7 +292,7 @@ def _llm_fallback_from_html(url, html):
     """When the structured scraper fails, ask Gemini to parse the page text."""
     api_key = _get_gemini_api_key()
     if not api_key:
-        return {'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina. De site ondersteunt geen gestructureerde receptdata.'}, 400
+        return {'status': 'error', 'message': _('No recipe information found on this page. The site does not provide structured recipe data.')}, 400
 
     from google import genai as _genai
 
@@ -333,7 +333,7 @@ def _llm_fallback_from_html(url, html):
     except Exception as e:
         msg = str(e)
         if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
-            msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
+            msg = _('Gemini is briefly unavailable (rate limit). Try again in a minute.')
         else:
             msg = f'Fout bij verwerken: {msg[:100]}'
         return {'status': 'error', 'message': msg}, 400
@@ -420,10 +420,10 @@ def recipe_from_photos(photos):
 
     api_key = _get_gemini_api_key()
     if not api_key:
-        return {'status': 'error', 'message': 'Gemini API key niet geconfigureerd'}, 400
+        return {'status': 'error', 'message': _('Gemini API key not configured')}, 400
 
     if not photos or len(photos) == 0 or photos[0].filename == '':
-        return {'status': 'error', 'message': "Geen foto's geselecteerd"}, 400
+        return {'status': 'error', 'message': _("No photos selected")}, 400
 
     if len(photos) > 3:
         return {'status': 'error', 'message': "Maximaal 3 foto's toegestaan"}, 400
@@ -485,7 +485,7 @@ def recipe_from_photos(photos):
     except Exception as e:
         msg = str(e)
         if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
-            msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
+            msg = _('Gemini is briefly unavailable (rate limit). Try again in a minute.')
         else:
             msg = f'Fout bij verwerken: {msg[:100]}'
         return {'status': 'error', 'message': msg}, 400

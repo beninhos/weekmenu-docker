@@ -29,3 +29,5 @@ static/uploads/*.jpeg
 static/uploads/*.png
 static/uploads/*.gif
 static/uploads/*.webp
+# macOS
+.DS_Store

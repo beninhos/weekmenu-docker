@@ -1,14 +1,14 @@
 {# ── Verse ingrediënten ── #}
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-1"
-        style="font-family: var(--font-serif)">Ecobooster</h2>
-    <p class="text-sm text-[#6B6B6B] mb-5">Wat moet je opmaken? Vind recepten die jouw ingrediënten gebruiken.</p>
+        style="font-family: var(--font-serif)">{{ _('Ecobooster') }}</h2>
+    <p class="text-sm text-[#6B6B6B] mb-5">{{ _('What needs using up? Find recipes that use your ingredients.') }}</p>
 
     <div id="freshChips" class="flex flex-wrap gap-2 mb-3 min-h-[2rem]"></div>
 
     <div class="relative mb-4">
         <input type="text" id="freshInput" autocomplete="off"
-               placeholder="+ Ingrediënt toevoegen…"
+               placeholder="{{ _('+ Add ingredient…') }}"
                class="w-full rounded-md border border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
         <div id="freshDropdown"
              class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
@@ -16,17 +16,17 @@
 
     <button onclick="doMatch()"
             class="bg-[#2C2C2C] text-white px-5 py-2 rounded text-sm hover:bg-[#1a1a1a]">
-        Zoek recepten
+        {{ _('Search recipes') }}
     </button>
 </div>
 
 {# ── Resultaten ── #}
 <div id="results" class="space-y-2 hidden">
-    <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B]">Recepten</h3>
+    <h3 class="text-xs font-semibold uppercase tracking-wide text-[#6B6B6B]">{{ _('Recipes') }}</h3>
     <div id="resultList"></div>
 </div>
 <div id="noResults" class="hidden text-sm text-[#6B6B6B] text-center py-6">
-    Geen recepten gevonden met deze ingrediënten.
+    {{ _('No recipes found with these ingredients.') }}
 </div>
 
 <script>

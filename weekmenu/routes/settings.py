@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 import time
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
@@ -23,8 +24,12 @@ def settings_page():
         else:
             if setting:
                 db.session.delete(setting)
+        language = request.form.get('language', '').strip()
+        if language:
+            from weekmenu.i18n import set_stored_language
+            set_stored_language(language)
         db.session.commit()
-        flash('Instellingen opgeslagen')
+        flash(_('Settings saved'))
         return redirect(url_for('settings.settings_page'))
 
     stats = {
@@ -60,7 +65,7 @@ def gemini_key():
     data = request.get_json() or {}
     api_key = data.get('key', '').strip()
     if not api_key:
-        return jsonify({'status': 'error', 'message': 'Geen API key opgegeven'}), 400
+        return jsonify({'status': 'error', 'message': _('No API key provided')}), 400
 
     setting = Settings.query.filter_by(key='gemini_api_key').first()
     if setting:

@@ -1,4 +1,5 @@
 """Pantry CRUD — items marked as "altijd op voorraad", used by shopping-list filter and Ecobooster."""
+from flask_babel import gettext as _
 from weekmenu.extensions import db
 from weekmenu.models import PantryIngredient
 
@@ -16,7 +17,7 @@ def list_pantry():
 def add_to_pantry(ingredient_id):
     """Add an ingredient to the pantry. Returns (result_dict, status_code)."""
     if not ingredient_id:
-        return {'status': 'error', 'message': 'ingredient_id verplicht'}, 400
+        return {'status': 'error', 'message': _('ingredient_id required')}, 400
 
     existing = PantryIngredient.query.filter_by(ingredient_id=ingredient_id).first()
     if existing:

@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 import hashlib
 import io
 import os
@@ -31,7 +32,7 @@ def crop_image(src_rel, x, y, w, h):
         im = Image.open(src_abs)
         im.load()
     except Exception:
-        raise ValueError('Dit afbeeldingsformaat kan niet bijgesneden worden')
+        raise ValueError(_('This image format cannot be cropped'))
 
     width, height = im.size
     left = int(x * width)

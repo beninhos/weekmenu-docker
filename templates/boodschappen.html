@@ -3,21 +3,21 @@
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
     <div class="flex justify-between items-start mb-2 flex-wrap gap-3">
         <div>
-            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Boodschappen</h2>
-            <p class="text-sm text-[#6B6B6B]">Alles wat gepland en nog open staat</p>
+            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ _('Groceries') }}</h2>
+            <p class="text-sm text-[#6B6B6B]">{{ _('Everything planned and still outstanding') }}</p>
         </div>
         <div class="flex gap-2 flex-wrap justify-end">
             <button onclick="toggleExtraPicker()"
                     class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
-                + Recept
+                {{ _('+ Recipe') }}
             </button>
             <button onclick="toggleAddItemPicker()"
                     class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
-                + Los item
+                {{ _('+ Loose item') }}
             </button>
             <button onclick="checkAll()"
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
-                Alles afvinken
+                {{ _('Check all') }}
             </button>
             <button onclick="sendToAh()" id="sendAhBtn"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
@@ -28,7 +28,7 @@
 
     {% if quick_add %}
     <div class="flex flex-wrap gap-2 items-center text-sm mt-4 mb-2">
-        <span class="text-[#6B6B6B]">Losse recepten:</span>
+        <span class="text-[#6B6B6B]">{{ _('Loose recipes:') }}</span>
         {% for q in quick_add %}
         <span class="inline-flex items-center gap-1 border border-[#E8E4DC] rounded-full px-3 py-1">
             {{ q.recipe_name }} ({{ q.people_count }}p)
@@ -43,16 +43,16 @@
         <div class="flex flex-col md:flex-row gap-2 md:items-center">
             <div class="relative flex-grow">
                 <input type="text" id="extraRecipeInput" autocomplete="off"
-                       placeholder="Zoek recept..."
+                       placeholder="{{ _('Search recipe...') }}"
                        class="w-full rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
                 <div id="extraRecipeDropdown"
                      class="hidden absolute z-20 mt-1 w-full bg-white border border-[#E8E4DC] rounded-lg shadow-lg max-h-60 overflow-y-auto"></div>
             </div>
-            <input type="number" id="extraPeople" min="1" value="4" placeholder="Personen"
+            <input type="number" id="extraPeople" min="1" value="4" placeholder="{{ _('Servings') }}"
                    class="w-full md:w-28 rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
             <button onclick="addExtra()"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
-                Toevoegen
+                {{ _('Add') }}
             </button>
         </div>
     </div>
@@ -62,23 +62,23 @@
         <div class="flex flex-col md:flex-row gap-2 md:items-center">
             <div class="relative flex-grow">
                 <input type="text" id="addItemInput" autocomplete="off"
-                       placeholder="Zoek ingrediënt..."
+                       placeholder="{{ _('Search ingredient...') }}"
                        class="w-full rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
                 <div id="addItemDropdown" class="hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
             </div>
-            <input type="number" id="addItemAmount" min="0.1" step="any" value="1" placeholder="Aantal"
+            <input type="number" id="addItemAmount" min="0.1" step="any" value="1" placeholder="{{ _('Quantity') }}"
                    class="w-full md:w-24 rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
-            <input type="text" id="addItemUnit" value="stuks" placeholder="Eenheid"
+            <input type="text" id="addItemUnit" value="stuks" placeholder="{{ _('Unit') }}"
                    class="w-full md:w-24 rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2 focus:outline-none focus:border-[#C9A882]">
             <button onclick="addLosItem()"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
-                Toevoegen
+                {{ _('Add') }}
             </button>
         </div>
     </div>
 
     {% for group in grouped_open %}
-        <h3 class="shopping-category text-sm font-semibold text-[#6B6B6B] uppercase tracking-wide mt-6 mb-1">{{ group.category }}</h3>
+        <h3 class="shopping-category text-sm font-semibold text-[#6B6B6B] uppercase tracking-wide mt-6 mb-1">{{ group.category|category_label }}</h3>
         <div class="shopping-group">
             {% for item in group.producten %}
             <div class="shopping-item"
@@ -136,7 +136,7 @@
                     </div>
                     {% else %}
                     <div class="list-right flex items-center gap-3 w-full md:flex-grow">
-                        <span class="text-sm text-[#9CA3AF]">Geen AH-koppeling</span>
+                        <span class="text-sm text-[#9CA3AF]">{{ _('No AH link') }}</span>
                         <button onclick="excludeItem({{ item.ingredient_id }})" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-auto" style="font-size:0.75rem">✕</button>
                     </div>
                     {% endif %}
@@ -148,7 +148,7 @@
     {% endfor %}
 
     {% if not grouped_open %}
-    <p class="text-sm text-[#6B6B6B] py-6 text-center">Geen open items — alles is al afgevinkt.</p>
+    <p class="text-sm text-[#6B6B6B] py-6 text-center">{{ _('No outstanding items — everything is checked off.') }}</p>
     {% endif %}
 
     {# ── Afgevinkt ── #}
@@ -166,7 +166,7 @@
                     {{ item.amount_display }}{% if item.unit %} {{ item.unit }}{% endif %} {{ item.name }}
                 </span>
                 {% if item.via_ah %}
-                <span class="bg-green-100 text-green-800 rounded-full px-2 text-xs">via AH</span>
+                <span class="bg-green-100 text-green-800 rounded-full px-2 text-xs">{{ _('via AH') }}</span>
                 {% endif %}
             </div>
             {% endfor %}
@@ -187,7 +187,7 @@ const WEEKS_BY_ING = {{ weeks_by_ingredient_json | safe }};
         const needle = q.toLowerCase();
         const hits = RECIPES.filter(r => r.name.toLowerCase().includes(needle)).slice(0, 12);
         if (!hits.length) {
-            dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">Geen recept gevonden</div>';
+            dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">{{ _("No recipe found") }}</div>';
         } else {
             dropdown.innerHTML = hits.map(r => `
                 <div class="extra-recipe-option px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm text-[#2C2C2C]"
@@ -227,7 +227,7 @@ async function checkItem(ingredientId, checked) {
 }
 
 async function checkAll() {
-    if (!confirm('Alle openstaande items afvinken?')) return;
+    if (!confirm('{{ _("Check off all outstanding items?") }}')) return;
     await fetch('/api/boodschappen/check-all', { method: 'POST' });
     location.reload();
 }
@@ -252,7 +252,7 @@ async function addExtra() {
         const match = RECIPES.find(r => r.name.toLowerCase() === input.value.trim().toLowerCase());
         if (match) recipeId = match.id;
     }
-    if (!recipeId) { alert('Kies een recept uit de suggesties'); return; }
+    if (!recipeId) { alert('{{ _("Pick a recipe from the suggestions") }}'); return; }
     const people = parseInt(document.getElementById('extraPeople').value) || 4;
     const resp = await fetch('/api/boodschappen/extra', {
         method: 'POST',
@@ -318,7 +318,7 @@ function changeQty(btn, delta) {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ qty: next }),
-    }).catch(e => console.warn('Qty opslaan mislukt:', e));
+    }).catch(e => console.warn('{{ _("Saving quantity failed:") }}', e));
 }
 
 // ── (+) Los item toevoegen (aan de huidige ISO-week) ─────────────────────
@@ -359,15 +359,15 @@ function changeQty(btn, delta) {
             const resp = await fetch('/api/ingredients/search?q=' + encodeURIComponent(q));
             const results = await resp.json();
             if (!results.length) {
-                dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">Geen ingrediënt gevonden</div>';
+                dropdown.innerHTML = '<div class="px-3 py-2 text-xs text-[#6B6B6B]">{{ _("No ingredient found") }}</div>';
                 dropdown.classList.remove('hidden');
                 return;
             }
             dropdown.innerHTML = results.map(r => `
                 <div class="add-item-option flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-[#FAF8F5] text-sm"
-                     data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category)}">
+                     data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category_label || r.category)}">
                     <span class="text-[#2C2C2C]">${esc(r.name)}</span>
-                    <span class="text-xs text-[#6B6B6B]">${esc(r.category)}${r.has_ah ? ' · AH' : ''}</span>
+                    <span class="text-xs text-[#6B6B6B]">${esc(r.category_label || r.category)}${r.has_ah ? ' · AH' : ''}</span>
                 </div>
             `).join('');
             dropdown.querySelectorAll('.add-item-option').forEach(opt => {

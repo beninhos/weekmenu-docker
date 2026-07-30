@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="mb-6">
-    <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-4">Nieuw Kookboek</h1>
+    <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-4">{{ _('New Cookbook') }}</h1>
     
     {% with messages = get_flashed_messages() %}
     {% if messages %}
@@ -17,38 +17,34 @@
     <form method="POST" action="{{ url_for('recipes.new_cookbook') }}" enctype="multipart/form-data" class="bg-[#F5F2ED] border border-[#E8E4DC] rounded px-8 pt-6 pb-8 mb-4">
         <div class="mb-4">
             <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="name">
-                Naam
+                {{ _('Name') }}
             </label>
             <input type="text" id="name" name="name" required
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-[#2C2C2C] leading-tight focus:outline-none focus:shadow-outline">
         </div>
         
         <div class="mb-4">
-            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="abbreviation">
-                Afkorting (voor weekmenu)
-            </label>
-            <input type="text" id="abbreviation" name="abbreviation" maxlength="10" placeholder="bijv. SWJ"
+            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="abbreviation">{{ _('Abbreviation (for week menu)') }}</label>
+            <input type="text" id="abbreviation" name="abbreviation" maxlength="10" placeholder="{{ _('e.g. SWJ') }}"
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-[#2C2C2C] leading-tight focus:outline-none focus:shadow-outline">
-            <p class="text-[#6B6B6B] text-xs mt-1">Kort (max 10 tekens) voor in weekmenu. Wordt automatisch aangemaakt als leeg gelaten.</p>
+            <p class="text-[#6B6B6B] text-xs mt-1">{{ _('Short (max 10 characters) for the week menu. Generated automatically if left empty.') }}</p>
         </div>
         
         <div class="mb-6">
-            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="image">
-                Kookboek Afbeelding
-            </label>
+            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1" for="image">{{ _('Cookbook Image') }}</label>
             <input type="file" id="image" name="image" accept="image/*"
                    class="shadow appearance-none border rounded w-full py-2 px-3 text-[#2C2C2C] leading-tight focus:outline-none focus:shadow-outline">
-            <p class="text-[#6B6B6B] text-xs mt-1">Kies een afbeelding voor de voorkant van het kookboek (optioneel)</p>
+            <p class="text-[#6B6B6B] text-xs mt-1">{{ _('Choose an image for the cookbook cover (optional)') }}</p>
         </div>
         
         <div class="flex items-center justify-between">
             <button type="submit" 
                     class="bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-                Opslaan
+                {{ _('Save') }}
             </button>
             <a href="{{ url_for('recipes.list_cookbooks') }}" 
                class="border border-[#D4CEC4] text-[#2C2C2C] font-medium py-2 px-4 rounded hover:bg-[#F5F2ED]">
-                Annuleren
+                {{ _('Cancel') }}
             </a>
         </div>
     </form>

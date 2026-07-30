@@ -1,31 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="max-w-3xl mx-auto space-y-6">
-    <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten-dump</h1>
-    <p class="text-sm text-[#6B6B6B]">Gooi hier foto's van kookboekpagina's of een PDF in.
-       De recepten worden automatisch herkend en verschijnen hieronder ter controle.</p>
+    <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ _('Recipe dump') }}</h1>
+    <p class="text-sm text-[#6B6B6B]">{{ _('Drop photos of cookbook pages or a PDF here. The recipes are recognised automatically and appear below for review.') }}</p>
 
     <!-- Dropzone -->
     <div id="dropzone"
          class="border-2 border-dashed border-[#E8E4DC] rounded-lg p-8 text-center cursor-pointer hover:border-[#8B4513] transition-colors">
         <input type="file" id="fileInput" class="hidden" multiple
                accept="image/*,application/pdf" onchange="startUpload(this.files)">
-        <p class="font-medium">Sleep foto's of een PDF hierheen</p>
-        <p class="text-sm text-[#6B6B6B] mt-1">of klik om te kiezen</p>
+        <p class="font-medium">{{ _('Drag photos or a PDF here') }}</p>
+        <p class="text-sm text-[#6B6B6B] mt-1">{{ _('or click to choose') }}</p>
     </div>
 
     <!-- Job-status -->
     <div id="jobStatus" class="hidden text-sm flex items-center gap-2">
         <img id="jobBanana" src="{{ url_for('static', filename='uploads/dancing-banana.gif') }}" class="h-10 hidden">
         <span id="jobStatusText"></span>
-        <button id="retryBtn" class="hidden underline text-[#8B4513]" onclick="retryJob()">Opnieuw proberen</button>
+        <button id="retryBtn" class="hidden underline text-[#8B4513]" onclick="retryJob()">{{ _('Try again') }}</button>
     </div>
 
     <!-- Kookboek-keuze voor de hele batch -->
     <div class="flex items-center gap-3">
-        <label class="text-sm font-medium">Kookboek voor opgeslagen recepten:</label>
+        <label class="text-sm font-medium">{{ _('Cookbook for saved recipes:') }}</label>
         <select id="cookbookSelect" class="border border-[#E8E4DC] rounded px-2 py-1 text-sm">
-            <option value="">— Geen —</option>
+            <option value="">{{ _('— None —') }}</option>
             {% for cb in cookbooks %}
             <option value="{{ cb.id }}">{{ cb.name }}</option>
             {% endfor %}
@@ -73,7 +72,7 @@ async function startUpload(files) {
         const data = await resp.json();
         if (data.status !== 'success') { setJobError(data.message); return; }
         activeJobId = data.job_id;
-        setJobStatus('Recepten worden herkend...', true);
+        setJobStatus('{{ _("Recognising recipes...") }}', true);
         pollTimer = setInterval(pollJob, 2500);
     } catch (err) {
         setJobError(err.message);
@@ -84,14 +83,14 @@ async function pollJob() {
     const resp = await fetch(`/dump/status/${activeJobId}`);
     if (!resp.ok) {
         clearInterval(pollTimer);
-        setJobError('Job niet gevonden');
+        setJobError('{{ _("Job not found") }}');
         return;
     }
     const data = await resp.json();
     if (data.status === 'processing') return;
     clearInterval(pollTimer);
     if (data.status === 'error') { setJobError(data.error_message); return; }
-    setJobStatus(`Klaar: ${data.drafts.length} recept(en) herkend.`, false);
+    setJobStatus(`{{ _("Done:") }} ${data.drafts.length} {{ _("recipe(s) recognised.") }}`, false);
     data.drafts.forEach(renderCard);
 }
 
@@ -165,7 +164,7 @@ initialDrafts.forEach(renderCard);
 initialJobs.forEach(j => {
     activeJobId = j.id;
     if (j.status === 'processing') {
-        setJobStatus('Recepten worden herkend...', true);
+        setJobStatus('{{ _("Recognising recipes...") }}', true);
         pollTimer = setInterval(pollJob, 2500);
     } else if (j.status === 'error') {
         setJobError(j.error_message);

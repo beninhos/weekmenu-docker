@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 import json as _json
 import os
 import time
@@ -23,7 +24,7 @@ def ah_connect():
     raw = (request.json or {}).get('code', '').strip()
     code = _ah_extract_code(raw)
     if not code:
-        return jsonify({'status': 'error', 'message': 'Geen code opgegeven'}), 400
+        return jsonify({'status': 'error', 'message': _('No code provided')}), 400
     try:
         resp = _req.post(
             _AH_TOKEN_URL,
@@ -39,7 +40,7 @@ def ah_connect():
         _ah_setting('ah_token_expires', str(expires_at))
         return jsonify({'status': 'ok', 'expires_at': expires_at})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Koppelen mislukt: {e}'}), 400
+        return jsonify({'status': 'error', 'message': f'Linking failed: {e}'}), 400
 
 
 @bp.route('/api/ah/status')
@@ -102,7 +103,7 @@ def ah_login_password():
     password = data.get('password', '').strip()
     capsolver_key = data.get('capsolver_key', '').strip()
     if not email or not password:
-        return jsonify({'status': 'error', 'message': 'E-mail en wachtwoord zijn verplicht'}), 400
+        return jsonify({'status': 'error', 'message': _('Email and password are required')}), 400
     if capsolver_key:
         _ah_setting('capsolver_key', capsolver_key)
     try:
@@ -121,7 +122,7 @@ def ah_verify():
     from weekmenu.constants import _AH_GRAPHQL_URL
     token = ah_get_access_token()
     if not token:
-        return jsonify({'ok': False, 'reason': 'Geen token opgeslagen'})
+        return jsonify({'ok': False, 'reason': _('No token stored')})
     # AH heeft member-info verplaatst van de REST-route
     # (mobile-services/v1/member/profile → 404) naar GraphQL.
     query = (
@@ -143,7 +144,7 @@ def ah_verify():
             return jsonify({'ok': False, 'reason': msg})
         member = (body.get('data') or {}).get('member') or {}
         if not member.get('emailAddress'):
-            return jsonify({'ok': False, 'reason': 'Niet ingelogd (anoniem token)'})
+            return jsonify({'ok': False, 'reason': _('Not logged in (anonymous token)')})
         name = (member.get('name') or {}).get('first') or ''
         return jsonify({'ok': True, 'name': name})
     except Exception as e:
@@ -189,7 +190,7 @@ def ah_order_detail(order_id):
     from weekmenu.services.shopping import _build_shopping_dict
     order = ah_get_order(order_id)
     if order is None:
-        return jsonify({'error': 'Order niet bereikbaar'}), 502
+        return jsonify({'error': _('Order unreachable')}), 502
 
     needed, unlinked = [], []
     week = request.args.get('week', type=int)
@@ -233,11 +234,11 @@ def ah_order_apply(order_id):
     from weekmenu.services.ah import ah_add_to_open_order, ah_get_order
     if not _AH_ORDER_WRITE_ENABLED:
         return jsonify({'status': 'error',
-                        'message': 'Bewerken van bestellingen staat uit.'}), 403
+                        'message': _('Editing orders is disabled.')}), 403
     data = request.get_json(force=True) or {}
     items = data.get('items', [])
     if not items:
-        return jsonify({'status': 'error', 'message': 'Geen wijzigingen opgegeven'}), 400
+        return jsonify({'status': 'error', 'message': _('No changes provided')}), 400
     try:
         ah_add_to_open_order(order_id, items)
     except Exception as e:
@@ -279,10 +280,10 @@ def ah_link_ingredient(ingredient_id):
 def ah_refresh_ingredient(ingredient_id):
     ing = Ingredient.query.get_or_404(ingredient_id)
     if not ing.ah_product_id:
-        return jsonify({'status': 'error', 'message': 'Geen product gekoppeld'}), 400
+        return jsonify({'status': 'error', 'message': _('No product linked')}), 400
     products = ah_search_products(ing.name, size=1)
     if not products:
-        return jsonify({'status': 'error', 'message': 'Geen resultaten'}), 404
+        return jsonify({'status': 'error', 'message': _('No results')}), 404
     p = products[0]
     ing.ah_product_name = p['title']
     ing.ah_product_size = p['size']

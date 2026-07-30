@@ -6,7 +6,7 @@
  *   - DOMPurify (for sanitizing instructions HTML)
  *
  * Optional page-level integration:
- *   - window.openPlanPopup      → if undefined, "Plan dit recept" button is hidden
+ *   - window.openPlanPopup      → if undefined, the "Plan this recipe" button is hidden
  *   - window.onRecipeFavoriteToggled(id, isFavorite) → called after a successful toggle
  *   - window.onRecipeDeleted(id)                    → called after a successful delete
  *   - window.showToast(msg)                         → optional, used for delete-confirm feedback

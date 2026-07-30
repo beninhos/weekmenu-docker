@@ -1,61 +1,61 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
-    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-6">Recept Bewerken</h2>
+    <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-6">{{ _('Edit Recipe') }}</h2>
     
     <form method="POST" enctype="multipart/form-data" class="space-y-6">
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Naam</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Name') }}</label>
             <input type="text" name="name" required value="{{ recipe.name }}"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Standaard aantal personen</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Default servings') }}</label>
             <input type="number" name="serves" value="{{ recipe.serves or '' }}" min="1" max="12"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
-            <p class="text-[#6B6B6B] text-xs mt-1">Standaard aantal personen waarvoor dit recept is bedoeld (optioneel)</p>
+            <p class="text-[#6B6B6B] text-xs mt-1">{{ _('Default number of servings this recipe is intended for (optional)') }}</p>
         </div>
         
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Kookboek</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Cookbook') }}</label>
             <select name="cookbook" id="fieldCookbook"
                     onchange="toggleNewCookbook(this)"
                     class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
-                <option value="">Selecteer een kookboek</option>
+                <option value="">{{ _('Select a cookbook') }}</option>
                 {% for cookbook in cookbooks %}
                 <option value="{{ cookbook.id }}"
                         {{ 'selected' if cookbook.id == recipe.cookbook_id }}>
                     {{ cookbook.name }}
                 </option>
                 {% endfor %}
-                <option value="__new__">+ Nieuw kookboek</option>
+                <option value="__new__">{{ _('+ New cookbook') }}</option>
             </select>
             <input type="text" name="new_cookbook_name" id="newCookbookInput"
-                   placeholder="Naam nieuw kookboek"
+                   placeholder="{{ _('New cookbook name') }}"
                    class="hidden mt-2 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
         
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Pagina</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Page') }}</label>
             <input type="number" name="page" value="{{ recipe.page or '' }}"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">URL (online recept)</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('URL (online recipe)') }}</label>
             <input type="url" name="url" value="{{ recipe.url or '' }}" placeholder="https://..."
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Bereidingswijze</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Method') }}</label>
             <div id="quill-editor" class="mt-1 bg-white rounded-md" style="min-height:160px;"></div>
             <textarea name="instructions" id="fieldInstructions" class="hidden">{{ recipe.instructions or '' }}</textarea>
         </div>
 
         <div>
-            <label class="block text-sm font-semibold text-[#2C2C2C]">Receptafbeelding</label>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">{{ _('Recipe image') }}</label>
             {% if recipe.image_path %}
             <div class="mb-2">
                 <img id="recipeImagePreview"
@@ -67,7 +67,7 @@
                     onclick="openCropModal('{{ url_for('static', filename=(recipe.original_image_path or recipe.image_path).replace('static/', '')) }}',
                                            '/recipe/{{ recipe.id }}/crop',
                                            (p) => { const img = document.getElementById('recipeImagePreview'); if (img) img.src = '/' + p + '?t=' + Date.now(); })"
-                    class="mt-1 px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✂️ Bijsnijden</button>
+                    class="mt-1 px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">{{ _('✂️ Crop') }}</button>
             {% endif %}
             <input type="file" name="image" accept="image/*"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
@@ -81,7 +81,7 @@
         </datalist>
 
         <div>
-            <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h3>
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">{{ _('Ingredients') }}</h3>
             <div id="ingredients" class="space-y-2">
                 {% for ri in recipe.ingredients %}
                 <div class="grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row">
@@ -92,7 +92,7 @@
                         <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
                     </div>
                     <div class="col-span-1 order-2 md:order-5 flex items-center justify-center"
-                         title="Altijd in huis — wijzigt de voorraadkast voor de hele app">
+                         title="{{ _('Always in stock — changes the pantry for the whole app') }}">
                         <input type="checkbox" name="pantry[]" value="{{ ri.ingredient.id }}"
                                class="w-4 h-4 cursor-pointer rounded border-[#D4CEC4]"
                                {{ 'checked' if ri.ingredient_id in pantry_ids }}>
@@ -124,18 +124,18 @@
 
             <button type="button" onclick="addIngredientRow('', '', '', '', '', '', true)"
                     class="mt-4 text-[#8B4513] hover:text-[#8B4513] text-sm">
-                + Ingrediënt toevoegen
+                {{ _('+ Add ingredient') }}
             </button>
         </div>
         
         <div class="flex justify-end space-x-4">
             <a href="{{ url_for('recipes.receptenplanner') }}"
                class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#F5F2ED]">
-                Annuleren
+                {{ _('Cancel') }}
             </a>
             <button type="submit"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C]">
-                Opslaan
+                {{ _('Save') }}
             </button>
         </div>
     </form>

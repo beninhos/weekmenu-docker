@@ -1,3 +1,5 @@
+from flask_babel import gettext as _
+from weekmenu.i18n import category_label
 import hashlib
 import json
 import os
@@ -114,7 +116,7 @@ def new_cookbook():
 
         existing_cookbook = Cookbook.query.filter_by(name=cookbook_name).first()
         if existing_cookbook:
-            flash('Dit kookboek bestaat al')
+            flash(_('This cookbook already exists'))
             return redirect(url_for('recipes.new_cookbook'))
 
         if not abbreviation:
@@ -177,9 +179,9 @@ def rename_cookbook(id):
     cookbook = Cookbook.query.get_or_404(id)
     new_name = request.form.get('name', '').strip()
     if not new_name:
-        return jsonify({'status': 'error', 'message': 'Naam mag niet leeg zijn'}), 400
+        return jsonify({'status': 'error', 'message': _('Name may not be empty')}), 400
     if Cookbook.query.filter(Cookbook.name == new_name, Cookbook.id != id).first():
-        return jsonify({'status': 'error', 'message': 'Een kookboek met deze naam bestaat al'}), 400
+        return jsonify({'status': 'error', 'message': _('A cookbook with this name already exists')}), 400
     cookbook.name = new_name
     db.session.commit()
     return jsonify({'status': 'success', 'name': cookbook.name})
@@ -191,11 +193,11 @@ def migrate_cookbook(id):
     data = request.get_json()
     target_id = data.get('target_cookbook_id')
     if not target_id:
-        return jsonify({'status': 'error', 'message': 'Geen doelkookboek opgegeven'}), 400
+        return jsonify({'status': 'error', 'message': _('No target cookbook provided')}), 400
     target = Cookbook.query.get_or_404(int(target_id))
     Recipe.query.filter_by(cookbook_id=id).update({'cookbook_id': target.id})
     db.session.commit()
-    return jsonify({'status': 'success', 'message': f'Recepten verplaatst naar {target.name}'})
+    return jsonify({'status': 'success', 'message': f'Recipes moved to {target.name}'})
 
 
 @bp.route('/cookbook/<int:id>/archive', methods=['POST'])
@@ -210,7 +212,7 @@ def archive_cookbook(id):
 def delete_cookbook(id):
     cookbook = Cookbook.query.get_or_404(id)
     if cookbook.recipes:
-        return jsonify({'status': 'error', 'message': 'Kookboek heeft nog recepten. Verwijder of verplaats ze eerst.'}), 400
+        return jsonify({'status': 'error', 'message': _('Cookbook still has recipes. Delete or move them first.')}), 400
     if cookbook.image_path:
         try:
             os.remove(os.path.join(current_app.static_folder, 'uploads', os.path.basename(cookbook.image_path)))
@@ -467,11 +469,11 @@ def recipe_crop(id):
         return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
     src_rel = recipe.original_image_path or recipe.image_path
     if not src_rel:
-        return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
+        return jsonify({'status': 'error', 'message': _('No image to crop')}), 400
     try:
         new_path = crop_image(src_rel, *coords)
     except FileNotFoundError:
-        return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
+        return jsonify({'status': 'error', 'message': _('Source image not found')}), 404
     except ValueError as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
     if not recipe.original_image_path:
@@ -506,6 +508,7 @@ def ingredient_search():
         'id': ing.id,
         'name': ing.display,
         'category': ing.category,
+        'category_label': category_label(ing.category),
         'has_ah': bool(ing.ah_product_id),
         'preferred_unit': ing.preferred_unit,
     } for ing in results[:15]])
@@ -518,7 +521,7 @@ def create_ingredient():
     category = data.get('category', 'Overig')
 
     if not raw_name:
-        return jsonify({'status': 'error', 'message': 'Naam is verplicht'}), 400
+        return jsonify({'status': 'error', 'message': _('Name is required')}), 400
 
     canonical = _normalize_ingredient(raw_name.lower().strip())
 
@@ -599,7 +602,7 @@ def scrape_recipe():
 @bp.route('/recipe/from-photo', methods=['POST'])
 def recipe_from_photo():
     if 'photos' not in request.files:
-        return jsonify({'status': 'error', 'message': "Geen foto's ontvangen"}), 400
+        return jsonify({'status': 'error', 'message': _("No photos received")}), 400
     payload, status = recipe_from_photos(request.files.getlist('photos'))
     return jsonify(payload), status
 

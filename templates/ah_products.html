@@ -17,15 +17,15 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div>
-            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">AH Producten</h2>
-            <p class="text-sm text-[#6B6B6B] mt-1">Koppel per ingrediënt je voorkeurs-AH-product. Eenmalig instellen, altijd gebruikt bij "Stuur naar AH".</p>
+            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">{{ _('AH Products') }}</h2>
+            <p class="text-sm text-[#6B6B6B] mt-1">{{ _('Link your preferred AH product per ingredient. Set once, always used by "Send to AH".') }}</p>
         </div>
-        <a href="{{ url_for('settings.settings_page') }}" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C]">← Instellingen</a>
+        <a href="{{ url_for('settings.settings_page') }}" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C]">{{ _('← Settings') }}</a>
     </div>
 
     <!-- Zoekfilter -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] px-4 py-3">
-        <input type="text" id="filterInput" placeholder="Filter ingrediënten..."
+        <input type="text" id="filterInput" placeholder="{{ _('Filter ingredients...') }}"
                oninput="filterIngredients(this.value)"
                class="w-full text-sm border-[#D4CEC4] rounded-md shadow-sm">
     </div>
@@ -39,7 +39,7 @@
         </span>
         <span>·</span>
         <span id="statUnlinked" class="text-[#8B4513]">
-            {{ ingredients|rejectattr('ah_product_id')|list|length }} nog te koppelen
+            {{ ingredients|rejectattr('ah_product_id')|list|length }} {{ _("still to link") }}
         </span>
     </div>
 
@@ -54,12 +54,12 @@
             <div class="px-4 py-3 border-b border-[#E8E4DC] flex items-center justify-between">
                 <div>
                     <span class="font-semibold text-[#2C2C2C]">{{ ing.display }}</span>
-                    <span class="ml-2 text-xs text-[#6B6B6B]">{{ ing.category }}</span>
+                    <span class="ml-2 text-xs text-[#6B6B6B]">{{ ing.category|category_label }}</span>
                 </div>
                 {% if ing.ah_product_id %}
-                <span class="text-xs text-[#8B4513] font-medium bg-[#FAF8F5] px-2 py-0.5 rounded-full">✓ gekoppeld</span>
+                <span class="text-xs text-[#8B4513] font-medium bg-[#FAF8F5] px-2 py-0.5 rounded-full">{{ _('✓ linked') }}</span>
                 {% else %}
-                <span class="text-xs text-[#6B6B6B] bg-[#F5F2ED] px-2 py-0.5 rounded-full">niet gekoppeld</span>
+                <span class="text-xs text-[#6B6B6B] bg-[#F5F2ED] px-2 py-0.5 rounded-full">{{ _('not linked') }}</span>
                 {% endif %}
             </div>
 
@@ -97,13 +97,13 @@
                 </div>
                 <div class="flex flex-col gap-2 flex-shrink-0">
                     <button onclick="refreshIngredient({{ ing.id }}, event)"
-                            title="Ververs productinfo"
+                            title="{{ _('Refresh product info') }}"
                             class="text-xs text-[#6B6B6B] hover:text-[#8B4513] border border-[#E8E4DC] px-2 py-1 rounded hover:border-[#D4CEC4] transition-colors">
                         🔄
                     </button>
                     <button onclick="openSearch({{ ing.id }})"
                             class="text-xs text-[#8B4513] hover:text-[#8B4513] border border-[#E8E4DC] px-2 py-1 rounded hover:bg-[#FAF8F5] transition-colors">
-                        Wijzig
+                        {{ _('Change') }}
                     </button>
                 </div>
             </div>
@@ -111,16 +111,16 @@
             <div class="border-t border-[#E8E4DC] px-4 py-3">
                 <button onclick="togglePkg({{ ing.id }})" id="pkgToggle-{{ ing.id }}"
                         class="text-xs text-[#6B6B6B] hover:text-[#8B4513]">
-                    ▸ Verpakking instellen
+                    {{ _('▸ Configure packaging') }}
                 </button>
                 <div id="pkg-{{ ing.id }}" class="hidden mt-3 space-y-2">
                     <div class="flex items-center gap-2 text-sm">
-                        <span class="text-[#6B6B6B] shrink-0">Pak bevat:</span>
+                        <span class="text-[#6B6B6B] shrink-0">{{ _('Pack contains:') }}</span>
                         <input type="number" step="0.1" value="{{ ing.ah_pkg_qty or '' }}"
                                id="pkgQty-{{ ing.id }}" class="w-20 text-sm border-[#D4CEC4] rounded">
                         <input type="text" value="{{ ing.ah_pkg_unit or '' }}"
                                id="pkgUnit-{{ ing.id }}" class="w-24 text-sm border-[#D4CEC4] rounded"
-                               placeholder="eenheid">
+                               placeholder="{{ _('unit') }}">
                     </div>
                     <div class="flex items-center gap-2 text-sm">
                         <span class="text-[#6B6B6B] shrink-0">Conversie: 1 {{ ing.ah_pkg_unit or 'pak' }} =</span>
@@ -128,10 +128,10 @@
                                id="convFactor-{{ ing.id }}" class="w-20 text-sm border-[#D4CEC4] rounded">
                         <input type="text" value="{{ ing.ah_conv_unit or '' }}"
                                id="convUnit-{{ ing.id }}" class="w-24 text-sm border-[#D4CEC4] rounded"
-                               placeholder="recept-eenheid">
+                               placeholder="{{ _('recipe unit') }}">
                     </div>
                     <button onclick="savePkg({{ ing.id }}, event)"
-                            class="text-xs bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">Opslaan</button>
+                            class="text-xs bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">{{ _('Save') }}</button>
                 </div>
             </div>
             {% else %}
@@ -147,13 +147,13 @@
             <div id="search-{{ ing.id }}" class="hidden border-t border-[#E8E4DC] bg-[#F5F2ED] px-4 py-3 space-y-3">
                 <div class="flex gap-2">
                     <input type="text" id="searchInput-{{ ing.id }}"
-                           placeholder="Zoek op AH..."
+                           placeholder="{{ _('Search on AH...') }}"
                            value="{{ ing.display }}"
                            class="flex-1 text-sm border-[#D4CEC4] rounded-md shadow-sm"
                            onkeydown="if(event.key==='Enter') doSearch({{ ing.id }})">
                     <button onclick="doSearch({{ ing.id }})"
                             class="bg-[#2C2C2C] text-white px-3 py-1.5 rounded text-sm hover:bg-[#1a1a1a]">
-                        Zoek
+                        {{ _('Search') }}
                     </button>
                     <button onclick="closeSearch({{ ing.id }})"
                             class="text-[#6B6B6B] hover:text-[#6B6B6B] px-2 py-1.5 rounded text-sm">
@@ -163,14 +163,14 @@
                 <div class="flex items-center gap-3 text-xs">
                     <button onclick="showAdvice({{ ing.id }})"
                             class="font-medium text-[#8B4513] border border-[#D4CEC4] rounded px-2 py-1 hover:bg-white transition-colors">
-                        💡 Prijsadvies
+                        {{ _('💡 Price advice') }}
                     </button>
                     <label class="ml-auto flex items-center gap-1 text-[#6B6B6B]">
-                        Sorteer
+                        {{ _('Sort') }}
                         <select id="sortSel-{{ ing.id }}" onchange="doSearch({{ ing.id }})"
                                 class="text-xs border-[#D4CEC4] rounded py-0.5">
-                            <option value="relevance">relevantie</option>
-                            <option value="unit">€/eenheid</option>
+                            <option value="relevance">{{ _('relevance') }}</option>
+                            <option value="unit">{{ _('€/unit') }}</option>
                         </select>
                     </label>
                 </div>
@@ -233,7 +233,7 @@ async function doSearch(id) {
     const resp = await fetch('/api/ah/product-search?q=' + encodeURIComponent(q) + '&size=12');
     let products = await resp.json();
     if (!products.length) {
-        resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Geen resultaten gevonden.</p>';
+        resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">{{ _("No results") }} gevonden.</p>';
         return;
     }
     if (document.getElementById('sortSel-' + id).value === 'unit') {
@@ -258,7 +258,7 @@ function adviceCard(id, col, p) {
             </div>
             <button onclick='selectProduct(${id}, ${JSON.stringify(p).replace(/'/g, "\\'")})'
                     class="ah-prijsknop mt-2 text-xs font-medium text-white rounded px-2 py-1.5 hover:opacity-90"
-                    style="background:${col.accent}">Kies dit</button>
+                    style="background:${col.accent}">{{ _('Choose this') }}</button>
         </div>`;
 }
 
@@ -276,7 +276,7 @@ async function showAdvice(id) {
         {key: 'organic',  label: '🌱 Biologisch', accent: '#3f7d3f'},
     ].filter(c => d[c.key]);
     if (!cols.length) {
-        adviceEl.innerHTML = '<p class="text-xs text-[#6B6B6B]">Geen vergelijkbaar advies — te weinig producten met een €/eenheid.</p>';
+        adviceEl.innerHTML = '<p class="text-xs text-[#6B6B6B]">{{ _("No comparable advice — too few products with a €/unit.") }}</p>';
         return;
     }
     adviceEl.innerHTML = `
@@ -297,11 +297,11 @@ async function selectProduct(ingId, product) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(product),
         });
-        if (!resp.ok) throw new Error('Koppelen mislukt');
+        if (!resp.ok) throw new Error('{{ _("Linking failed") }}');
         await softRefreshCard(ingId);
     } catch (e) {
         if (card) card.style.opacity = '';
-        alert(e.message || 'Koppelen mislukt');
+        alert(e.message || '{{ _("Linking failed") }}');
     }
 }
 
@@ -328,7 +328,7 @@ function refreshStats() {
     const linkedEl = document.getElementById('statLinked');
     const unlinkedEl = document.getElementById('statUnlinked');
     if (linkedEl) linkedEl.textContent = `${linked} gekoppeld`;
-    if (unlinkedEl) unlinkedEl.textContent = `${total - linked} nog te koppelen`;
+    if (unlinkedEl) unlinkedEl.textContent = `${total - linked} {{ _("still to link") }}`;
 }
 
 function togglePkg(id) {

@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -223,7 +224,7 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
     access_token = ah_get_access_token()
     if not access_token:
         return ({'status': 'error',
-                 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}, 401, [])
+                 'message': _('No AH account linked. Go to Settings.')}, 401, [])
 
     if not shopping_dict:
         return ({'status': 'ok', 'sent': 0, 'not_linked': [],
@@ -250,8 +251,7 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
 
     if not merged:
         return ({'status': 'ok', 'sent': 0, 'not_linked': not_linked,
-                 'message': 'Geen gekoppelde AH-producten in de lijst. '
-                            'Koppel ze eerst via AH-producten.'}, 200, [])
+                 'message': _('No linked AH products in the list. Link them first via AH products.')}, 200, [])
 
     order_id = None
     try:
@@ -286,11 +286,11 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
         from flask import current_app
         current_app.logger.warning('AH send mislukt: %r', e)
         return ({'status': 'error', 'sent': 0, 'not_linked': not_linked,
-                 'message': f'Versturen naar AH mislukt: {e}'}, 502, [])
+                 'message': f'Sending to AH failed: {e}'}, 502, [])
 
     sent = len(merged)
-    msg = f'{sent} product{"en" if sent != 1 else ""} toegevoegd aan je AH-{target}'
+    msg = f'{sent} product{"s" if sent != 1 else ""} added to your AH {target}'
     if not_linked:
-        msg += f'. {len(not_linked)} nog niet gekoppeld (overgeslagen): {", ".join(not_linked[:5])}'
+        msg += f'. {len(not_linked)} not yet linked (skipped): {", ".join(not_linked[:5])}'
     return ({'status': 'ok', 'sent': sent, 'not_linked': not_linked,
              'message': msg}, 200, sent_ingredient_ids)

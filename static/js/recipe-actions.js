@@ -1,5 +1,5 @@
 async function deleteRecipe(id) {
-    if (confirm('Weet je zeker dat je dit recept wilt verwijderen?')) {
+    if (confirm(window.t('confirmDeleteRecipe'))) {
         const response = await fetch(`/recipe/${id}`, {
             method: 'DELETE',
         });

@@ -1,3 +1,4 @@
+from flask_babel import gettext as _
 import re
 import time
 import threading
@@ -435,7 +436,7 @@ def ah_add_to_open_order(order_id, items):
     from weekmenu.constants import _AH_ORDER_ITEMS_URL
     token = ah_get_access_token()
     if not token:
-        raise ValueError('Geen AH-account gekoppeld')
+        raise ValueError(_('No AH account linked'))
     payload = [{'productId': int(it['productId']), 'quantity': int(it['quantity']),
                 'originCode': 'PRD', 'description': '', 'strikethrough': False}
                for it in items if it.get('productId') is not None]
@@ -452,8 +453,7 @@ def ah_add_to_open_order(order_id, items):
         timeout=20,
     )
     if resp.status_code == 412:
-        raise ValueError('Deze bestelling is doorgezet. Open hem eerst zelf in '
-                         'de AH-app, dan kun je hier items toevoegen.')
+        raise ValueError(_('This order has been submitted. Open it yourself in the AH app first, then you can add items here.'))
     resp.raise_for_status()
 
 
@@ -494,7 +494,7 @@ def _solve_hcaptcha_capsolver(api_key):
         if result.get('status') == 'ready':
             return result['solution']['gRecaptchaResponse']
         if result.get('status') == 'failed':
-            raise ValueError(f'Capsolver: captcha mislukt — {result}')
+            raise ValueError(f'Capsolver: captcha failed — {result}')
     raise TimeoutError('Capsolver: timeout bij oplossen captcha')
 
 
@@ -506,8 +506,7 @@ def ah_login_with_password(email, password, capsolver_key=None):
     key = capsolver_key or _ah_setting('capsolver_key') or ''
     if not key:
         raise ValueError(
-            'Een Capsolver API-key is vereist. '
-            'Maak gratis een account aan op capsolver.com en voer de key in bij instellingen.'
+            _('A Capsolver API key is required. Create a free account at capsolver.com and enter the key in settings.')
         )
 
     captcha_token = _solve_hcaptcha_capsolver(key)
@@ -545,7 +544,7 @@ def ah_login_with_password(email, password, capsolver_key=None):
     location = r2.headers.get('Location', '')
     if not location:
         body = r2.text[:200]
-        raise ValueError(f'Inloggen mislukt — {body}')
+        raise ValueError(f'Login failed — {body}')
 
     for _ in range(10):
         if 'appie://login-exit' in location:
@@ -558,8 +557,8 @@ def ah_login_with_password(email, password, capsolver_key=None):
     code = _ah_extract_code(location)
     if not code or code == location:
         raise ValueError(
-            f'Inloggen mislukt — geen OAuth-code ontvangen. '
-            f'Controleer e-mail en wachtwoord. (laatste redirect: {location!r:.120})'
+            'Login failed — no OAuth code received. '
+            f'Check your email and password. (last redirect: {location!r:.120})'
         )
 
     tok = _req.post(
