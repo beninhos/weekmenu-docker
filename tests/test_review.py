@@ -87,3 +87,49 @@ def test_pagina_rendert_en_staat_op_de_voorraadpagina(client, app):
     html = client.get('/twijfelgevallen').get_data(as_text=True)
     assert 'Twijfelgevallen' in html and 'kaneel' in html
     assert '/twijfelgevallen' in client.get('/voorraad').get_data(as_text=True)
+
+
+def test_bron_zetten_en_terugdraaien(client, app):
+    ing = _ing('polenta', 'Pasta, Rijst & Wereldkeuken')
+    assert client.post(f'/api/ingredient/{ing.id}/bron',
+                       json={'bron': 'toko'}).get_json()['bron'] == 'toko'
+    assert Ingredient.query.get(ing.id).bron == 'toko'
+    # 'ah' betekent gewoon bij de AH, en dat slaan we op als leeg
+    assert client.post(f'/api/ingredient/{ing.id}/bron',
+                       json={'bron': 'ah'}).get_json()['bron'] == 'ah'
+    assert Ingredient.query.get(ing.id).bron is None
+
+
+def test_onbekende_bron_wordt_geweigerd(client, app):
+    ing = _ing('polenta', 'Pasta, Rijst & Wereldkeuken')
+    assert client.post(f'/api/ingredient/{ing.id}/bron',
+                       json={'bron': 'gamma'}).status_code == 400
+    assert Ingredient.query.get(ing.id).bron is None
+
+
+def test_niet_ah_items_krijgen_een_eigen_blok_op_de_lijst(client, app):
+    from weekmenu.models import Recipe, MenuItem
+    from datetime import date
+    iso = date.today().isocalendar()
+
+    polenta = _ing('polenta', 'Pasta, Rijst & Wereldkeuken')
+    ui = _ing('ui', 'Groente, Fruit & Aardappelen')
+    r = _recipe()
+    _use(r, polenta, 250, 'g')
+    _use(r, ui, 2, 'stuks')
+    db.session.add(MenuItem(recipe_id=r.id, week_number=iso[1], year=iso[0],
+                            day_of_week=0, meal_type='diner', people_count=2))
+    db.session.commit()
+
+    html = client.get('/boodschappen').get_data(as_text=True)
+    assert 'Niet bij de AH' not in html          # nog niets gemarkeerd
+
+    client.post(f'/api/ingredient/{polenta.id}/bron', json={'bron': 'toko'})
+    html = client.get('/boodschappen').get_data(as_text=True)
+    assert 'Niet bij de AH' in html
+    assert 'Toko' in html
+    # polenta staat in het elders-blok, de ui blijft erboven in de AH-lijst
+    kop = html.index('Niet bij de AH')
+    assert 'polenta' in html[kop:]
+    assert 'polenta' not in html[:kop]
+    assert 'ui' in html[:kop]
