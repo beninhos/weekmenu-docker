@@ -131,3 +131,18 @@ def test_boodschappenlijst_heeft_printknop_en_printstijl(client, app):
     assert 'window.print()' in html
     assert '@media print' in html
     assert 'shopping-list-print' in html
+
+
+def test_meel_familie_landt_goed(app):
+    """'maismeel' matchte 'mais' (groente), 'tarwemeel' had geen sleutelwoord."""
+    from weekmenu.services.units import _guess_ingredient_category as g
+    for naam in ('maismeel', 'maïsmeel', 'tarwemeel', 'roggemeel', 'boekweitmeel',
+                 'speltmeel', 'bloem', 'tarwebloem', 'zelfrijzend bakmeel', 'paneermeel'):
+        assert g(naam) == 'Bakken & Desserts', naam
+    for naam in ('maisgriesmeel', 'instant maisgriesmeel', 'griesmeel', 'polenta',
+                 'Valle del sole Maisgriesmeel voor polenta bramata'):
+        assert g(naam) == 'Pasta, Rijst & Granen', naam
+    # de buren mogen niet meeverhuizen
+    assert g('amandelmeel') == 'Noten, Zaden & Gedroogd Fruit'
+    assert g('bloemkool') == 'Groente & Aardappelen'
+    assert g('mais') == 'Groente & Aardappelen'

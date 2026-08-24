@@ -209,6 +209,12 @@ _CATEGORY_KEYWORDS = [
     ('Groente & Aardappelen', ['bloemkool', 'vleestomaat', 'vleestomaten', 'bladspinazie', 'sperziebonen', 'sperzieboon', 'winterpeen', 'winterpenen', 'puntpaprika', 'bosui', 'bosuitje', 'bleekselderij', 'augurk', 'casave', 'cassave', 'rucola', 'rucolo',
                                'rode peper', 'groene peper', 'spaanse peper', 'chilipeper', 'peper (vers)', 'zoete aardappel', 'bataat', 'aardappel', 'tuinkers', 'waterkers', 'kerstomaat']),
     ('Fruit', ['banaan', 'banan', 'watermeloen', 'granaatappel']),
+    # De meel-familie: 'maismeel' matchte anders 'mais' (groente) en
+    # 'tarwemeel'/'roggemeel' hadden helemaal geen sleutelwoord.
+    # Griesmeel en polenta kook je, die horen bij de granen; de rest is bakwerk.
+    ('Pasta, Rijst & Granen', ['maisgriesmeel', 'maisgries', 'griesmeel', 'polenta', 'bulghur']),
+    ('Bakken & Desserts', ['maismeel', 'maizemeel', 'tarwemeel', 'roggemeel', 'boekweitmeel',
+                           'speltmeel', 'volkorenmeel', 'havermeel', 'bakmeel', 'patentbloem']),
     ('Ontbijt & Beleg', ['pindakaas', 'notenpasta', 'chocopasta', 'hagelslag', 'jam', 'marmelade', 'appelstroop', 'muesli', 'granola', 'cornflakes', 'havermout', 'vlokken', 'ontbijtkoek', 'beschuit', 'cracker']),
     ('Vleeswaren', ['achterham', 'beenham', 'rauwe ham', 'parmaham', 'serranoham', 'ontbijtspek', 'ontbijtspekje']),
     ('Noten, Zaden & Gedroogd Fruit', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'pinda']),
@@ -238,7 +244,7 @@ _CATEGORY_KEYWORDS = [
     ('Conserven & Peulvruchten', ['tomatenblokje', 'tomatenstukje', 'passata', 'kikkererwt', 'linzen', 'linze', 'bruine bonen', 'witte bonen', 'kidneybonen', 'kidney', 'zwarte bonen', 'chili boon', 'bonen', 'olijf', 'kappertjes']),
     ('Brood & Bakkerij', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'focaccia', 'brioche', 'tortilla', 'pitabrood', 'pita', 'naan', 'brood']),
     ('Ontbijt & Beleg', []),
-    ('Bakken & Desserts', ['bloem', 'bakpoeder', 'gist', 'baksoda', 'vanille', 'vanillesuiker', 'amandelpoeder', 'amandelmeel', 'suiker', 'poedersuiker', 'basterdsuiker', 'rietsuiker', 'cacaopoeder', 'cacao', 'paneermeel']),
+    ('Bakken & Desserts', ['bloem', 'meel', 'bakpoeder', 'gist', 'baksoda', 'vanille', 'vanillesuiker', 'amandelpoeder', 'amandelmeel', 'suiker', 'poedersuiker', 'basterdsuiker', 'rietsuiker', 'cacaopoeder', 'cacao', 'paneermeel']),
     ('Snacks & Zoetwaren', ['chocolade', 'pure chocolade', 'melkchocolade', 'witte chocolade', 'koek', 'stroopwafel', 'biscuit', 'marshmallow', 'chips', 'popcorn', 'snoep', 'kroepoek']),
     ('Dranken', ['koffie', 'espresso', 'thee', 'groene thee',
                  'limonade', 'cola', 'spa', 'mineraalwater', 'appelsap', 'sinaasappelsap', 'tomatensap', 'water',
