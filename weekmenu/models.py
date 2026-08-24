@@ -53,6 +53,7 @@ class Ingredient(db.Model):
     ah_conv_factor     = db.Column(db.Float, nullable=True)
     ah_conv_unit       = db.Column(db.String(20), nullable=True)
     preferred_unit     = db.Column(db.String(20), nullable=True)
+    bron               = db.Column(db.String(20), nullable=True)
 
     @property
     def display(self):

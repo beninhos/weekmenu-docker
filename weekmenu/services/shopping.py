@@ -147,6 +147,7 @@ def _row_base(ing, unit, amount, recipe_names=None):
         'ah_product_price': ing.ah_product_price,
         'ah_product_bonus': ing.ah_product_bonus or False,
         'ah_product_bg': api_color or CATEGORY_BG.get(ing.category, '#f0ede8'),
+        'bron': ing.bron or 'ah',
     }
 
 

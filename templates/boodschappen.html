@@ -104,6 +104,13 @@
                             <span class="text-xs text-[#9CA3AF]" title="{{ item.recipes | join(', ') }}">· {{ item.recipes | join(', ') }}</span>
                             {% endif %}
                         </span>
+                        <select class="bron-select no-print ml-auto shrink-0 text-xs rounded border-[#E8E4DC] py-0.5 text-[#B4B2A9]"
+                                title="Waar haal je dit?"
+                                onchange="setBron({{ item.ingredient_id }}, this.value, this)">
+                            {% for code, label in bronnen %}
+                            <option value="{{ code }}" {{ 'selected' if item.bron == code }}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     {# RECHTS — AH-productstijl #}
@@ -163,6 +170,34 @@
     {% endfor %}
 
     </div>
+
+    {% if grouped_elders %}
+    <div class="elders-blok mt-8 pt-5 border-t-2 border-dashed border-[#D4CEC4]">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-1">Niet bij de AH</h3>
+        <p class="text-xs text-[#6B6B6B] mb-3 no-print">Deze haal je ergens anders.</p>
+        {% for group in grouped_elders %}
+        <h4 class="shopping-category text-sm font-semibold text-[#6B6B6B] mt-4 mb-1">{{ group.category }}</h4>
+        <div class="shopping-group">
+            {% for item in group.producten %}
+            <div class="shopping-item item-row flex items-center gap-2 py-2 border-b border-[#E8E4DC]"
+                 data-ingredient-id="{{ item.ingredient_id }}">
+                <input type="checkbox" class="cursor-pointer shrink-0"
+                       onchange="checkItem({{ item.ingredient_id }}, this.checked)">
+                <span class="item-text text-sm text-[#2C2C2C]">
+                    <span class="font-semibold">{{ item.amount_display }}</span>{% if item.unit %}<span class="text-[#6B6B6B]"> {{ item.unit }}</span>{% endif %} {{ item.name }}
+                </span>
+                <select class="bron-select no-print ml-auto shrink-0 text-xs rounded border-[#E8E4DC] py-0.5 text-[#B4B2A9]"
+                        onchange="setBron({{ item.ingredient_id }}, this.value, this)">
+                    {% for code, label in bronnen %}
+                    <option value="{{ code }}" {{ 'selected' if item.bron == code }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     {% if not grouped_open %}
     <p class="text-sm text-[#6B6B6B] py-6 text-center">Geen open items — alles is al afgevinkt.</p>
@@ -427,6 +462,19 @@ async function addLosItem() {
         console.error('Item toevoegen mislukt:', e);
     }
 }
+
+async function setBron(ingredientId, bron, el) {
+    try {
+        const resp = await fetch(`/api/ingredient/${ingredientId}/bron`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({bron}),
+        });
+        const data = await resp.json();
+        if (data.status !== 'ok') return;
+        window.location.reload();   // item springt naar het juiste blok
+    } catch (e) { /* offline: keuze blijft staan tot de volgende keer */ }
+}
 </script>
 
 <style>
@@ -444,6 +492,8 @@ async function addLosItem() {
 
     /* Twee kolommen scheelt papier; koppen blijven bij hun groep */
     .shopping-list-print { column-count: 2; column-gap: 1.5rem; }
+    .elders-blok { break-inside: avoid; page-break-inside: avoid; }
+    .bron-select { display: none !important; }
     .shopping-category { break-after: avoid; page-break-after: avoid; }
     .shopping-group { break-inside: avoid; page-break-inside: avoid; }
     .shopping-item { break-inside: avoid; page-break-inside: avoid; }

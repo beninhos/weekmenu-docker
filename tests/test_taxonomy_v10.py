@@ -1,7 +1,7 @@
 """Migratie v10: de universele schapindeling, getoetst op representatieve rijen."""
 from sqlalchemy import text
 from weekmenu.extensions import db
-from weekmenu.migrations import _migrate_v10
+from weekmenu.migrations import _migrate_v10, _migrate_v12
 from weekmenu.models import Ingredient
 from weekmenu.constants import PRODUCT_CATEGORIES, CATEGORY_ORDER_SUPERMARKET, CATEGORY_BG
 
@@ -21,68 +21,71 @@ def test_constantenlijsten_zijn_consistent(app):
     assert set(PRODUCT_CATEGORIES) == set(CATEGORY_BG)
 
 
-def test_splitsingen_en_hernoemingen(client, app):
+def test_migratieketen_v10_tot_v12(client, app):
+    """v10 splitste, v12 voegt vier daarvan weer samen. Samen moeten ze op
+    het huidige vocabulaire uitkomen, ongeacht van welke oude naam je start."""
     _seed([
-        # Groente/Fruit-splitsing
         ('appel', 'Groente, Fruit & Aardappelen'),
         ('courgette', 'Groente, Fruit & Aardappelen'),
         ('basilicum', 'Groente, Fruit & Aardappelen'),
-        # Kaas/Vleeswaren-splitsing incl. het beroemde geval
         ('achterham', 'Kaas & Vleeswaren'),
         ('geraspte oude kaas', 'Kaas & Vleeswaren'),
         ('pindakaas', 'Kaas & Vleeswaren'),
-        # Ontbijt&Beleg/Bakken-splitsing incl. bloemkool-weeffout
         ('bosvruchten jam', 'Ontbijt, Bakken & Desserts'),
         ('bloem', 'Ontbijt, Bakken & Desserts'),
         ('bloemkool', 'Ontbijt, Bakken & Desserts'),
-        # Verse kruiden uit droge specerijen
         ('verse munt', 'Kruiden & Specerijen'),
         ('rode peper', 'Kruiden & Specerijen'),
         ('zwarte peper', 'Kruiden & Specerijen'),
-        # Hernoemingen en wezen
         ('halfvolle melk', 'Zuivel, Plantaardige Zuivel & Eieren'),
         ('fijne mosterd', 'Soepen, Sauzen & Kruiden'),
-        ('verse dragon', 'Groente & Aardappelen'),
-        # Buiten de splitsing: bewuste keuze blijft staan
-        ('mangochutney', 'Groente, Fruit & Aardappelen'),
-        ('tuinkers', 'Groente, Fruit & Aardappelen'),
-        ('parmaham', 'Kaas & Vleeswaren'),
-        ('manchego twee', 'Zuivel, Plantaardige Zuivel & Eieren'),
+        ('zalm', 'Vis & Schaaldieren'),
+        ('walnoten', 'Noten, Zaden & Gedroogd Fruit'),
+        ('spaghetti', 'Pasta, Rijst & Granen'),
         ('kimchi', 'Conserven & Peulvruchten'),
-        ('manchego', 'Overig'),
     ])
     with db.engine.connect() as conn:
         _migrate_v10(conn)
+        _migrate_v12(conn)
         conn.commit()
     db.session.expire_all()
 
-    assert _cat('appel') == 'Fruit'
-    assert _cat('courgette') == 'Groente & Aardappelen'
-    assert _cat('basilicum') == 'Verse Kruiden'
-    assert _cat('achterham') == 'Vleeswaren'
-    assert _cat('geraspte oude kaas') == 'Kaas'
+    # AGF is nu een hoek: groente, fruit en verse kruiden bij elkaar
+    for naam in ('appel', 'courgette', 'basilicum', 'verse munt', 'rode peper', 'bloemkool'):
+        assert _cat(naam) == 'Groente, Fruit & Aardappelen', naam
+    # koelwand
+    assert _cat('achterham') == 'Kaas & Vleeswaren'
+    assert _cat('geraspte oude kaas') == 'Kaas & Vleeswaren'
+    assert _cat('zalm') == 'Vlees & Vis'
+    assert _cat('halfvolle melk') == 'Zuivel & Eieren'
+    # droge midden
     assert _cat('pindakaas') == 'Ontbijt & Beleg'
     assert _cat('bosvruchten jam') == 'Ontbijt & Beleg'
     assert _cat('bloem') == 'Bakken & Desserts'
-    assert _cat('bloemkool') == 'Groente & Aardappelen'
-    assert _cat('verse munt') == 'Verse Kruiden'
-    assert _cat('rode peper') == 'Groente & Aardappelen'
     assert _cat('zwarte peper') == 'Kruiden & Specerijen'
-    assert _cat('halfvolle melk') == 'Zuivel & Eieren'
     assert _cat('fijne mosterd') == 'Oliën, Sauzen & Smaakmakers'
-    assert _cat('verse dragon') == 'Verse Kruiden'
-    assert _cat('mangochutney') == 'Oliën, Sauzen & Smaakmakers'
-    assert _cat('tuinkers') == 'Groente & Aardappelen'
-    assert _cat('parmaham') == 'Vleeswaren'
-    assert _cat('manchego twee') == 'Kaas'
-    assert _cat('kimchi') == 'Conserven & Peulvruchten'   # niet aangeraakt
-    assert _cat('manchego') == 'Overig'                    # niet aangeraakt
+    assert _cat('walnoten') == 'Noten & Snacks'
+    assert _cat('spaghetti') == 'Pasta, Rijst & Wereldkeuken'
+    # buiten elke splitsing: bewuste keuze blijft staan
+    assert _cat('kimchi') == 'Conserven & Peulvruchten'
+    # en niets valt buiten het vocabulaire
+    for ing in Ingredient.query.all():
+        assert ing.category in PRODUCT_CATEGORIES, ing.name
+
+
+def test_looproute_is_geen_kopie_van_toevallige_volgorde(app):
+    """De volgorde moet een route zijn: vers eerst, kassa-kant achteraan."""
+    o = CATEGORY_ORDER_SUPERMARKET
+    assert o[0] == 'Groente, Fruit & Aardappelen'
+    assert o.index('Kaas & Vleeswaren') < o.index('Pasta, Rijst & Wereldkeuken')
+    assert o.index('Diepvries') < o.index('Dranken')
+    assert o[-1] == 'Overig'
 
 
 def test_verse_kruiden_zijn_geen_kastartikel_meer(client, app):
     from weekmenu.services.pantry import annotate_pantry_status
     rows = annotate_pantry_status([
-        {'name': 'verse basilicum', 'amount': 22, 'unit': 'g', 'category': 'Verse Kruiden'},
+        {'name': 'verse basilicum', 'amount': 22, 'unit': 'g', 'category': 'Groente, Fruit & Aardappelen'},
         {'name': 'kaneel', 'amount': 1, 'unit': 'tl', 'category': 'Kruiden & Specerijen'},
         {'name': 'bosvruchten jam', 'amount': 1, 'unit': 'el', 'category': 'Ontbijt & Beleg'},
     ])
@@ -93,10 +96,10 @@ def test_verouderde_categorie_lekt_niet_binnen_bij_nieuw_ingredient(client, app)
     """De dropdown toont verouderde waarden als optie; die mogen niet
     als categorie van een nieuw ingredient worden opgeslagen."""
     from weekmenu.services.recipes import _resolve_or_create_ingredient
-    ing = _resolve_or_create_ingredient('venkelzaad', 'Groente, Fruit & Aardappelen')
+    ing = _resolve_or_create_ingredient('venkelzaad', 'Soepen, Sauzen & Kruiden')
     db.session.commit()
     assert ing.category in PRODUCT_CATEGORIES
-    assert ing.category != 'Groente, Fruit & Aardappelen'
+    assert ing.category != 'Soepen, Sauzen & Kruiden'
 
 
 def test_v11_ruimt_oude_categorieen_op_in_ingredienten_en_drafts(client, app):
@@ -104,12 +107,12 @@ def test_v11_ruimt_oude_categorieen_op_in_ingredienten_en_drafts(client, app):
     from weekmenu.migrations import _migrate_v11
     from weekmenu.models import DumpJob, RecipeDraft
 
-    _seed([('venkelzaad', 'Groente, Fruit & Aardappelen')])
+    _seed([('venkelzaad', 'Soepen, Sauzen & Kruiden')])
     job = DumpJob(id='job-v11')
     db.session.add(job)
     db.session.flush()
     draft = RecipeDraft(job_id=job.id, name='Oud concept', ingredients_json=json.dumps([
-        {'name': 'appel', 'amount': 1, 'unit': 'stuks', 'category': 'Groente, Fruit & Aardappelen'},
+        {'name': 'appel', 'amount': 1, 'unit': 'stuks', 'category': 'Soepen, Sauzen & Kruiden'},
         {'name': 'kaneel', 'amount': 1, 'unit': 'tl', 'category': 'Kruiden & Specerijen'},
     ]))
     db.session.add(draft)
@@ -122,7 +125,7 @@ def test_v11_ruimt_oude_categorieen_op_in_ingredienten_en_drafts(client, app):
 
     assert _cat('venkelzaad') in PRODUCT_CATEGORIES
     items = json.loads(RecipeDraft.query.get(draft.id).ingredients_json)
-    assert items[0]['category'] == 'Fruit'          # herzien
+    assert items[0]['category'] == 'Groente, Fruit & Aardappelen'          # herzien
     assert items[1]['category'] == 'Kruiden & Specerijen'  # ongemoeid
 
 
@@ -141,8 +144,8 @@ def test_meel_familie_landt_goed(app):
         assert g(naam) == 'Bakken & Desserts', naam
     for naam in ('maisgriesmeel', 'instant maisgriesmeel', 'griesmeel', 'polenta',
                  'Valle del sole Maisgriesmeel voor polenta bramata'):
-        assert g(naam) == 'Pasta, Rijst & Granen', naam
+        assert g(naam) == 'Pasta, Rijst & Wereldkeuken', naam
     # de buren mogen niet meeverhuizen
-    assert g('amandelmeel') == 'Noten, Zaden & Gedroogd Fruit'
-    assert g('bloemkool') == 'Groente & Aardappelen'
-    assert g('mais') == 'Groente & Aardappelen'
+    assert g('amandelmeel') == 'Noten & Snacks'
+    assert g('bloemkool') == 'Groente, Fruit & Aardappelen'
+    assert g('mais') == 'Groente, Fruit & Aardappelen'

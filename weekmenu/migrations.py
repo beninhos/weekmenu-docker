@@ -278,6 +278,24 @@ def _migrate_v10(conn):
             {'Kruiden & Specerijen', 'Verse Kruiden', 'Groente & Aardappelen'}),
     }
 
+    # De guesser draait op het HUIDIGE vocabulaire, dat na v12 andere namen
+    # heeft. Een doel is dus ook geldig onder zijn latere naam, anders valt
+    # een verse database hier terug op de default.
+    LATER = {
+        'Groente & Aardappelen':         'Groente, Fruit & Aardappelen',
+        'Fruit':                         'Groente, Fruit & Aardappelen',
+        'Verse Kruiden':                 'Groente, Fruit & Aardappelen',
+        'Kaas':                          'Kaas & Vleeswaren',
+        'Vleeswaren':                    'Kaas & Vleeswaren',
+        'Vlees & Gevogelte':             'Vlees & Vis',
+        'Vis & Schaaldieren':            'Vlees & Vis',
+        'Noten, Zaden & Gedroogd Fruit': 'Noten & Snacks',
+        'Snacks & Zoetwaren':            'Noten & Snacks',
+        'Pasta, Rijst & Granen':         'Pasta, Rijst & Wereldkeuken',
+    }
+    SPLITS = {src: (default, allowed | {LATER[a] for a in allowed if a in LATER})
+              for src, (default, allowed) in SPLITS.items()}
+
     rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
     for ing_id, ing_name, old_cat in rows:
         if old_cat in RENAMES:
@@ -333,6 +351,70 @@ def _migrate_v11(conn):
                 {'j': json.dumps(items, ensure_ascii=False), 'i': draft_id})
 
 
+def _migrate_v12(conn):
+    """Vier samenvoegingen, puur op naam — geen gokwerk.
+
+    Gemeten over 16 echte weeklijsten waren Fruit, Verse Kruiden, Vis, Kaas,
+    Vleeswaren en Noten stuk voor stuk kopjes met gemiddeld een of twee regels,
+    terwijl je er in de winkel op dezelfde plek staat. Deze map is deterministisch:
+    de guesser wordt niet aangeroepen, dus er kan niets onverwachts verschuiven.
+    """
+    import json
+
+    MAP = {
+        'Groente & Aardappelen':        'Groente, Fruit & Aardappelen',
+        'Fruit':                        'Groente, Fruit & Aardappelen',
+        'Verse Kruiden':                'Groente, Fruit & Aardappelen',
+        'Kaas':                         'Kaas & Vleeswaren',
+        'Vleeswaren':                   'Kaas & Vleeswaren',
+        'Vlees & Gevogelte':            'Vlees & Vis',
+        'Vis & Schaaldieren':           'Vlees & Vis',
+        'Noten, Zaden & Gedroogd Fruit':'Noten & Snacks',
+        'Snacks & Zoetwaren':           'Noten & Snacks',
+        'Pasta, Rijst & Granen':        'Pasta, Rijst & Wereldkeuken',
+    }
+
+    for old_cat, new_cat in MAP.items():
+        conn.execute(
+            text('UPDATE ingredient SET category = :new WHERE category = :old'),
+            {'new': new_cat, 'old': old_cat})
+
+    # Wachtende drafts dragen hun categorie in JSON, dus die moeten mee.
+    drafts = conn.execute(text(
+        "SELECT id, ingredients_json FROM recipe_draft WHERE status = 'pending'"
+    )).fetchall()
+    for draft_id, raw in drafts:
+        try:
+            items = json.loads(raw or '[]')
+        except (ValueError, TypeError):
+            continue
+        changed = False
+        for item in items:
+            if item.get('category') in MAP:
+                item['category'] = MAP[item['category']]
+                changed = True
+        if changed:
+            conn.execute(
+                text('UPDATE recipe_draft SET ingredients_json = :j WHERE id = :i'),
+                {'j': json.dumps(items, ensure_ascii=False), 'i': draft_id})
+
+    # Alles wat na de samenvoeging nog buiten het vocabulaire valt, opnieuw raden.
+    valid = set(PRODUCT_CATEGORIES)
+    rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
+    for ing_id, ing_name, cat in rows:
+        if cat not in valid:
+            conn.execute(
+                text('UPDATE ingredient SET category = :c WHERE id = :i'),
+                {'c': _guess_ingredient_category(ing_name), 'i': ing_id})
+
+
+def _migrate_v13(conn):
+    """Herkomst per ingredient: waar haal je het, als het niet de AH is."""
+    cols = [r[1] for r in conn.execute(text('PRAGMA table_info(ingredient)'))]
+    if 'bron' not in cols:
+        conn.execute(text('ALTER TABLE ingredient ADD COLUMN bron VARCHAR(20)'))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -370,8 +452,12 @@ def migrate_db():
             _migrate_v10(conn)
         if current < 11:
             _migrate_v11(conn)
+        if current < 12:
+            _migrate_v12(conn)
+        if current < 13:
+            _migrate_v13(conn)
 
-        target = 11
+        target = 13
         if current < target:
             if row:
                 conn.execute(

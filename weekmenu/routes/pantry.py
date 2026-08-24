@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify
 
 from weekmenu.models import Ingredient, PantryIngredient
 from weekmenu.constants import PRODUCT_CATEGORIES
-from weekmenu.services.pantry import review_lists, set_category
+from weekmenu.services.pantry import review_lists, set_category, set_bron
 
 
 bp = Blueprint('pantry', __name__)
@@ -32,4 +32,11 @@ def review():
 def update_category(ingredient_id):
     data = request.get_json() or {}
     payload, status = set_category(ingredient_id, data.get('category'))
+    return jsonify(payload), status
+
+
+@bp.route('/api/ingredient/<int:ingredient_id>/bron', methods=['POST'])
+def update_bron(ingredient_id):
+    data = request.get_json() or {}
+    payload, status = set_bron(ingredient_id, data.get('bron'))
     return jsonify(payload), status

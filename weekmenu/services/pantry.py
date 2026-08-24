@@ -55,7 +55,7 @@ KAST_CATEGORIES = {
     'Bakken & Desserts',
     'Ontbijt & Beleg',
     'Conserven & Peulvruchten',
-    # Oude naam, komt nog voor in ingredients_json van wachtende drafts:
+    # Oude namen, komen nog voor in ingredients_json van wachtende drafts:
     'Ontbijt, Bakken & Desserts',
 }
 
@@ -294,3 +294,17 @@ def set_category(ingredient_id, category):
     ing.category = category
     db.session.commit()
     return {'status': 'ok', 'id': ing.id, 'category': ing.category}, 200
+
+
+def set_bron(ingredient_id, bron):
+    """Waar je dit product haalt. Leeg of 'ah' = gewoon bij Albert Heijn."""
+    from weekmenu.constants import BRONNEN
+    codes = {c for c, _ in BRONNEN}
+    if bron and bron not in codes:
+        return {'status': 'error', 'message': 'onbekende bron'}, 400
+    ing = Ingredient.query.get(ingredient_id)
+    if not ing:
+        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+    ing.bron = (bron or None) if bron != 'ah' else None
+    db.session.commit()
+    return {'status': 'ok', 'id': ing.id, 'bron': ing.bron or 'ah'}, 200

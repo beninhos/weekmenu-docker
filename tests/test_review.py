@@ -61,21 +61,21 @@ def test_overig_met_testafval_achteraan(client, app):
 def test_afwijking_van_de_gok(client, app):
     _ing('rucola', 'Dranken')
     afw = {a['name']: a for a in review_lists()['afwijkend']}
-    assert afw['rucola']['guess'] == 'Groente & Aardappelen'
+    assert afw['rucola']['guess'] == 'Groente, Fruit & Aardappelen'
 
 
 def test_categorie_wijzigen_via_de_api(client, app):
     ing = _ing('rucola', 'Dranken')
     resp = client.post(f'/api/ingredient/{ing.id}/category',
-                       json={'category': 'Groente & Aardappelen'})
-    assert resp.get_json()['category'] == 'Groente & Aardappelen'
-    assert Ingredient.query.get(ing.id).category == 'Groente & Aardappelen'
+                       json={'category': 'Groente, Fruit & Aardappelen'})
+    assert resp.get_json()['category'] == 'Groente, Fruit & Aardappelen'
+    assert Ingredient.query.get(ing.id).category == 'Groente, Fruit & Aardappelen'
 
 
 def test_onbekende_categorie_wordt_geweigerd(client, app):
     ing = _ing('rucola', 'Dranken')
     resp = client.post(f'/api/ingredient/{ing.id}/category',
-                       json={'category': 'Groente, Fruit & Aardappelen'})
+                       json={'category': 'Soepen, Sauzen & Kruiden'})
     assert resp.status_code == 400
     assert Ingredient.query.get(ing.id).category == 'Dranken'
 

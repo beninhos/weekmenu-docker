@@ -9,7 +9,7 @@ from weekmenu.models import (
     ShoppingListExclusion, CustomShoppingIngredient,
     ShoppingCheck, QuickAddItem,
 )
-from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET
+from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET, BRONNEN
 from weekmenu.services.shopping import (
     _build_shopping_dict, send_dict_to_ah, build_combined_shopping_list,
 )
@@ -38,8 +38,23 @@ def boodschappen():
                                for r in recipes])
     weeks_json = json.dumps({str(k): v for k, v in data['weeks_by_ingredient'].items()})
     iso_now = date.today().isocalendar()
+    # Wat je niet bij de AH haalt komt in een eigen blok onderaan, zodat je
+    # het op papier los kunt afscheuren.
+    ah_items = [i for i in data['open'] if (i.get('bron') or 'ah') == 'ah']
+    elders_items = [i for i in data['open'] if (i.get('bron') or 'ah') != 'ah']
+    elders = []
+    for code, label in BRONNEN:
+        if code == 'ah':
+            continue
+        producten = sorted((i for i in elders_items if i['bron'] == code),
+                           key=lambda x: x['name'])
+        if producten:
+            elders.append({'category': label, 'producten': producten})
+
     return render_template('boodschappen.html',
-                           grouped_open=_grouped(data['open']),
+                           grouped_open=_grouped(ah_items),
+                           grouped_elders=elders,
+                           bronnen=BRONNEN,
                            checked_items=sorted(data['checked'],
                                                 key=lambda x: x['checked_at'] or datetime.min,
                                                 reverse=True),
