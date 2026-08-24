@@ -74,7 +74,7 @@ def test_categorie_van_bestaand_ingredient_is_te_corrigeren(client, app):
 def test_onbekende_categorie_wordt_niet_overgenomen(client, app):
     r, ing = _make_recipe(category='Overig')
     client.post(f'/recipe/{r.id}/edit',
-                data=_edit_form(ing, 'Zuivel & Eieren', ''))
+                data=_edit_form(ing, 'Soepen, Sauzen & Kruiden', ''))
     assert Ingredient.query.get(ing.id).category == 'Overig'
 
 
@@ -120,9 +120,9 @@ def test_nieuw_receptformulier_heeft_een_voorraadmarkering(client, app):
 
 def test_verouderde_categorie_blijft_selecteerbaar_in_de_dropdown(client, app):
     """Zonder deze optie stuurt de select niets mee en schuiven de rijen op."""
-    r, ing = _make_recipe(category='Zuivel & Eieren')
+    r, ing = _make_recipe(category='Soepen, Sauzen & Kruiden')
     html = client.get(f'/recipe/{r.id}/edit').get_data(as_text=True)
-    assert 'Zuivel &amp; Eieren (verouderd)' in html
+    assert 'Soepen, Sauzen &amp; Kruiden (verouderd)' in html
 
 
 def test_server_rijen_hebben_het_label_dat_de_js_bijwerkt(client, app):

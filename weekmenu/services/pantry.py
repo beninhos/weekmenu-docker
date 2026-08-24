@@ -52,16 +52,19 @@ def remove_from_pantry(ingredient_id):
 KAST_CATEGORIES = {
     'Kruiden & Specerijen',
     'Oliën, Sauzen & Smaakmakers',
-    'Ontbijt, Bakken & Desserts',
+    'Bakken & Desserts',
+    'Ontbijt & Beleg',
     'Conserven & Peulvruchten',
+    # Oude naam, komt nog voor in ingredients_json van wachtende drafts:
+    'Ontbijt, Bakken & Desserts',
 }
 
 DOSE_UNITS = {'el', 'tl', 'kl', 'snufje', 'snuf', 'mespunt', 'scheutje', 'scheut'}
 
-# Tijdelijke rem: verse kruiden zitten nog in 'Kruiden & Specerijen' en worden in
-# kleine hoeveelheden gebruikt, dus zonder deze uitzondering stelt de app 'verse
-# basilicum' als kastartikel voor. Vervalt zodra 'Verse kruiden' een eigen
-# categorie is.
+# Vangnet voor regels die nog met oude categorienamen zijn opgeslagen
+# (ingredients_json van wachtende drafts): verse kruiden horen nooit in de
+# kast, ook niet als hun regel nog 'Kruiden & Specerijen' zegt. Nieuwe regels
+# vallen al af doordat de guesser ze in 'Verse Kruiden' plaatst.
 _VERS_RE = re.compile(r'\b(verse?|takjes?|blaadjes?|bosje)\b')
 
 

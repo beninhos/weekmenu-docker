@@ -247,6 +247,53 @@ def _migrate_v9(conn):
     '''))
 
 
+def _migrate_v10(conn):
+    """Universele schapindeling: v4-samenvoegingen teruggedraaid.
+
+    Groente/Fruit, Kaas/Vleeswaren en Ontbijt&Beleg/Bakken zijn weer gesplitst,
+    'Verse Kruiden' is nieuw. Alleen rijen in gesplitste of hernoemde categorieën
+    worden aangeraakt; de guesser mag daarbij uitsluitend binnen de doelen van
+    die splitsing kiezen, zodat bewuste keuzes elders intact blijven.
+    """
+    RENAMES = {
+        'Soepen, Sauzen & Kruiden': 'Oliën, Sauzen & Smaakmakers',
+    }
+    # bron -> (default, toegestane doelen voor de guesser). De doelen zijn
+    # per bron begrensd zodat bewuste keuzes buiten de splitsing intact
+    # blijven, maar ruim genoeg om oude gokfouten binnen de bron te herstellen
+    # (pita bij de groente, eiernoedels bij de zuivel, manchego bij de zuivel).
+    GF = {'Groente & Aardappelen', 'Fruit', 'Verse Kruiden', 'Brood & Bakkerij',
+          'Conserven & Peulvruchten', 'Diepvries', 'Oliën, Sauzen & Smaakmakers'}
+    SPLITS = {
+        'Groente, Fruit & Aardappelen': ('Groente & Aardappelen', GF),
+        'Groente & Aardappelen':        ('Groente & Aardappelen', GF),   # wees uit v4
+        'Kaas & Vleeswaren': ('Kaas',
+            {'Kaas', 'Vleeswaren', 'Vlees & Gevogelte', 'Ontbijt & Beleg'}),
+        'Zuivel, Plantaardige Zuivel & Eieren': ('Zuivel & Eieren',
+            {'Zuivel & Eieren', 'Kaas', 'Pasta, Rijst & Granen'}),
+        'Ontbijt, Bakken & Desserts': ('Bakken & Desserts',
+            {'Ontbijt & Beleg', 'Bakken & Desserts', 'Groente & Aardappelen'}),
+        'Kruiden & Specerijen': ('Kruiden & Specerijen',
+            {'Kruiden & Specerijen', 'Verse Kruiden', 'Groente & Aardappelen'}),
+    }
+
+    rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
+    for ing_id, ing_name, old_cat in rows:
+        if old_cat in RENAMES:
+            new_cat = RENAMES[old_cat]
+        elif old_cat in SPLITS:
+            default, allowed = SPLITS[old_cat]
+            guess = _guess_ingredient_category(ing_name)
+            new_cat = guess if guess in allowed else default
+        else:
+            continue
+        if new_cat != old_cat:
+            conn.execute(
+                text('UPDATE ingredient SET category = :cat WHERE id = :id'),
+                {'cat': new_cat, 'id': ing_id}
+            )
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -280,8 +327,10 @@ def migrate_db():
             _migrate_v8(conn)
         if current < 9:
             _migrate_v9(conn)
+        if current < 10:
+            _migrate_v10(conn)
 
-        target = 9
+        target = 10
         if current < target:
             if row:
                 conn.execute(
