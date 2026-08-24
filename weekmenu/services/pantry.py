@@ -192,3 +192,43 @@ def pantry_hints_for(ingredients):
         else:
             hints[ing.id] = None
     return hints
+
+
+def hints_for_recipe_rows(recipe_ingredients):
+    """Voorraadhint + naamvariant per bestaande receptregel.
+
+    Dezelfde vier standen als bij een import, maar dan voor rijen die al in
+    de database staan. De regel kent hier zijn eigen hoeveelheid en eenheid,
+    dus die wegen mee in plaats van het gemiddelde gebruik.
+
+    Geeft {recipe_ingredient_id: {'hint': ..., 'variant_of': {...}|None}}.
+    """
+    if not recipe_ingredients:
+        return {}
+
+    pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
+    pantry_by_key = {}
+    if pantry_ids:
+        for ing in Ingredient.query.filter(Ingredient.id.in_(pantry_ids)).all():
+            pantry_by_key.setdefault(_variant_key(ing.name), ing)
+
+    out = {}
+    for ri in recipe_ingredients:
+        ing = ri.ingredient
+        if ing.id in pantry_ids:
+            out[ri.id] = {'hint': 'in_pantry', 'variant_of': None}
+            continue
+
+        twin = pantry_by_key.get(_variant_key(ing.name))
+        if twin and twin.id != ing.id:
+            out[ri.id] = {'hint': 'variant',
+                          'variant_of': {'id': twin.id, 'name': twin.display}}
+            continue
+
+        is_fresh = bool(_VERS_RE.search(_normalize_ingredient((ing.name or '').lower())))
+        if (ing.category in KAST_CATEGORIES and not is_fresh
+                and _is_dose(ri.unit, ri.amount)):
+            out[ri.id] = {'hint': 'suggest', 'variant_of': None}
+        else:
+            out[ri.id] = {'hint': None, 'variant_of': None}
+    return out

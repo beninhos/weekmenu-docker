@@ -80,9 +80,10 @@ function addIngredientRow(opts) {
             </select>
         </div>
         <div class="col-span-12 md:col-span-2 order-6 md:order-6">
-            <label class="pantry-label flex items-center gap-1.5 px-2 py-1.5 rounded border border-[#E8E4DC] cursor-pointer text-xs text-[#6B6B6B]">
-                <input type="checkbox" class="pantry-cb w-4 h-4 cursor-pointer rounded border-[#D4CEC4]">
-                <span class="pantry-text">altijd in huis</span>
+            <label class="pantry-label inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#E8E4DC] cursor-pointer text-xs text-[#6B6B6B]">
+                <input type="checkbox" class="pantry-cb sr-only">
+                <span class="pantry-icon" aria-hidden="true"></span>
+                <span class="pantry-text">op de lijst</span>
             </label>
         </div>
         <div class="col-span-12 order-7 md:order-7 pantry-variant hidden"></div>
@@ -122,15 +123,17 @@ function initPantryToggle(row, checked, hint) {
   // Op de rij, niet in de closure: de autocomplete kan de hint later nog wijzigen.
   if (hint !== undefined) row.dataset.hint = hint || '';
 
+  const icon = row.querySelector('.pantry-icon');
   const paint = () => {
     flag.value = cb.checked ? '1' : '0';
     if (!label) return;
     const suggest = !cb.checked && row.dataset.hint === 'suggest';
-    label.className = 'pantry-label flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer text-xs '
+    label.className = 'pantry-label inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full cursor-pointer text-xs '
       + (cb.checked ? 'border border-[#97C459] bg-[#EAF3DE] text-[#3B6D11]'
         : suggest ? 'border border-dashed border-[#BA7517] bg-[#FAEEDA] text-[#854F0B]'
-          : 'border border-[#E8E4DC] text-[#6B6B6B]');
-    if (text) text.textContent = cb.checked ? 'in huis' : (suggest ? 'altijd in huis?' : 'altijd in huis');
+          : 'border border-[#E8E4DC] text-[#B4B2A9] hover:border-[#8B4513] hover:text-[#8B4513]');
+    if (icon) icon.textContent = cb.checked ? '\u2302' : (suggest ? '+' : '');
+    if (text) text.textContent = cb.checked ? 'in huis' : (suggest ? 'altijd in huis?' : 'op de lijst');
   };
 
   cb.checked = !!checked;
@@ -159,4 +162,9 @@ function showVariantHint(row, twin) {
   box.querySelector('.variant-dismiss').addEventListener('click', () => box.classList.add('hidden'));
 }
 
-document.querySelectorAll('.ingredient-row').forEach(row => initPantryToggle(row, row.dataset.pantry === '1'));
+document.querySelectorAll('.ingredient-row').forEach(row => {
+  initPantryToggle(row, row.dataset.pantry === '1', row.dataset.hint || '');
+  if (row.dataset.hint === 'variant' && row.dataset.variantId) {
+    showVariantHint(row, { id: row.dataset.variantId, name: row.dataset.variantName || '' });
+  }
+});

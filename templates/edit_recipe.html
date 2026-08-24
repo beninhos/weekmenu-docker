@@ -111,8 +111,12 @@
             </div>
             <div id="ingredients" class="space-y-2">
                 {% for ri in recipe.ingredients %}
+                {% set h = row_hints.get(ri.id, {}) %}
                 <div class="grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row"
-                     data-pantry="{{ '1' if ri.ingredient_id in pantry_ids else '0' }}">
+                     data-pantry="{{ '1' if ri.ingredient_id in pantry_ids else '0' }}"
+                     data-hint="{{ h.hint or '' }}"
+                     {% if h.variant_of %}data-variant-id="{{ h.variant_of.id }}"
+                     data-variant-name="{{ h.variant_of.name }}"{% endif %}>
                     <div class="col-span-10 md:col-span-4 order-1 md:order-1 relative">
                         <input type="text" name="ingredient[]" value="{{ ri.ingredient.display }}" autocomplete="off"
                                class="ingredient-ac block w-full rounded-md border-[#D4CEC4] shadow-sm">
@@ -147,11 +151,13 @@
                         </select>
                     </div>
                     <div class="col-span-12 md:col-span-2 order-6 md:order-6">
-                        <label class="pantry-label flex items-center gap-1.5 px-2 py-1.5 rounded border border-[#E8E4DC] cursor-pointer text-xs text-[#6B6B6B]">
-                            <input type="checkbox" class="pantry-cb w-4 h-4 cursor-pointer rounded border-[#D4CEC4]">
-                            <span class="pantry-text">altijd in huis</span>
+                        <label class="pantry-label inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#E8E4DC] cursor-pointer text-xs text-[#6B6B6B]">
+                            <input type="checkbox" class="pantry-cb sr-only">
+                            <span class="pantry-icon" aria-hidden="true"></span>
+                            <span class="pantry-text">op de lijst</span>
                         </label>
                     </div>
+                    <div class="col-span-12 order-7 md:order-7 pantry-variant hidden"></div>
                 </div>
                 {% endfor %}
             </div>

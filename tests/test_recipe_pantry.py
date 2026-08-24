@@ -115,7 +115,9 @@ def test_bewerkformulier_stuurt_de_bereiding_mee(client, app):
 def test_nieuw_receptformulier_heeft_een_voorraadmarkering(client, app):
     html = client.get('/recipe/new').get_data(as_text=True)
     assert 'name="pantry_flag[]"' in html
-    assert 'altijd in huis' in html
+    assert 'class="pantry-label' in html
+    assert 'class="pantry-text"' in html
+    assert 'pantry-variant' in html
 
 
 def test_verouderde_categorie_blijft_selecteerbaar_in_de_dropdown(client, app):
@@ -131,3 +133,46 @@ def test_server_rijen_hebben_het_label_dat_de_js_bijwerkt(client, app):
     for url in ('/recipe/new', f'/recipe/{r.id}/edit'):
         html = client.get(url).get_data(as_text=True)
         assert 'class="pantry-text"' in html, url
+
+
+def test_bestaande_receptregels_krijgen_hint_en_variant(client, app):
+    """De oranje suggestie en de variant-waarschuwing moeten ook in het
+    bewerkformulier verschijnen, niet alleen bij een import."""
+    from weekmenu.models import Recipe, RecipeIngredient, PantryIngredient
+
+    twin = Ingredient(name='rodewijnazijn', display_name='rodewijnazijn',
+                      category='Oliën, Sauzen & Smaakmakers')
+    variant = Ingredient(name='rode wijnazijn', display_name='rode wijnazijn',
+                         category='Oliën, Sauzen & Smaakmakers')
+    kaneel = Ingredient(name='kaneel', display_name='kaneel',
+                        category='Kruiden & Specerijen')
+    puree = Ingredient(name='tomatenpuree', display_name='tomatenpuree',
+                       category='Oliën, Sauzen & Smaakmakers')
+    db.session.add_all([twin, variant, kaneel, puree])
+    db.session.flush()
+    db.session.add(PantryIngredient(ingredient_id=twin.id))
+    r = Recipe(name='Proef', serves=2)
+    db.session.add(r)
+    db.session.flush()
+    db.session.add_all([
+        RecipeIngredient(recipe_id=r.id, ingredient_id=twin.id, amount=1, unit='el'),
+        RecipeIngredient(recipe_id=r.id, ingredient_id=variant.id, amount=1, unit='el'),
+        RecipeIngredient(recipe_id=r.id, ingredient_id=kaneel.id, amount=1, unit='tl'),
+        RecipeIngredient(recipe_id=r.id, ingredient_id=puree.id, amount=140, unit='g'),
+    ])
+    db.session.commit()
+
+    from weekmenu.services.pantry import hints_for_recipe_rows
+    h = hints_for_recipe_rows(r.ingredients)
+    per_ing = {ri.ingredient.name: h[ri.id] for ri in r.ingredients}
+    assert per_ing['rodewijnazijn']['hint'] == 'in_pantry'
+    assert per_ing['rode wijnazijn']['hint'] == 'variant'
+    assert per_ing['rode wijnazijn']['variant_of']['name'] == 'rodewijnazijn'
+    assert per_ing['kaneel']['hint'] == 'suggest'
+    assert per_ing['tomatenpuree']['hint'] is None
+
+    html = client.get(f'/recipe/{r.id}/edit').get_data(as_text=True)
+    assert 'data-hint="suggest"' in html
+    assert 'data-hint="variant"' in html
+    assert 'data-variant-name="rodewijnazijn"' in html
+    assert html.count('pantry-variant') >= 4      # container op elke rij

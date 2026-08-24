@@ -23,7 +23,7 @@ from weekmenu.services.gemini import scrape_recipe_from_url, recipe_from_photos
 from weekmenu.services.recipe_matcher import score_recipes
 from weekmenu.services.pantry import (
     list_pantry, add_to_pantry, remove_from_pantry, annotate_pantry_status,
-    pantry_hints_for,
+    pantry_hints_for, hints_for_recipe_rows,
 )
 
 
@@ -487,6 +487,7 @@ def edit_recipe(id):
     pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
     return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks,
                            categories=PRODUCT_CATEGORIES, pantry_ids=pantry_ids,
+                           row_hints=hints_for_recipe_rows(recipe.ingredients),
                            meal_types=RECIPE_MEAL_TYPES,
                            recipe_meal_types={m.meal_type for m in recipe.meal_types})
 
