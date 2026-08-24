@@ -44,10 +44,11 @@ async function fetchResults(q, dropdown, input, hiddenId) {
             return;
         }
         dropdown.innerHTML = results.map((r, i) => `
-            <div class="ac-item flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-[#FAF8F5] text-sm"
-                 data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category)}" data-pref-unit="${esc(r.preferred_unit || '')}">
-                <span class="text-[#2C2C2C]">${esc(r.name)}</span>
-                <span class="text-xs text-[#6B6B6B]">${esc(r.category)}${r.has_ah ? ' \u00B7 AH' : ''}</span>
+            <div class="ac-item flex items-center justify-between px-3 py-1.5 cursor-pointer text-sm ${r.in_pantry ? 'bg-[#F4F8EE] hover:bg-[#EAF3DE]' : 'hover:bg-[#FAF8F5]'}"
+                 data-id="${r.id}" data-name="${esc(r.name)}" data-cat="${esc(r.category)}" data-pref-unit="${esc(r.preferred_unit || '')}"
+                 data-pantry="${r.in_pantry ? '1' : '0'}" data-hint="${esc(r.pantry_hint || '')}">
+                <span class="${r.in_pantry ? 'text-[#3B6D11]' : 'text-[#2C2C2C]'}">${r.in_pantry ? '\u2302 ' : ''}${esc(r.name)}</span>
+                <span class="text-xs ${r.in_pantry ? 'text-[#3B6D11]' : 'text-[#6B6B6B]'}">${r.in_pantry ? 'in voorraad \u00B7 ' : ''}${esc(r.category)}${r.has_ah ? ' \u00B7 AH' : ''}</span>
             </div>
         `).join('');
         dropdown.querySelectorAll('.ac-item').forEach(item => {
@@ -57,7 +58,13 @@ async function fetchResults(q, dropdown, input, hiddenId) {
                 const row = input.closest('.ingredient-row');
                 if (row) {
                     const catSel = row.querySelector('select[name="category[]"]');
-                    if (catSel) catSel.value = item.dataset.cat;
+                    if (catSel) setCategoryValue(catSel, item.dataset.cat);
+                    const cb = row.querySelector('.pantry-cb');
+                    if (cb) {
+                        row.dataset.hint = item.dataset.hint || '';
+                        cb.checked = item.dataset.pantry === '1';
+                        cb.dispatchEvent(new Event('change'));
+                    }
                     const prefUnit = item.dataset.prefUnit;
                     if (prefUnit) {
                         const unitInput = row.querySelector('input[name="unit[]"]');

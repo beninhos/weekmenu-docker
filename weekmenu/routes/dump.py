@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, redirect, render_template, request, url_fo
 from weekmenu.extensions import db
 from weekmenu.models import Cookbook, DumpJob, Recipe, RecipeDraft, RecipeIngredient
 from weekmenu.services.dump import retry_dump_job, start_dump_job
+from weekmenu.services.pantry import annotate_pantry_status
 from weekmenu.services.recipes import _resolve_or_create_ingredient
 from weekmenu.services.units import _normalize_ri_unit
 
@@ -18,7 +19,7 @@ def serialize_draft(d):
         'name': d.name,
         'serves': d.serves,
         'instructions': d.instructions,
-        'ingredients': json.loads(d.ingredients_json or '[]'),
+        'ingredients': annotate_pantry_status(json.loads(d.ingredients_json or '[]')),
         'image_path': d.image_path,
         'original_image_path': d.original_image_path,
         'status': d.status,

@@ -21,7 +21,10 @@ from weekmenu.services.recipes import (
 )
 from weekmenu.services.gemini import scrape_recipe_from_url, recipe_from_photos
 from weekmenu.services.recipe_matcher import score_recipes
-from weekmenu.services.pantry import list_pantry, add_to_pantry, remove_from_pantry
+from weekmenu.services.pantry import (
+    list_pantry, add_to_pantry, remove_from_pantry, annotate_pantry_status,
+    pantry_hints_for,
+)
 
 
 bp = Blueprint('recipes', __name__)
@@ -221,6 +224,41 @@ def delete_cookbook(id):
     return jsonify({'status': 'success'})
 
 
+def _pick_ingredient(ingredient_ids, ingredient_names, categories, i):
+    """Resolve row i to an Ingredient and apply the category chosen in the form.
+
+    Zonder deze correctie is Ingredient.category write-once: bij een bestaand
+    ingredient werd de dropdown genegeerd, waardoor een fout schap nergens te
+    herstellen viel.
+    """
+    posted_cat = categories[i] if i < len(categories) else None
+
+    if i < len(ingredient_ids) and ingredient_ids[i]:
+        ingredient = Ingredient.query.get(int(ingredient_ids[i]))
+    else:
+        ingredient = _resolve_or_create_ingredient(ingredient_names[i], posted_cat)
+
+    if ingredient and posted_cat in PRODUCT_CATEGORIES and posted_cat != ingredient.category:
+        ingredient.category = posted_cat
+
+    return ingredient
+
+
+def _sync_pantry(scope_ids, wanted_ids):
+    """Zet de voorraadkast gelijk aan `wanted_ids`, maar alleen binnen `scope_ids`.
+
+    Ingredienten buiten dit recept blijven ongemoeid.
+    """
+    for ing_id in scope_ids:
+        exists = PantryIngredient.query.filter_by(ingredient_id=ing_id).first()
+        if ing_id in wanted_ids:
+            if not exists:
+                db.session.add(PantryIngredient(ingredient_id=ing_id))
+        elif exists:
+            db.session.delete(exists)
+    db.session.commit()
+
+
 @bp.route('/recipe/new', methods=['GET', 'POST'])
 def new_recipe():
     cookbooks = Cookbook.query.order_by(Cookbook.name).all()
@@ -286,18 +324,21 @@ def new_recipe():
         units = request.form.getlist('unit[]')
         categories = request.form.getlist('category[]')
         preparations = request.form.getlist('preparation[]')
+        pantry_flags = request.form.getlist('pantry_flag[]')
+        pantry_scope, pantry_wanted = set(), set()
 
         for i in range(len(ingredient_names)):
             if not ingredient_names[i]:
                 continue
 
-            if i < len(ingredient_ids) and ingredient_ids[i]:
-                ingredient = Ingredient.query.get(int(ingredient_ids[i]))
-            else:
-                ingredient = _resolve_or_create_ingredient(ingredient_names[i], categories[i] if i < len(categories) else None)
+            ingredient = _pick_ingredient(ingredient_ids, ingredient_names, categories, i)
 
             if not ingredient:
                 continue
+
+            pantry_scope.add(ingredient.id)
+            if i < len(pantry_flags) and pantry_flags[i] == '1':
+                pantry_wanted.add(ingredient.id)
 
             prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
 
@@ -313,6 +354,7 @@ def new_recipe():
             db.session.add(recipe_ingredient)
 
         db.session.commit()
+        _sync_pantry(pantry_scope, pantry_wanted)
 
         draft_id = request.form.get('draft_id')
         if draft_id:
@@ -324,7 +366,9 @@ def new_recipe():
 
         return redirect(url_for('recipes.receptenplanner'))
 
-    return render_template('new_recipe.html', cookbooks=cookbooks, categories=PRODUCT_CATEGORIES)
+    pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
+    return render_template('new_recipe.html', cookbooks=cookbooks,
+                           categories=PRODUCT_CATEGORIES, pantry_ids=pantry_ids)
 
 
 @bp.route('/recipe/<int:id>/edit', methods=['GET', 'POST'])
@@ -387,18 +431,21 @@ def edit_recipe(id):
         units = request.form.getlist('unit[]')
         categories = request.form.getlist('category[]')
         preparations = request.form.getlist('preparation[]')
+        pantry_flags = request.form.getlist('pantry_flag[]')
+        pantry_scope, pantry_wanted = set(), set()
 
         for i in range(len(ingredient_names)):
             if not ingredient_names[i]:
                 continue
 
-            if i < len(ingredient_ids) and ingredient_ids[i]:
-                ingredient = Ingredient.query.get(int(ingredient_ids[i]))
-            else:
-                ingredient = _resolve_or_create_ingredient(ingredient_names[i], categories[i] if i < len(categories) else None)
+            ingredient = _pick_ingredient(ingredient_ids, ingredient_names, categories, i)
 
             if not ingredient:
                 continue
+
+            pantry_scope.add(ingredient.id)
+            if i < len(pantry_flags) and pantry_flags[i] == '1':
+                pantry_wanted.add(ingredient.id)
 
             prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
 
@@ -415,18 +462,7 @@ def edit_recipe(id):
 
         db.session.commit()
 
-        # Scope-gebonden pantry-sync: alleen ingrediënten van dit recept aanraken
-        scope_ids         = set(int(x) for x in request.form.getlist('ingredient_id[]') if x)
-        checked_pantry_ids = set(int(x) for x in request.form.getlist('pantry[]'))
-        for ing_id in scope_ids:
-            exists = PantryIngredient.query.filter_by(ingredient_id=ing_id).first()
-            if ing_id in checked_pantry_ids:
-                if not exists:
-                    db.session.add(PantryIngredient(ingredient_id=ing_id))
-            else:
-                if exists:
-                    db.session.delete(exists)
-        db.session.commit()
+        _sync_pantry(pantry_scope, pantry_wanted)
 
         return redirect(url_for('recipes.receptenplanner'))
 
@@ -502,13 +538,25 @@ def ingredient_search():
         ).limit(15 - len(results)).all()
         results.extend(r for r in more if r.id not in seen)
 
+    shown = results[:15]
+    pantry_ids = {
+        p.ingredient_id for p in
+        PantryIngredient.query.filter(
+            PantryIngredient.ingredient_id.in_([i.id for i in shown])
+        ).all()
+    } if shown else set()
+
+    hints = pantry_hints_for(shown)
+
     return jsonify([{
         'id': ing.id,
         'name': ing.display,
         'category': ing.category,
         'has_ah': bool(ing.ah_product_id),
         'preferred_unit': ing.preferred_unit,
-    } for ing in results[:15]])
+        'in_pantry': ing.id in pantry_ids,
+        'pantry_hint': hints.get(ing.id),
+    } for ing in shown])
 
 
 @bp.route('/api/ingredients', methods=['POST'])
@@ -590,6 +638,8 @@ def scrape_recipe():
     data = request.get_json() or {}
     url = data.get('url', '')
     payload, status = scrape_recipe_from_url(url)
+    if status == 200:
+        annotate_pantry_status(payload.get('ingredients') or [])
     if status != 200:
         current_app.logger.warning('Recept-import mislukt voor %r: %s',
                                    url, payload.get('message'))
@@ -601,6 +651,8 @@ def recipe_from_photo():
     if 'photos' not in request.files:
         return jsonify({'status': 'error', 'message': "Geen foto's ontvangen"}), 400
     payload, status = recipe_from_photos(request.files.getlist('photos'))
+    if status == 200:
+        annotate_pantry_status(payload.get('ingredients') or [])
     return jsonify(payload), status
 
 
