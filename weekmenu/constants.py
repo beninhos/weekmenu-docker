@@ -190,8 +190,11 @@ DUTCH_UNITS = {
 
 _UNIT_KEYS = '|'.join(re.escape(k) for k in sorted(DUTCH_UNITS.keys(), key=len, reverse=True))
 _AMOUNT_RE = r'(?:[\d]+(?:[,.][\d]+)?(?:\s*[-–]\s*[\d]+(?:[,.][\d]+)?)?|[½¼¾⅓⅔⅛⅜⅝⅞]|\d+\s*/\s*\d+|\d+\s+\d+\s*/\s*\d+)'
+# Kookboeken schrijven 'stuk(s)' en 'teen(tjes)'. Zonder deze staart belandt
+# de eenheid in de ingredientnaam en ontstaat er een spookingredient.
+_UNIT_SUFFIX = r'(?:\((?:s|en|tjes|je|jes)\))?'
 _INGREDIENT_RE = re.compile(
-    r'^(' + _AMOUNT_RE + r')\s+(' + _UNIT_KEYS + r')\b\.?\s+(.+)$',
+    r'^(' + _AMOUNT_RE + r')\s+(' + _UNIT_KEYS + r')\b' + _UNIT_SUFFIX + r'\.?\s+(.+)$',
     re.IGNORECASE
 )
 _AMOUNT_ONLY_RE = re.compile(
@@ -215,7 +218,7 @@ _CATEGORY_KEYWORDS = [
                            'speltmeel', 'volkorenmeel', 'havermeel', 'bakmeel', 'patentbloem']),
     ('Ontbijt & Beleg', ['pindakaas', 'notenpasta', 'chocopasta', 'hagelslag', 'jam', 'marmelade', 'appelstroop', 'muesli', 'granola', 'cornflakes', 'havermout', 'vlokken', 'ontbijtkoek', 'beschuit', 'cracker']),
     ('Kaas & Vleeswaren', ['achterham', 'beenham', 'rauwe ham', 'parmaham', 'serranoham', 'ontbijtspek', 'ontbijtspekje']),
-    ('Noten & Snacks', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'pinda']),
+    ('Noten & Snacks', ['amandel', 'walnoot', 'walnoten', 'cashew', 'hazelnoot', 'hazelnoten', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'pinda']),
     ('Oliën, Sauzen & Smaakmakers', ['satésaus', 'sesamolie', 'ahornsiroop', 'boemboe', 'jus', 'saus', 'bouillon', 'fond', 'soep', 'chutney', 'tapenade']),
     ('Bakken & Desserts', ['maizena', 'maïzena', 'zelfrijzend']),
     ('Brood & Bakkerij', ['hamburgerbroodje', 'volkoren bolletje', 'bolletje', 'broodje', 'papadum', 'chapati', 'wraps']),

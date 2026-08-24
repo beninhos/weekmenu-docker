@@ -115,22 +115,26 @@ function flash(row, tekst) {
 
 async function toPantry(id, btn) {
     btn.disabled = true;
+    let data;
     try {
         const resp = await fetch('/api/pantry', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ingredient_id: id}),
         });
-        const data = await resp.json();
-        if (data.status === 'ok' || data.status === 'exists') {
-            // Eerst de rij pakken: na btn.remove() is closest() null.
-            const row = btn.closest('.review-row');
-            btn.remove();
-            flash(row, '✓ op voorraad');
-            return;
-        }
-    } catch (e) { /* val door naar herstel */ }
-    btn.disabled = false;
+        data = await resp.json();
+    } catch (e) {
+        btn.disabled = false;    // offline: laat de knop bruikbaar
+        return;
+    }
+    // Buiten de try: anders slikt hij ook fouten in deze DOM-code op.
+    if (!data || (data.status !== 'ok' && data.status !== 'exists')) {
+        btn.disabled = false;
+        return;
+    }
+    const row = btn.closest('.review-row');   // vóór remove(), anders null
+    btn.remove();
+    flash(row, '✓ op voorraad');
 }
 
 async function setCategory(id, category, el) {

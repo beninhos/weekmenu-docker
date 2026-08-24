@@ -11,7 +11,7 @@ from weekmenu.models import (
 )
 from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET, BRONNEN
 from weekmenu.services.shopping import (
-    _build_shopping_dict, send_dict_to_ah, build_combined_shopping_list,
+    send_dict_to_ah, build_combined_shopping_list,
 )
 from weekmenu.services.units import _normalize_ri_unit
 from weekmenu.services.menu import clear_shopping_list as _clear_shopping_list
@@ -274,9 +274,3 @@ def add_shopping_item(year, week):
     })
 
 
-@bp.route('/api/shopping-list/<int:year>/<int:week>/send-to-ah', methods=['POST'])
-def send_to_ah(year, week):
-    _body = request.get_json(force=True) or {}
-    qty_overrides = {int(k): v for k, v in _body.get('qty_overrides', {}).items()}
-    payload, status, _sent = send_dict_to_ah(_build_shopping_dict(year, week), qty_overrides)
-    return jsonify(payload), status

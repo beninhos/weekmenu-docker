@@ -160,3 +160,69 @@ def test_ingredient_api_weigert_een_verouderde_categorie(client, app):
     ing = Ingredient.query.filter_by(name='venkelzaad').one()
     assert ing.category in PRODUCT_CATEGORIES
     assert resp.status_code in (200, 201)
+
+
+# ── Opruimwerk uit de 'kan later'-lijst ─────────────────────────────────
+
+def test_parser_slikt_de_meervoudsstaart_van_de_eenheid(app):
+    """Kookboeken schrijven 'stuk(s)'; die staart hoorde niet in de naam."""
+    from weekmenu.services.units import _parse_dutch_ingredient as p
+    assert p('1 stuk(s) tomaat')['name'] == 'tomaat'
+    assert p('2 stuk(s) rode paprika')['name'] == 'rode paprika'
+    teen = p('1 teen(tjes) knoflook')
+    assert teen['name'] == 'knoflook' and teen['unit'] == 'teen'
+    # en de gewone vormen blijven werken
+    assert p('2 stuks tomaat')['name'] == 'tomaat'
+    assert p('1 el olijfolie')['unit'] == 'el'
+    assert p('500 g kipfilet')['amount'] == 500
+
+
+def test_meervoudige_noten_vallen_niet_in_overig(app):
+    from weekmenu.services.units import _guess_ingredient_category as g
+    for naam in ('walnoot', 'walnoten', 'hazelnoot', 'hazelnoten'):
+        assert g(naam) == 'Noten & Snacks', naam
+
+
+def test_zip_import_valideert_de_categorie(client, app):
+    """De ZIP-tak maakte Ingredient() rechtstreeks aan, dus zonder
+    display_name en met een categorie die niet meer bestaat."""
+    from weekmenu.services.recipes import _resolve_or_create_ingredient
+    from weekmenu.constants import PRODUCT_CATEGORIES
+    ing = _resolve_or_create_ingredient('venkelzaad', 'Groente & Aardappelen')
+    db.session.commit()
+    assert ing.category in PRODUCT_CATEGORIES
+    assert ing.display_name
+
+
+def test_dode_ah_route_is_weg(client, app):
+    assert client.post('/api/shopping-list/2026/35/send-to-ah', json={}).status_code == 404
+
+
+def test_zip_import_rondrit(client, app):
+    """Exporteer een recept naar ZIP en lees het weer in: het ingredient moet
+    een display_name, een alias en een geldige categorie hebben."""
+    import io as _io, json, zipfile
+    from weekmenu.constants import PRODUCT_CATEGORIES
+    from weekmenu.models import IngredientAlias
+
+    payload = {'cookbooks': [], 'recipes': [{
+        'name': 'Ingelezen recept', 'serves': 2, 'page': None, 'url': None,
+        'instructions': 'Stap 1.', 'image_filename': None,
+        'ingredients': [{'name': 'venkelzaad', 'category': 'Groente & Aardappelen',
+                         'amount': 1, 'unit': 'tl'}],
+    }]}
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr('weekmenu_export.json', json.dumps(payload))
+    buf.seek(0)
+
+    resp = client.post('/import/zip',
+                       data={'file': (buf, 'export.zip')},
+                       content_type='multipart/form-data')
+    assert resp.status_code == 200, resp.get_data(as_text=True)[:300]
+
+    ing = Ingredient.query.filter_by(name='venkelzaad').one()
+    assert ing.category in PRODUCT_CATEGORIES
+    assert ing.category != 'Groente & Aardappelen'
+    assert ing.display_name
+    assert IngredientAlias.query.filter_by(ingredient_id=ing.id).count() >= 1

@@ -141,7 +141,7 @@ function renderGrid() {
   container.innerHTML = filteredRecipes.map(r => `
     <div class="recipe-card-grid" role="button" tabindex="0"
          onclick="openDetail(event, ${r.id})"
-         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDetail(null, ${r.id});}">
+         onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail(null, ${r.id});}">
       ${r.image_path
         ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy">`
         : `<div class="card-placeholder"><span style="font-size:3rem;font-weight:800;color:#D4CEC4;">${esc((r.name?.[0] ?? '?').toUpperCase())}</span></div>`
@@ -239,7 +239,7 @@ function renderList() {
     <div class="flex items-center gap-3 p-3 bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] cursor-pointer hover:border-[#C9A882]"
          role="button" tabindex="0"
          onclick="openDetail(event, ${r.id})"
-         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDetail(null, ${r.id});}">
+         onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail(null, ${r.id});}">
       <div class="flex-shrink-0 rounded-lg overflow-hidden" style="width:56px;height:56px;background:#F5F2ED;">
         ${r.image_path
           ? `<img src="/${esc(r.image_path)}" alt="${esc(r.name)}" loading="lazy" style="width:56px;height:56px;object-fit:cover;">`
