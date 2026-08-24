@@ -6,7 +6,7 @@ from flask import current_app
 
 from weekmenu.extensions import db
 from weekmenu.models import Ingredient, IngredientAlias, Cookbook
-from weekmenu.constants import _KNOWN_SITES, _BROWSER_HEADERS
+from weekmenu.constants import _KNOWN_SITES, _BROWSER_HEADERS, PRODUCT_CATEGORIES
 from weekmenu.services.units import _normalize_ingredient, _guess_ingredient_category
 
 
@@ -30,7 +30,10 @@ def _resolve_or_create_ingredient(raw_name, category=None):
     if existing:
         return existing
 
-    if not category or category == 'Overig':
+    # Een categorie die niet (meer) bestaat mag hier niet binnenkomen: de
+    # dropdown toont verouderde waarden als optie, en drafts van voor een
+    # taxonomiewijziging dragen oude namen in hun ingredients_json.
+    if not category or category == 'Overig' or category not in PRODUCT_CATEGORIES:
         category = _guess_ingredient_category(raw_name)
 
     display_name = raw_name.strip()

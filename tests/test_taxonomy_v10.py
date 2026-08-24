@@ -87,3 +87,47 @@ def test_verse_kruiden_zijn_geen_kastartikel_meer(client, app):
         {'name': 'bosvruchten jam', 'amount': 1, 'unit': 'el', 'category': 'Ontbijt & Beleg'},
     ])
     assert [r['pantry_hint'] for r in rows] == [None, 'suggest', 'suggest']
+
+
+def test_verouderde_categorie_lekt_niet_binnen_bij_nieuw_ingredient(client, app):
+    """De dropdown toont verouderde waarden als optie; die mogen niet
+    als categorie van een nieuw ingredient worden opgeslagen."""
+    from weekmenu.services.recipes import _resolve_or_create_ingredient
+    ing = _resolve_or_create_ingredient('venkelzaad', 'Groente, Fruit & Aardappelen')
+    db.session.commit()
+    assert ing.category in PRODUCT_CATEGORIES
+    assert ing.category != 'Groente, Fruit & Aardappelen'
+
+
+def test_v11_ruimt_oude_categorieen_op_in_ingredienten_en_drafts(client, app):
+    import json
+    from weekmenu.migrations import _migrate_v11
+    from weekmenu.models import DumpJob, RecipeDraft
+
+    _seed([('venkelzaad', 'Groente, Fruit & Aardappelen')])
+    job = DumpJob(id='job-v11')
+    db.session.add(job)
+    db.session.flush()
+    draft = RecipeDraft(job_id=job.id, name='Oud concept', ingredients_json=json.dumps([
+        {'name': 'appel', 'amount': 1, 'unit': 'stuks', 'category': 'Groente, Fruit & Aardappelen'},
+        {'name': 'kaneel', 'amount': 1, 'unit': 'tl', 'category': 'Kruiden & Specerijen'},
+    ]))
+    db.session.add(draft)
+    db.session.commit()
+
+    with db.engine.connect() as conn:
+        _migrate_v11(conn)
+        conn.commit()
+    db.session.expire_all()
+
+    assert _cat('venkelzaad') in PRODUCT_CATEGORIES
+    items = json.loads(RecipeDraft.query.get(draft.id).ingredients_json)
+    assert items[0]['category'] == 'Fruit'          # herzien
+    assert items[1]['category'] == 'Kruiden & Specerijen'  # ongemoeid
+
+
+def test_boodschappenlijst_heeft_printknop_en_printstijl(client, app):
+    html = client.get('/boodschappen').get_data(as_text=True)
+    assert 'window.print()' in html
+    assert '@media print' in html
+    assert 'shopping-list-print' in html

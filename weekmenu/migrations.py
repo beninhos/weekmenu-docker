@@ -2,6 +2,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from weekmenu.extensions import db
+from weekmenu.constants import PRODUCT_CATEGORIES
 from weekmenu.services.units import _parse_product_size, _guess_ingredient_category
 
 
@@ -294,6 +295,44 @@ def _migrate_v10(conn):
             )
 
 
+def _migrate_v11(conn):
+    """Restanten van de oude taxonomie opruimen.
+
+    Twee bronnen lekten na v10 nog oude categorienamen binnen: de
+    '(verouderd)'-optie in de receptdropdown, en de ingredients_json van
+    drafts die voor de migratie zijn ingelezen. De guesser draait hier
+    lokaal, dus dit kost geen enkele Gemini-aanroep.
+    """
+    import json
+
+    valid = set(PRODUCT_CATEGORIES)
+
+    rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
+    for ing_id, ing_name, cat in rows:
+        if cat not in valid:
+            conn.execute(
+                text('UPDATE ingredient SET category = :c WHERE id = :i'),
+                {'c': _guess_ingredient_category(ing_name), 'i': ing_id})
+
+    drafts = conn.execute(text(
+        "SELECT id, ingredients_json FROM recipe_draft WHERE status = 'pending'"
+    )).fetchall()
+    for draft_id, raw in drafts:
+        try:
+            items = json.loads(raw or '[]')
+        except (ValueError, TypeError):
+            continue
+        changed = False
+        for item in items:
+            if item.get('category') not in valid:
+                item['category'] = _guess_ingredient_category(item.get('name') or '')
+                changed = True
+        if changed:
+            conn.execute(
+                text('UPDATE recipe_draft SET ingredients_json = :j WHERE id = :i'),
+                {'j': json.dumps(items, ensure_ascii=False), 'i': draft_id})
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -329,8 +368,10 @@ def migrate_db():
             _migrate_v9(conn)
         if current < 10:
             _migrate_v10(conn)
+        if current < 11:
+            _migrate_v11(conn)
 
-        target = 10
+        target = 11
         if current < target:
             if row:
                 conn.execute(

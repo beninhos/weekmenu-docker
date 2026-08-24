@@ -15,6 +15,10 @@
                     class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
                 + Los item
             </button>
+            <button onclick="window.print()"
+                    class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
+                Printen
+            </button>
             <button onclick="checkAll()"
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
                 Alles afvinken
@@ -77,6 +81,7 @@
         </div>
     </div>
 
+    <div class="shopping-list-print">
     {% for group in grouped_open %}
         <h3 class="shopping-category text-sm font-semibold text-[#6B6B6B] uppercase tracking-wide mt-6 mb-1">{{ group.category }}</h3>
         <div class="shopping-group">
@@ -156,6 +161,8 @@
             {% endfor %}
         </div>
     {% endfor %}
+
+    </div>
 
     {% if not grouped_open %}
     <p class="text-sm text-[#6B6B6B] py-6 text-center">Geen open items — alles is al afgevinkt.</p>
@@ -421,4 +428,35 @@ async function addLosItem() {
     }
 }
 </script>
+
+<style>
+@media print {
+    /* Alles wat geen boodschap is verdwijnt */
+    nav, header, footer, button, input, select, textarea,
+    .ah-badge, .ah-search-panel, .qty-control, .list-right,
+    #extraPicker, #addItemPicker, .no-print { display: none !important; }
+
+    /* Geen kaartranden en achtergronden op papier */
+    body { background: #fff !important; }
+    .bg-\[\#F5F2ED\], .bg-\[\#FAF8F5\] { background: #fff !important; }
+    .rounded-lg, .rounded { border: 0 !important; }
+    .shadow { box-shadow: none !important; }
+
+    /* Twee kolommen scheelt papier; koppen blijven bij hun groep */
+    .shopping-list-print { column-count: 2; column-gap: 1.5rem; }
+    .shopping-category { break-after: avoid; page-break-after: avoid; }
+    .shopping-group { break-inside: avoid; page-break-inside: avoid; }
+    .shopping-item { break-inside: avoid; page-break-inside: avoid; }
+
+    /* Afvinkhokje op papier, want de echte checkbox is verborgen */
+    .shopping-item > :first-child::before {
+        content: '';
+        display: inline-block;
+        width: .7em; height: .7em;
+        border: 1px solid #666;
+        margin-right: .5em;
+        vertical-align: middle;
+    }
+}
+</style>
 {% endblock %}
