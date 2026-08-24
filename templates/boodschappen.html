@@ -199,7 +199,7 @@
     </div>
     {% endif %}
 
-    {% if not grouped_open %}
+    {% if not grouped_open and not grouped_elders %}
     <p class="text-sm text-[#6B6B6B] py-6 text-center">Geen open items — alles is al afgevinkt.</p>
     {% endif %}
 
@@ -498,8 +498,10 @@ async function setBron(ingredientId, bron, el) {
     .shopping-group { break-inside: avoid; page-break-inside: avoid; }
     .shopping-item { break-inside: avoid; page-break-inside: avoid; }
 
-    /* Afvinkhokje op papier, want de echte checkbox is verborgen */
-    .shopping-item > :first-child::before {
+    /* Afvinkhokje op papier, want de echte checkbox is verborgen.
+       Mikken op .item-text: die span bestaat in beide blokken, terwijl
+       :first-child in het elders-blok de verborgen checkbox is. */
+    .shopping-item .item-text::before {
         content: '';
         display: inline-block;
         width: .7em; height: .7em;

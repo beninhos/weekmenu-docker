@@ -80,6 +80,20 @@ def _sanitize_json(text):
     return text
 
 
+def _as_number(value):
+    """Gemini levert 'amount' soms als string ('140') of als bereik ('2-3').
+
+    Alles wat niet als getal te lezen is wordt None; dat is precies hoe de
+    app een onbekende hoeveelheid al behandelt.
+    """
+    if value is None or value == '':
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _build_gemini_ingredients(raw_list):
     """Convert structured LLM ingredient dicts to app format with category."""
     ingredients = []
@@ -89,7 +103,7 @@ def _build_gemini_ingredients(raw_list):
             continue
         ingredients.append({
             'name': name,
-            'amount': ing.get('amount'),
+            'amount': _as_number(ing.get('amount')),
             'unit': ing.get('unit') or '',
             'category': _guess_ingredient_category(name),
         })

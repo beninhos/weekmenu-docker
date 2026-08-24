@@ -14,7 +14,9 @@
             <label class="block text-sm font-semibold text-[#2C2C2C] mb-1">Maaltijdtype</label>
             <div class="flex flex-wrap gap-2">
                 {% for code, label in meal_types %}
-                <label class="mealtype-chip flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-sm
+                <label tabindex="0" role="checkbox"
+                       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.querySelector('input').click();}"
+                       class="mealtype-chip flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-sm
                               {{ 'border-[#8B4513] bg-[#8B4513] text-white' if code in recipe_meal_types else 'border-[#D4CEC4] text-[#6B6B6B]' }}">
                     <input type="checkbox" name="meal_type[]" value="{{ code }}" class="hidden"
                            {{ 'checked' if code in recipe_meal_types }}

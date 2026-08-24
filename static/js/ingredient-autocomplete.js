@@ -8,6 +8,9 @@ function initAutocomplete(input) {
 
     input.addEventListener('input', () => {
         hiddenId.value = '';
+        // De rij gaat over iets anders zodra je de naam wijzigt: hint,
+        // variantwaarschuwing en voorraadvinkje horen niet mee te verhuizen.
+        resetRowState(input);
         const q = input.value.trim();
         clearTimeout(debounce);
         if (q.length < 1) { dropdown.classList.add('hidden'); return; }
@@ -59,6 +62,7 @@ async function fetchResults(q, dropdown, input, hiddenId) {
                 if (row) {
                     const catSel = row.querySelector('select[name="category[]"]');
                     if (catSel) setCategoryValue(catSel, item.dataset.cat);
+                    clearVariantHint(row);
                     const cb = row.querySelector('.pantry-cb');
                     if (cb) {
                         row.dataset.hint = item.dataset.hint || '';
@@ -84,3 +88,17 @@ async function fetchResults(q, dropdown, input, hiddenId) {
 
 // Initialize autocomplete on all existing rows
 document.querySelectorAll('.ingredient-ac').forEach(initAutocomplete);
+
+/** Zet hint, variantwaarschuwing en voorraadvinkje terug als de rij van
+ *  ingredient wisselt. Zonder dit blijft de oude stand plakken. */
+function resetRowState(input) {
+    const row = input.closest('.ingredient-row');
+    if (!row) return;
+    row.dataset.hint = '';
+    if (typeof clearVariantHint === 'function') clearVariantHint(row);
+    const cb = row.querySelector('.pantry-cb');
+    if (cb && cb.checked) {
+        cb.checked = false;
+        cb.dispatchEvent(new Event('change'));
+    }
+}

@@ -127,6 +127,10 @@ def boodschappen_send_to_ah():
     data = build_combined_shopping_list()
     open_dict = {}
     for row in data['open']:
+        # Wat je bij de toko of de slager haalt hoort niet in het AH-mandje,
+        # en mag daarna ook niet als 'via AH besteld' worden afgevinkt.
+        if (row.get('bron') or 'ah') != 'ah':
+            continue
         open_dict[(row['ingredient_id'], row['unit'])] = row['amount']
     payload, status, sent_ids = send_dict_to_ah(open_dict, qty_overrides)
     if status == 200 and payload.get('status') == 'ok' and sent_ids:

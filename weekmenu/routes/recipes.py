@@ -260,11 +260,14 @@ def _sync_meal_types(recipe, codes):
 
 
 def _sync_pantry(scope_ids, wanted_ids):
-    """Zet de voorraadkast gelijk aan `wanted_ids`, maar alleen binnen `scope_ids`.
+    """Zet de voorraadkast gelijk aan `wanted_ids`, maar verwijder alleen
+    binnen `scope_ids`.
 
-    Ingredienten buiten dit recept blijven ongemoeid.
+    Toevoegen mag altijd: dat is een expliciete klik van de gebruiker.
+    Verwijderen alleen als de rij zijn ingredient bij id kende, anders haalt
+    een net ingetypte naam stilzwijgend iets uit de kast.
     """
-    for ing_id in scope_ids:
+    for ing_id in scope_ids | wanted_ids:
         exists = PantryIngredient.query.filter_by(ingredient_id=ing_id).first()
         if ing_id in wanted_ids:
             if not exists:
@@ -351,7 +354,11 @@ def new_recipe():
             if not ingredient:
                 continue
 
-            pantry_scope.add(ingredient.id)
+            # Alleen een rij die zijn ingredient bij naam kent mag iets uit de
+            # voorraad HALEN; zonder id weet het formulier niet waarover het
+            # praat en zou een leeg vinkje stilzwijgend iets verwijderen.
+            if i < len(ingredient_ids) and ingredient_ids[i]:
+                pantry_scope.add(ingredient.id)
             if i < len(pantry_flags) and pantry_flags[i] == '1':
                 pantry_wanted.add(ingredient.id)
 
@@ -460,7 +467,11 @@ def edit_recipe(id):
             if not ingredient:
                 continue
 
-            pantry_scope.add(ingredient.id)
+            # Alleen een rij die zijn ingredient bij naam kent mag iets uit de
+            # voorraad HALEN; zonder id weet het formulier niet waarover het
+            # praat en zou een leeg vinkje stilzwijgend iets verwijderen.
+            if i < len(ingredient_ids) and ingredient_ids[i]:
+                pantry_scope.add(ingredient.id)
             if i < len(pantry_flags) and pantry_flags[i] == '1':
                 pantry_wanted.add(ingredient.id)
 
@@ -582,12 +593,17 @@ def ingredient_search():
 
 @bp.route('/api/ingredients', methods=['POST'])
 def create_ingredient():
-    data = request.get_json()
+    data = request.get_json() or {}
     raw_name = (data.get('name') or '').strip()
     category = data.get('category', 'Overig')
 
     if not raw_name:
         return jsonify({'status': 'error', 'message': 'Naam is verplicht'}), 400
+
+    # Zelfde poort als in _resolve_or_create_ingredient: een categorie die
+    # niet (meer) bestaat mag de database niet in.
+    if category not in PRODUCT_CATEGORIES:
+        category = _guess_ingredient_category(raw_name)
 
     canonical = _normalize_ingredient(raw_name.lower().strip())
 

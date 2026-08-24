@@ -313,6 +313,28 @@ def _migrate_v10(conn):
             )
 
 
+# Een migratie moet toetsen tegen het vocabulaire van HAAR EIGEN tijdperk.
+# Tegen het levende PRODUCT_CATEGORIES toetsen laat v11 alle v10-tussennamen
+# ongeldig verklaren en opnieuw raden, waarmee v12 zijn deterministische map
+# nooit meer te zien krijgt.
+_V11_CATEGORIES = frozenset({
+    'Groente & Aardappelen', 'Fruit', 'Verse Kruiden', 'Vlees & Gevogelte',
+    'Vis & Schaaldieren', 'Vegetarisch & Plantaardig', 'Vleeswaren', 'Kaas',
+    'Zuivel & Eieren', 'Brood & Bakkerij', 'Ontbijt & Beleg', 'Bakken & Desserts',
+    'Kruiden & Specerijen', 'Oliën, Sauzen & Smaakmakers', 'Pasta, Rijst & Granen',
+    'Conserven & Peulvruchten', 'Noten, Zaden & Gedroogd Fruit',
+    'Snacks & Zoetwaren', 'Dranken', 'Diepvries', 'Non-Food & Huishouden', 'Overig',
+})
+
+_V12_CATEGORIES = frozenset({
+    'Groente, Fruit & Aardappelen', 'Brood & Bakkerij', 'Kaas & Vleeswaren',
+    'Vlees & Vis', 'Zuivel & Eieren', 'Vegetarisch & Plantaardig', 'Diepvries',
+    'Pasta, Rijst & Wereldkeuken', 'Conserven & Peulvruchten',
+    'Oliën, Sauzen & Smaakmakers', 'Kruiden & Specerijen', 'Bakken & Desserts',
+    'Ontbijt & Beleg', 'Noten & Snacks', 'Dranken', 'Non-Food & Huishouden', 'Overig',
+})
+
+
 def _migrate_v11(conn):
     """Restanten van de oude taxonomie opruimen.
 
@@ -323,7 +345,7 @@ def _migrate_v11(conn):
     """
     import json
 
-    valid = set(PRODUCT_CATEGORIES)
+    valid = _V11_CATEGORIES
 
     rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
     for ing_id, ing_name, cat in rows:
@@ -399,7 +421,7 @@ def _migrate_v12(conn):
                 {'j': json.dumps(items, ensure_ascii=False), 'i': draft_id})
 
     # Alles wat na de samenvoeging nog buiten het vocabulaire valt, opnieuw raden.
-    valid = set(PRODUCT_CATEGORIES)
+    valid = _V12_CATEGORIES
     rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
     for ing_id, ing_name, cat in rows:
         if cat not in valid:

@@ -146,7 +146,11 @@ function initPantryToggle(row, checked, hint) {
 function showVariantHint(row, twin) {
   const box = row.querySelector('.pantry-variant');
   if (!box) return;
-  box.className = 'col-span-12 order-7 md:order-7 mt-1 rounded bg-[#E6F1FB] px-3 py-2 flex items-center gap-2 flex-wrap';
+  // classList, geen className: de haak-klasse pantry-variant moet blijven staan,
+  // anders is het blok daarna nergens meer terug te vinden.
+  box.classList.remove('hidden');
+  box.classList.add('mt-1', 'rounded', 'bg-[#E6F1FB]', 'px-3', 'py-2',
+                    'flex', 'items-center', 'gap-2', 'flex-wrap');
   box.innerHTML = `
         <span class="text-xs text-[#0C447C] flex-1 min-w-[200px]">Lijkt op <strong class="font-medium">${esc(twin.name)}</strong>, die in je voorraad staat</span>
         <button type="button" class="variant-accept text-xs px-2.5 py-1 rounded border border-[#378ADD] text-[#0C447C] hover:bg-[#B5D4F4]">Zelfde product</button>
@@ -157,9 +161,18 @@ function showVariantHint(row, twin) {
     row.querySelector('input[name="ingredient_id[]"]').value = twin.id;
     const cb = row.querySelector('.pantry-cb');
     if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
-    box.classList.add('hidden');
+    clearVariantHint(row);
   });
-  box.querySelector('.variant-dismiss').addEventListener('click', () => box.classList.add('hidden'));
+  box.querySelector('.variant-dismiss').addEventListener('click', () => clearVariantHint(row));
+}
+
+/** Haal de variantwaarschuwing weg, bijvoorbeeld als de rij een ander
+ *  ingredient krijgt. */
+function clearVariantHint(row) {
+  const box = row.querySelector('.pantry-variant');
+  if (!box) return;
+  box.innerHTML = '';
+  box.className = 'col-span-12 order-7 md:order-7 pantry-variant hidden';
 }
 
 document.querySelectorAll('.ingredient-row').forEach(row => {

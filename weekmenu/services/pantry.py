@@ -74,9 +74,15 @@ def _is_dose(unit, amount):
     '1 tl kurkuma' is een kastartikel, '140 g tomatenpuree' koop je per recept.
     """
     unit = (unit or '').strip().lower()
-    amount = amount or 0
+    # Een dosis-eenheid is op zichzelf al beslissend; de hoeveelheid doet er
+    # dan niet toe. Daarom eerst deze poort, en pas daarna rekenen.
     if unit in DOSE_UNITS:
         return True
+    # Al opgeslagen drafts kunnen een string of een bereik ('2-3') dragen.
+    try:
+        amount = float(amount) if amount not in (None, '') else 0
+    except (TypeError, ValueError):
+        return False
     if unit in ('g', 'ml'):
         return 0 < amount <= 100
     return not unit and not amount

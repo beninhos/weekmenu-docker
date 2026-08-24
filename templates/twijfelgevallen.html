@@ -104,6 +104,7 @@
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script>
 function flash(row, tekst) {
+    if (!row) return;
     // Rij blijft staan zodat de lijst niet verspringt terwijl je doorwerkt.
     row.classList.add('opacity-50');
     const mark = document.createElement('span');
@@ -122,8 +123,10 @@ async function toPantry(id, btn) {
         });
         const data = await resp.json();
         if (data.status === 'ok' || data.status === 'exists') {
+            // Eerst de rij pakken: na btn.remove() is closest() null.
+            const row = btn.closest('.review-row');
             btn.remove();
-            flash(btn.closest('.review-row'), '✓ op voorraad');
+            flash(row, '✓ op voorraad');
             return;
         }
     } catch (e) { /* val door naar herstel */ }
@@ -132,20 +135,24 @@ async function toPantry(id, btn) {
 
 async function setCategory(id, category, el) {
     const row = el.closest('.review-row');
+    let data;
     try {
         const resp = await fetch(`/api/ingredient/${id}/category`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({category}),
         });
-        const data = await resp.json();
-        if (data.status !== 'ok') return;
-        const sel = row.querySelector('select');
-        if (sel && sel.value !== data.category) sel.value = data.category;
-        const knop = row.querySelector('button');
-        if (knop) knop.remove();
-        flash(row, '✓ ' + data.category);
-    } catch (e) { /* offline: niets veranderen */ }
+        data = await resp.json();
+    } catch (e) {
+        return;   // offline: laat de rij staan zoals hij staat
+    }
+    // Buiten de try, anders slikt hij ook programmeerfouten in deze DOM-code.
+    if (!data || data.status !== 'ok') return;
+    const sel = row.querySelector('select');
+    if (sel && sel.value !== data.category) sel.value = data.category;
+    const knop = row.querySelector('button');
+    if (knop) knop.remove();
+    flash(row, '✓ ' + data.category);
 }
 </script>
 {% endblock %}
