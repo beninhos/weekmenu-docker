@@ -232,3 +232,65 @@ def hints_for_recipe_rows(recipe_ingredients):
         else:
             out[ri.id] = {'hint': None, 'variant_of': None}
     return out
+
+
+# ── Twijfelgevallen: waar de app zichzelf niet zeker weet ────────────────
+
+TESTAFVAL = ('test ingredient', 'json ingredient')
+
+
+def review_lists():
+    """Drie lijsten voor de nakijkpagina.
+
+    kandidaten  kastartikel dat altijd in dosis gebruikt wordt maar niet
+                op voorraad staat
+    overig      categorie onbekend gebleven
+    afwijkend   opgeslagen categorie wijkt af van wat de gokker nu zegt;
+                dat is een signaal, geen oordeel — de gokker kan er ook
+                naast zitten ('focaccia met rozemarijn' is geen kruid)
+    """
+    from weekmenu.constants import PRODUCT_CATEGORIES
+    from weekmenu.services.units import _guess_ingredient_category
+
+    pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
+    ingredients = Ingredient.query.order_by(Ingredient.name).all()
+
+    uses = {}
+    for ri in RecipeIngredient.query.all():
+        uses.setdefault(ri.ingredient_id, []).append((ri.unit, ri.amount))
+
+    kandidaten, overig, afwijkend = [], [], []
+    for ing in ingredients:
+        rows = uses.get(ing.id, [])
+        n = len(rows)
+        base = {'id': ing.id, 'name': ing.display, 'category': ing.category, 'uses': n}
+
+        if ing.id not in pantry_ids and ing.category in KAST_CATEGORIES and rows:
+            is_fresh = bool(_VERS_RE.search(_normalize_ingredient((ing.name or '').lower())))
+            if not is_fresh and all(_is_dose(u, a) for u, a in rows):
+                kandidaten.append(base)
+
+        if ing.category == 'Overig':
+            overig.append(dict(base, testafval=any(t in ing.name for t in TESTAFVAL)))
+
+        guess = _guess_ingredient_category(ing.name)
+        if guess != ing.category and guess != 'Overig' and guess in PRODUCT_CATEGORIES:
+            afwijkend.append(dict(base, guess=guess))
+
+    kandidaten.sort(key=lambda x: (-x['uses'], x['name']))
+    overig.sort(key=lambda x: (x['testafval'], -x['uses'], x['name']))
+    afwijkend.sort(key=lambda x: (-x['uses'], x['name']))
+    return {'kandidaten': kandidaten, 'overig': overig, 'afwijkend': afwijkend}
+
+
+def set_category(ingredient_id, category):
+    """Categorie van een ingredient wijzigen, gevalideerd."""
+    from weekmenu.constants import PRODUCT_CATEGORIES
+    if category not in PRODUCT_CATEGORIES:
+        return {'status': 'error', 'message': 'onbekende categorie'}, 400
+    ing = Ingredient.query.get(ingredient_id)
+    if not ing:
+        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+    ing.category = category
+    db.session.commit()
+    return {'status': 'ok', 'id': ing.id, 'category': ing.category}, 200

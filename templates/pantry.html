@@ -5,10 +5,14 @@
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
         <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C] mb-1"
             style="font-family: var(--font-serif)">Voorraadkast</h2>
-        <p class="text-sm text-[#6B6B6B] mb-5">
+        <p class="text-sm text-[#6B6B6B] mb-3">
             Ingrediënten die altijd in huis zijn. Ze worden nooit op de boodschappenlijst gezet
             en tellen mee in de Ecobooster.
         </p>
+        <a href="{{ url_for('pantry.review') }}"
+           class="inline-block mb-5 text-sm text-[#8B4513] hover:underline">
+            Twijfelgevallen nakijken →
+        </a>
 
         <div id="pantryTable" class="grid grid-cols-3 gap-1 mb-4">
             {% for p in pantry %}

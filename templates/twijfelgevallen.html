@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+    <div class="flex justify-between items-start mb-1 flex-wrap gap-3">
+        <div>
+            <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Twijfelgevallen</h2>
+            <p class="text-sm text-[#6B6B6B]">Waar de app zichzelf niet zeker weet. Niets verandert vanzelf.</p>
+        </div>
+        <a href="{{ url_for('pantry.pantry') }}"
+           class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm"
+           style="text-decoration:none;">Naar voorraad</a>
+    </div>
+
+    {% macro catselect(item) %}
+    <select onchange="setCategory({{ item.id }}, this.value, this)"
+            class="rounded-md border-[#D4CEC4] shadow-sm text-xs py-1">
+        {% if item.category not in categories %}
+        <option value="{{ item.category }}" selected>{{ item.category }} (verouderd)</option>
+        {% endif %}
+        {% for cat in categories %}
+        <option value="{{ cat }}" {{ 'selected' if item.category == cat }}>{{ cat }}</option>
+        {% endfor %}
+    </select>
+    {% endmacro %}
+
+    <!-- ── 1. Voorraadkandidaten ──────────────────────────────────────── -->
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-6 mb-1">
+        Voorraadkandidaten <span class="font-normal normal-case">({{ lists.kandidaten | length }})</span>
+    </h3>
+    <p class="text-xs text-[#6B6B6B] mb-2">
+        Kastartikelen die je altijd per dosis gebruikt — nooit een hele verpakking — maar die niet op voorraad staan.
+    </p>
+    {% if lists.kandidaten %}
+    <div class="space-y-1">
+        {% for item in lists.kandidaten %}
+        <div class="review-row flex items-center gap-3 bg-white border border-[#E8E4DC] rounded px-3 py-1.5 text-sm"
+             data-id="{{ item.id }}">
+            <span class="flex-1 min-w-0 truncate">{{ item.name }}</span>
+            <span class="text-xs text-[#B4B2A9] shrink-0">{{ item.uses }}×</span>
+            <span class="text-xs text-[#6B6B6B] shrink-0 hidden sm:inline">{{ item.category }}</span>
+            <button onclick="toPantry({{ item.id }}, this)"
+                    class="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[#97C459] text-[#3B6D11] hover:bg-[#EAF3DE]">
+                ⌂ altijd in huis
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
+    {% endif %}
+
+    <!-- ── 2. Onbekende categorie ─────────────────────────────────────── -->
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-8 mb-1">
+        Categorie onbekend <span class="font-normal normal-case">({{ lists.overig | length }})</span>
+    </h3>
+    <p class="text-xs text-[#6B6B6B] mb-2">
+        Deze belanden onderaan de boodschappenlijst, buiten hun schap.
+    </p>
+    {% if lists.overig %}
+    <div class="space-y-1">
+        {% for item in lists.overig %}
+        <div class="review-row flex items-center gap-3 bg-white border rounded px-3 py-1.5 text-sm
+                    {{ 'border-red-200' if item.testafval else 'border-[#E8E4DC]' }}"
+             data-id="{{ item.id }}">
+            <span class="flex-1 min-w-0 truncate">
+                {{ item.name }}
+                {% if item.testafval %}<span class="text-xs text-red-600 ml-1">testrommel</span>{% endif %}
+            </span>
+            <span class="text-xs text-[#B4B2A9] shrink-0">{{ item.uses }}×</span>
+            {{ catselect(item) }}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
+    {% endif %}
+
+    <!-- ── 3. Afwijkend van de gok ────────────────────────────────────── -->
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-8 mb-1">
+        Wijkt af van de gok <span class="font-normal normal-case">({{ lists.afwijkend | length }})</span>
+    </h3>
+    <p class="text-xs text-[#6B6B6B] mb-2">
+        De gokker zou iets anders kiezen. Dat is een signaal, geen oordeel — soms heb jij gelijk.
+    </p>
+    {% if lists.afwijkend %}
+    <div class="space-y-1">
+        {% for item in lists.afwijkend %}
+        <div class="review-row flex items-center gap-3 bg-white border border-[#E8E4DC] rounded px-3 py-1.5 text-sm"
+             data-id="{{ item.id }}">
+            <span class="flex-1 min-w-0 truncate">{{ item.name }}</span>
+            <span class="text-xs text-[#B4B2A9] shrink-0">{{ item.uses }}×</span>
+            <button onclick="setCategory({{ item.id }}, '{{ item.guess | e }}', this)"
+                    class="shrink-0 text-xs px-2.5 py-1 rounded-full border border-[#D4CEC4] text-[#8B4513] hover:bg-[#FAF8F5]"
+                    title="Neem de gok over">→ {{ item.guess }}</button>
+            {{ catselect(item) }}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
+    {% endif %}
+</div>
+
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script>
+function flash(row, tekst) {
+    // Rij blijft staan zodat de lijst niet verspringt terwijl je doorwerkt.
+    row.classList.add('opacity-50');
+    const mark = document.createElement('span');
+    mark.className = 'text-xs text-[#3B6D11] shrink-0';
+    mark.textContent = tekst;
+    row.appendChild(mark);
+}
+
+async function toPantry(id, btn) {
+    btn.disabled = true;
+    try {
+        const resp = await fetch('/api/pantry', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ingredient_id: id}),
+        });
+        const data = await resp.json();
+        if (data.status === 'ok' || data.status === 'exists') {
+            btn.remove();
+            flash(btn.closest('.review-row'), '✓ op voorraad');
+            return;
+        }
+    } catch (e) { /* val door naar herstel */ }
+    btn.disabled = false;
+}
+
+async function setCategory(id, category, el) {
+    const row = el.closest('.review-row');
+    try {
+        const resp = await fetch(`/api/ingredient/${id}/category`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({category}),
+        });
+        const data = await resp.json();
+        if (data.status !== 'ok') return;
+        const sel = row.querySelector('select');
+        if (sel && sel.value !== data.category) sel.value = data.category;
+        const knop = row.querySelector('button');
+        if (knop) knop.remove();
+        flash(row, '✓ ' + data.category);
+    } catch (e) { /* offline: niets veranderen */ }
+}
+</script>
+{% endblock %}
