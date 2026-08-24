@@ -18,6 +18,8 @@ const DEFAULT_SERVES = _plannerCfg.default_serves;
 let currentView     = 'grid';
 let currentCookbook = null;
 let filteredRecipes = [...RECIPES];
+let currentMealType = null;   // null = alles, '__none__' = nog zonder type
+const MEAL_TYPE_OPTS = JSON.parse(document.getElementById('meal-type-opts').textContent);
 let cfIndex         = 0;
 
 function switchView(view) {
@@ -53,12 +55,65 @@ function applyFilters() {
       [r.name, r.cookbook || '', r.cookbook_abbr || ''].join(' ').toLowerCase().includes(w)
     );
     const bookMatch = !currentCookbook || r.cookbook === currentCookbook;
-    return textMatch && bookMatch;
+    const tags = r.meal_types || [];
+    const mealMatch = !currentMealType
+      || (currentMealType === '__none__' ? !tags.length : tags.includes(currentMealType));
+    return textMatch && bookMatch && mealMatch;
   });
   cfIndex = 0;
   if (currentView === 'grid')            renderGrid();
   else if (currentView === 'coverflow')  renderCoverflow();
   else                                   renderList();
+}
+
+function filterByMealType(val, btn) {
+  currentMealType = val || null;
+  document.querySelectorAll('#mealtype-filter .mtf-chip').forEach(b => {
+    const active = b === btn;
+    b.classList.toggle('bg-[#8B4513]', active);
+    b.classList.toggle('text-white', active);
+    b.classList.toggle('border-[#8B4513]', active);
+    b.classList.toggle('text-[#6B6B6B]', !active);
+    b.classList.toggle('border-[#D4CEC4]', !active);
+  });
+  applyFilters();
+}
+
+function mealTypeChips(r) {
+  return MEAL_TYPE_OPTS.map(([code, label]) => {
+    const on = (r.meal_types || []).includes(code);
+    return `<button type="button"
+        onclick="event.stopPropagation();toggleMealType(${r.id},'${code}',this)"
+        class="mt-chip px-2 py-0.5 rounded-full border text-[11px] leading-4 ${on
+          ? 'border-[#8B4513] bg-[#8B4513] text-white'
+          : 'border-[#E8E4DC] text-[#B4B2A9] hover:border-[#8B4513] hover:text-[#8B4513]'}"
+        title="${esc(label)}">${esc(label)}</button>`;
+  }).join('');
+}
+
+async function toggleMealType(recipeId, code, btn) {
+  const r = RECIPES.find(x => x.id === recipeId);
+  if (!r) return;
+  const tags = new Set(r.meal_types || []);
+  tags.has(code) ? tags.delete(code) : tags.add(code);
+  try {
+    const resp = await fetch(`/api/recipe/${recipeId}/meal-types`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ meal_types: [...tags] }),
+    });
+    const data = await resp.json();
+    if (data.status !== 'ok') return;
+    r.meal_types = data.meal_types;
+    // Knop ter plekke bijwerken; de rij blijft staan tot de volgende filteractie,
+    // zodat je bij 'Zonder type' rustig kunt doorklikken zonder verspringende lijst.
+    const on = r.meal_types.includes(code);
+    btn.classList.toggle('bg-[#8B4513]', on);
+    btn.classList.toggle('text-white', on);
+    btn.classList.toggle('border-[#8B4513]', on);
+    btn.classList.toggle('text-[#B4B2A9]', !on);
+    btn.classList.toggle('border-[#E8E4DC]', !on);
+  } catch (e) { /* offline: knop blijft in oude stand */ }
 }
 
 function filterByCookbook(val) {
@@ -198,6 +253,7 @@ function renderList() {
         <p class="text-xs text-[#6B6B6B] truncate">
           ${r.cookbook ? esc(r.cookbook) : ''}${r.page ? ' p. ' + r.page : ''}${(r.cookbook || r.page) ? ' · ' : ''}${r.serves} pers.
         </p>
+        <div class="flex gap-1 mt-1 flex-wrap">${mealTypeChips(r)}</div>
       </div>
       <button onclick="event.stopPropagation();toggleCardFavorite(${r.id},this)"
               class="text-base ml-1 flex-shrink-0" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;"

@@ -235,6 +235,18 @@ def _migrate_v8(conn):
             pass
 
 
+def _migrate_v9(conn):
+    """Maaltijdtype-tags per recept (ontbijt/lunch/diner/tussendoor)."""
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS recipe_meal_type (
+            id INTEGER PRIMARY KEY,
+            recipe_id INTEGER NOT NULL REFERENCES recipe(id),
+            meal_type VARCHAR(20) NOT NULL,
+            UNIQUE(recipe_id, meal_type)
+        )
+    '''))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -266,8 +278,10 @@ def migrate_db():
             _migrate_v7(conn)
         if current < 8:
             _migrate_v8(conn)
+        if current < 9:
+            _migrate_v9(conn)
 
-        target = 8
+        target = 9
         if current < target:
             if row:
                 conn.execute(

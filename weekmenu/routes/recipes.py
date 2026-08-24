@@ -10,9 +10,9 @@ from flask import (
 from weekmenu.extensions import db
 from weekmenu.models import (
     Recipe, Ingredient, IngredientAlias, Cookbook,
-    RecipeIngredient, Settings, PantryIngredient,
+    RecipeIngredient, RecipeMealType, Settings, PantryIngredient,
 )
-from weekmenu.constants import PRODUCT_CATEGORIES
+from weekmenu.constants import PRODUCT_CATEGORIES, RECIPE_MEAL_TYPES
 from weekmenu.services.units import (
     _normalize_ingredient, _guess_ingredient_category, _normalize_ri_unit,
 )
@@ -43,6 +43,7 @@ def serialize_recipe(r, default_serves=4):
         'url': r.url or '',
         'instructions': r.instructions or '',
         'is_favorite': r.is_favorite,
+        'meal_types': sorted(m.meal_type for m in r.meal_types),
         'ingredients': [
             {
                 'id': ri.id,
@@ -82,7 +83,8 @@ def receptenplanner():
                            recipes_json=recipes_json,
                            current_week=current_week,
                            current_year=current_year,
-                           default_serves=default_serves)
+                           default_serves=default_serves,
+                           meal_types=RECIPE_MEAL_TYPES)
 
 
 @bp.route('/api/recipe/<int:id>')
@@ -244,6 +246,19 @@ def _pick_ingredient(ingredient_ids, ingredient_names, categories, i):
     return ingredient
 
 
+def _sync_meal_types(recipe, codes):
+    """Zet de maaltijdtype-tags van een recept gelijk aan `codes` (gevalideerd)."""
+    valid = {c for c, _ in RECIPE_MEAL_TYPES}
+    wanted = {c for c in codes if c in valid}
+    existing = {m.meal_type: m for m in RecipeMealType.query.filter_by(recipe_id=recipe.id)}
+    for code in wanted - existing.keys():
+        db.session.add(RecipeMealType(recipe_id=recipe.id, meal_type=code))
+    for code, row in existing.items():
+        if code not in wanted:
+            db.session.delete(row)
+    db.session.commit()
+
+
 def _sync_pantry(scope_ids, wanted_ids):
     """Zet de voorraadkast gelijk aan `wanted_ids`, maar alleen binnen `scope_ids`.
 
@@ -355,6 +370,7 @@ def new_recipe():
 
         db.session.commit()
         _sync_pantry(pantry_scope, pantry_wanted)
+        _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
 
         draft_id = request.form.get('draft_id')
         if draft_id:
@@ -368,7 +384,8 @@ def new_recipe():
 
     pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
     return render_template('new_recipe.html', cookbooks=cookbooks,
-                           categories=PRODUCT_CATEGORIES, pantry_ids=pantry_ids)
+                           categories=PRODUCT_CATEGORIES, pantry_ids=pantry_ids,
+                           meal_types=RECIPE_MEAL_TYPES, recipe_meal_types=set())
 
 
 @bp.route('/recipe/<int:id>/edit', methods=['GET', 'POST'])
@@ -463,12 +480,15 @@ def edit_recipe(id):
         db.session.commit()
 
         _sync_pantry(pantry_scope, pantry_wanted)
+        _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
 
         return redirect(url_for('recipes.receptenplanner'))
 
     pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
     return render_template('edit_recipe.html', recipe=recipe, cookbooks=cookbooks,
-                           categories=PRODUCT_CATEGORIES, pantry_ids=pantry_ids)
+                           categories=PRODUCT_CATEGORIES, pantry_ids=pantry_ids,
+                           meal_types=RECIPE_MEAL_TYPES,
+                           recipe_meal_types={m.meal_type for m in recipe.meal_types})
 
 
 @bp.route('/recipe/<int:id>', methods=['DELETE'])
@@ -631,6 +651,19 @@ def get_quick_access_recipes():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+@bp.route('/api/recipe/<int:id>/meal-types', methods=['POST'])
+def set_recipe_meal_types(id):
+    """Achteraf taggen vanaf de receptenplanner, zonder het hele formulier."""
+    recipe = Recipe.query.get_or_404(id)
+    data = request.get_json() or {}
+    codes = data.get('meal_types')
+    if not isinstance(codes, list):
+        return jsonify({'status': 'error', 'message': 'meal_types (lijst) verplicht'}), 400
+    _sync_meal_types(recipe, codes)
+    return jsonify({'status': 'ok',
+                    'meal_types': sorted(m.meal_type for m in recipe.meal_types)})
 
 
 @bp.route('/recipe/scrape', methods=['POST'])

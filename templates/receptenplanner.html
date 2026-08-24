@@ -155,6 +155,17 @@
           class="border border-[#D4CEC4] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A882] bg-white">
     <option value="">Alle kookboeken</option>
   </select>
+  <div id="mealtype-filter" class="flex items-center gap-1.5 flex-wrap">
+    <button type="button" data-code="" onclick="filterByMealType('', this)"
+            class="mtf-chip px-3 py-1.5 rounded-full text-sm border border-[#8B4513] bg-[#8B4513] text-white">Alles</button>
+    {% for code, label in meal_types %}
+    <button type="button" data-code="{{ code }}" onclick="filterByMealType('{{ code }}', this)"
+            class="mtf-chip px-3 py-1.5 rounded-full text-sm border border-[#D4CEC4] text-[#6B6B6B] hover:border-[#8B4513]">{{ label }}</button>
+    {% endfor %}
+    <button type="button" data-code="__none__" onclick="filterByMealType('__none__', this)"
+            class="mtf-chip px-3 py-1.5 rounded-full text-sm border border-dashed border-[#D4CEC4] text-[#6B6B6B] hover:border-[#8B4513]"
+            title="Recepten die nog geen maaltijdtype hebben">Zonder type</button>
+  </div>
   <a href="{{ url_for('recipes.new_recipe') }}"
      class="inline-flex items-center gap-1.5 bg-[#2C2C2C] hover:bg-[#1a1a1a] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors ml-auto"
      style="text-decoration:none;">
@@ -267,6 +278,7 @@
 <!-- ── TOAST ──────────────────────────────────────────────── -->
 <div id="toast"></div>
 
+<script type="application/json" id="meal-type-opts">{{ meal_types | tojson }}</script>
 <script type="application/json" id="planner-recipes">{{ recipes_json | safe }}</script>
 <script type="application/json" id="planner-config">{{ {'current_week': current_week, 'current_year': current_year, 'default_serves': default_serves} | tojson }}</script>
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>

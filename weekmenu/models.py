@@ -17,7 +17,17 @@ class Recipe(db.Model):
     url = db.Column(db.Text, nullable=True)
     instructions = db.Column(db.Text, nullable=True)
     ingredients = db.relationship('RecipeIngredient', backref='recipe', lazy=True, cascade='all, delete-orphan')
+    meal_types = db.relationship('RecipeMealType', backref='recipe', lazy=True, cascade='all, delete-orphan')
     cookbook = db.relationship('Cookbook', back_populates='recipes')
+
+
+class RecipeMealType(db.Model):
+    """Maaltijdtype-tags per recept (meerwaardig: een soep is lunch én diner)."""
+    __tablename__ = 'recipe_meal_type'
+    __table_args__ = (db.UniqueConstraint('recipe_id', 'meal_type'),)
+    id = db.Column(db.Integer, primary_key=True)
+    recipe_id = db.Column(db.Integer, db.ForeignKey('recipe.id'), nullable=False)
+    meal_type = db.Column(db.String(20), nullable=False)
 
 
 class Ingredient(db.Model):

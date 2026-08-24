@@ -18,6 +18,10 @@ MEAL_TYPES = [
     ('diner', 'Diner')
 ]
 
+# Receptclassificatie: breder dan de roostervakken in het weekmenu.
+# 'tussendoor' is wel een recepttype maar (bewust) geen rij in het weekrooster.
+RECIPE_MEAL_TYPES = MEAL_TYPES + [('tussendoor', 'Tussendoor')]
+
 # ── Productcategorieën ────────────────────────────────────────────────────
 
 PRODUCT_CATEGORIES = [
