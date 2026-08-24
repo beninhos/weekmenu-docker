@@ -95,13 +95,18 @@
                                onchange="checkItem({{ item.ingredient_id }}, this.checked)">
                         <span class="item-text text-sm text-[#2C2C2C]">
                             <span class="font-semibold">{{ item.amount_display }}</span>{% if item.unit %}<span class="text-[#6B6B6B]"> {{ item.unit }}</span>{% endif %} {{ item.name }}
+                            {% if item.recipes %}
+                            <span class="text-xs text-[#9CA3AF]" title="{{ item.recipes | join(', ') }}">· {{ item.recipes | join(', ') }}</span>
+                            {% endif %}
                         </span>
                     </div>
 
                     {# RECHTS — AH-productstijl #}
                     {% if item.ah_product_id %}
                     <div class="list-right flex items-center gap-2 w-full md:flex-grow min-w-0">
-                        <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden"
+                        <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden cursor-pointer"
+                             onclick="toggleSearch(this)"
+                             title="Klik om product te wijzigen"
                              style="background-color:{{ item.ah_product_bg }}">
                             <div class="shrink-0" style="width:80px;height:80px">
                                 <img src="{{ item.ah_product_image or '' }}"
@@ -136,12 +141,17 @@
                     </div>
                     {% else %}
                     <div class="list-right flex items-center gap-3 w-full md:flex-grow">
-                        <span class="text-sm text-[#9CA3AF]">Geen AH-koppeling</span>
+                        <button class="ah-badge text-sm text-[#6B6B6B] hover:text-[#8B4513] border border-dashed border-[#D4CEC4] hover:border-[#C9A882] rounded-lg px-3 py-2"
+                                onclick="toggleSearch(this)">
+                            + Koppel AH product
+                        </button>
                         <button onclick="excludeItem({{ item.ingredient_id }})" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-auto" style="font-size:0.75rem">✕</button>
                     </div>
                     {% endif %}
 
                 </div>
+
+                {% include '_ah_search_panel.html' %}
             </div>
             {% endfor %}
         </div>
@@ -164,6 +174,7 @@
                        onchange="checkItem({{ item.ingredient_id }}, this.checked)">
                 <span class="text-sm line-through text-[#9CA3AF]">
                     {{ item.amount_display }}{% if item.unit %} {{ item.unit }}{% endif %} {{ item.name }}
+                    {% if item.recipes %}· {{ item.recipes | join(', ') }}{% endif %}
                 </span>
                 {% if item.via_ah %}
                 <span class="bg-green-100 text-green-800 rounded-full px-2 text-xs">via AH</span>
@@ -175,6 +186,7 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ah_search.js') }}"></script>
 <script>
 const RECIPES = {{ recipes_json | safe }};
 const WEEKS_BY_ING = {{ weeks_by_ingredient_json | safe }};

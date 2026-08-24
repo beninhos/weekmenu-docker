@@ -101,23 +101,7 @@
 
                 </div>
 
-                {# ── Zoekpaneel (collapsed by default) ── #}
-                <div class="ah-search-panel hidden border border-[#E8E4DC] rounded-lg bg-white shadow-sm mt-1 mb-2">
-                    <div class="flex gap-1 p-2 border-b border-[#E8E4DC]">
-                        <input type="text"
-                               class="ah-search-input flex-grow text-sm border border-[#E8E4DC] rounded px-2 py-1 focus:outline-none focus:border-[#C9A882]"
-                               value="{{ item.name }}"
-                               placeholder="Zoek AH product…"
-                               onkeydown="if(event.key==='Enter') doSearch(this)">
-                        <button onclick="doSearch(this.previousElementSibling)"
-                                class="text-sm bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">Zoek</button>
-                        <button onclick="toggleSearch(this.closest('.shopping-item').querySelector('.ah-badge'))"
-                                class="text-sm text-[#6B6B6B] hover:text-[#6B6B6B] px-2">✕</button>
-                    </div>
-                    <div class="ah-results overflow-y-auto" style="max-height:200px">
-                        <div class="text-xs text-[#6B6B6B] p-3 text-center">Typ een zoekterm en druk op Zoek</div>
-                    </div>
-                </div>
+                {% include '_ah_search_panel.html' %}
 
             </div>
             {% endfor %}
@@ -134,6 +118,7 @@
 </style>
 
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ah_search.js') }}"></script>
 <script>
 function toggleItem(cb) {
     if (cb.checked) {
@@ -252,111 +237,6 @@ async function _saveQty(ingredientId, qty, isDefault) {
     } catch (e) {
         console.warn('Qty opslaan mislukt:', e);
     }
-}
-
-// ── AH product zoeken & koppelen ─────────────────────────────────────────
-function toggleSearch(trigger) {
-    const item    = trigger.closest('.shopping-item');
-    const panel   = item.querySelector('.ah-search-panel');
-    const wasHidden = panel.classList.contains('hidden');
-    document.querySelectorAll('.ah-search-panel').forEach(p => p.classList.add('hidden'));
-    if (wasHidden) {
-        panel.classList.remove('hidden');
-        panel.querySelector('.ah-search-input').focus();
-    }
-}
-
-async function doSearch(input) {
-    const panel     = input.closest('.ah-search-panel');
-    const resultsEl = panel.querySelector('.ah-results');
-    const query     = input.value.trim();
-    if (!query) return;
-
-    resultsEl.innerHTML = '<div class="text-xs text-[#6B6B6B] p-3 text-center">Zoeken...</div>';
-    try {
-        const resp     = await fetch('/api/ah/product-search?q=' + encodeURIComponent(query) + '&size=10');
-        const products = await resp.json();
-        if (!products.length) {
-            resultsEl.innerHTML = '<div class="text-xs text-[#6B6B6B] p-3 text-center">Geen resultaten</div>';
-            return;
-        }
-        resultsEl.innerHTML = products.map(p => `
-            <div class="flex items-center gap-3 px-3 py-2 hover:bg-[#FAF8F5] cursor-pointer border-b border-[#E8E4DC] last:border-0"
-                 onclick="linkProduct(this, ${JSON.stringify(p).replace(/"/g, '&quot;')})">
-                <div class="shrink-0 rounded-lg overflow-hidden" style="width:48px;height:48px;background-color:${p.bgColor || '#f0ede8'}">
-                    ${p.image ? `<img src="${p.image}" class="w-full h-full object-contain p-1.5" style="mix-blend-mode:multiply" alt="">` : ''}
-                </div>
-                <div class="flex-grow min-w-0">
-                    <div class="text-sm font-semibold text-[#2C2C2C] truncate">${esc(p.title)}</div>
-                    <div class="text-xs text-[#6B6B6B]">${esc(p.size || '')}</div>
-                </div>
-                <div class="text-right shrink-0">
-                    ${p.isBonus ? '<div style="font-size:10px" class="font-semibold bg-[#FDF8F3] text-[#8B4513] px-1 rounded mb-0.5">BONUS</div>' : ''}
-                    <div class="text-sm font-bold text-[#2C2C2C]">${p.price ? '€' + p.price : ''}</div>
-                </div>
-            </div>`).join('');
-    } catch (e) {
-        resultsEl.innerHTML = '<div class="text-xs text-red-400 p-3 text-center">Fout: ' + e.message + '</div>';
-    }
-}
-
-async function linkProduct(row, product) {
-    const panel       = row.closest('.ah-search-panel');
-    const item        = panel.closest('.shopping-item');
-    const ingredientId = item.dataset.ingredientId;
-    if (!ingredientId) return;
-
-    try {
-        const resp = await fetch(`/api/ah/ingredient/${ingredientId}/link`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(product),
-        });
-        const data = await resp.json();
-        if (data.ok || data.status === 'ok') {
-            updateBadge(item, product);
-            panel.classList.add('hidden');
-        }
-    } catch (e) {
-        console.error('Koppelen mislukt:', e);
-    }
-}
-
-function updateBadge(item, product) {
-    const right  = item.querySelector('.list-right');
-    const defQty = parseInt(item.dataset.defaultQty, 10);
-    right.innerHTML = `
-        <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden cursor-pointer"
-             onclick="toggleSearch(this)"
-             title="Klik om product te wijzigen"
-             style="background-color:${product.bgColor || '#f0ede8'}">
-            <div class="shrink-0" style="width:80px;height:80px">
-                <img src="${product.image || ''}" class="w-full h-full object-contain p-2" style="mix-blend-mode:multiply" alt="${product.title || ''}">
-            </div>
-            <div class="flex-grow min-w-0 px-3">
-                <div class="text-sm font-semibold text-[#2C2C2C] leading-tight">${product.title}</div>
-                <div class="text-sm mt-0.5 flex items-center gap-1 flex-wrap">
-                    ${product.price ? '<span class="font-bold text-[#2C2C2C]">€' + product.price + '</span>' : ''}
-                    ${product.size  ? '<span class="text-[#6B6B6B]">' + product.size + '</span>' : ''}
-                    ${product.isBonus ? '<span class="bg-[#FDF8F3] text-[#8B4513] font-semibold px-1 rounded" style="font-size:10px">BONUS</span>' : ''}
-                </div>
-            </div>
-        </div>
-        <div class="qty-control flex items-center gap-1.5 shrink-0">
-            <button class="qty-minus flex items-center justify-center rounded-full border border-[#D4CEC4] text-[#6B6B6B] hover:bg-[#F5F2ED]"
-                    style="width:32px;height:32px;font-size:1rem" onclick="changeQty(this,-1)">
-                <span class="qty-minus-icon">🗑</span>
-            </button>
-            <span class="qty-value flex items-center justify-center rounded-full border-2 border-[#2C2C2C] font-semibold text-[#2C2C2C] text-sm tabular-nums"
-                  style="min-width:2.5rem;height:32px;padding:0 6px">${defQty}</span>
-            <button class="qty-plus flex items-center justify-center rounded-full bg-[#2C2C2C] text-white font-bold hover:bg-[#1a1a1a]"
-                    style="width:32px;height:32px;font-size:1.2rem" onclick="changeQty(this,+1)">+</button>
-        </div>
-        <button onclick="removeItem(this)" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-1" style="font-size:0.75rem">✕</button>`;
-    item.dataset.qty = defQty;
-    // Icoon updaten: defQty kan > 1 zijn
-    const ctrl = right.querySelector('.qty-control');
-    _updateMinusIcon(ctrl, defQty);
 }
 
 // ── (+) Item toevoegen ───────────────────────────────────────────────────

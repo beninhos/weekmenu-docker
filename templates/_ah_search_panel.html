@@ -1,0 +1,24 @@
+{# AH-zoekpaneel per boodschappenlijst-item. Verwacht `item` in de context
+   en static/js/ah_search.js op de pagina. #}
+<div class="ah-search-panel hidden border border-[#E8E4DC] rounded-lg bg-white shadow-sm mt-1 mb-2">
+    <div class="flex flex-wrap gap-1 p-2 border-b border-[#E8E4DC]">
+        <input type="text"
+               class="ah-search-input flex-grow min-w-[8rem] text-sm border border-[#E8E4DC] rounded px-2 py-1 focus:outline-none focus:border-[#C9A882]"
+               value="{{ item.name }}"
+               placeholder="Zoek AH product…"
+               onkeydown="if(event.key==='Enter') doSearch(this, null, null)">
+        <button onclick="doSearch(this.closest('.ah-search-panel').querySelector('.ah-search-input'), null, null)"
+                class="text-sm bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">Zoek</button>
+        <button onclick="toggleSearch(this.closest('.shopping-item').querySelector('.ah-badge'))"
+                class="text-sm text-[#6B6B6B] hover:text-[#6B6B6B] px-2">✕</button>
+    </div>
+    <div class="ah-facet ah-taxonomies hidden items-center gap-1 px-2 py-1.5 border-b border-[#E8E4DC] overflow-x-auto"></div>
+    {# Maten breken af over meerdere regels: bij een brede zoekterm zijn het er
+       tientallen en moet ook de laatste (grootste) bereikbaar blijven. #}
+    <div class="ah-facet ah-sizes hidden flex-wrap items-center gap-1 px-2 py-1.5 border-b border-[#E8E4DC] overflow-y-auto"
+         style="max-height:4.75rem"></div>
+    <div class="ah-result-count text-xs text-[#6B6B6B] px-3 pt-1.5"></div>
+    <div class="ah-results overflow-y-auto" style="max-height:340px">
+        <div class="text-xs text-[#6B6B6B] p-3 text-center">Typ een zoekterm en druk op Zoek</div>
+    </div>
+</div>
