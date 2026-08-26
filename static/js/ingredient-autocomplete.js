@@ -97,7 +97,10 @@ function resetRowState(input) {
     row.dataset.hint = '';
     if (typeof clearVariantHint === 'function') clearVariantHint(row);
     const cb = row.querySelector('.pantry-cb');
-    if (cb && cb.checked) {
+    if (cb) {
+        // Onvoorwaardelijk: paint() hangt aan dit change-event, en zonder de
+        // dispatch bleef een 'altijd in huis?'-chip staan terwijl de hint
+        // waar hij op sloeg al gewist was.
         cb.checked = false;
         cb.dispatchEvent(new Event('change'));
     }

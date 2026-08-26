@@ -70,14 +70,47 @@ def test_uitvinken_met_id_haalt_wel_uit_de_voorraad(client, app):
 
 # ── Verstuur naar AH respecteert de bron ────────────────────────────────
 
-def test_elders_item_gaat_niet_mee_naar_ah(client, app):
+def _mock_ah(monkeypatch):
+    """Zonder AH-sessie keert send_dict_to_ah al op regel 1 terug met 401 en
+    kijkt hij niet eens naar de lijst; dan toetst de test niets."""
+    from weekmenu.services import shopping as shopping_svc
+    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
+
+    class FakeResp:
+        status_code = 404
+        def json(self): return {}
+        def raise_for_status(self): pass
+
+    class FakeReq:
+        def get(self, *a, **kw): return FakeResp()
+        def patch(self, *a, **kw): return FakeResp()
+        def put(self, *a, **kw): return FakeResp()
+
+    monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
+
+
+def test_elders_item_gaat_niet_mee_naar_ah(client, app, monkeypatch):
+    from weekmenu.models import ShoppingCheck
+    _mock_ah(monkeypatch)
     toko = _ing('sambal oelek', ah_product_id=12345, bron='toko')
     _plan(toko)
+
     resp = client.post('/api/boodschappen/send-to-ah', json={})
-    # Niets te versturen, dus ook niets afgevinkt als 'via AH'.
+    assert resp.status_code == 200
+    # Niet verstuurd, dus ook niet afgevinkt als 'via AH'.
+    assert ShoppingCheck.query.filter_by(ingredient_id=toko.id).first() is None
+
+
+def test_ah_item_wordt_wel_verstuurd_en_afgevinkt(client, app, monkeypatch):
     from weekmenu.models import ShoppingCheck
-    assert ShoppingCheck.query.count() == 0
-    assert resp.status_code in (200, 400, 401, 502)   # geen AH-sessie in de test
+    _mock_ah(monkeypatch)
+    gewoon = _ing('olijfolie', ah_product_id=777)
+    _plan(gewoon)
+
+    resp = client.post('/api/boodschappen/send-to-ah', json={})
+    assert resp.status_code == 200
+    check = ShoppingCheck.query.filter_by(ingredient_id=gewoon.id).first()
+    assert check is not None and check.via_ah is True
 
 
 def test_ah_item_gaat_wel_mee(client, app):
@@ -226,3 +259,71 @@ def test_zip_import_rondrit(client, app):
     assert ing.category != 'Groente & Aardappelen'
     assert ing.display_name
     assert IngredientAlias.query.filter_by(ingredient_id=ing.id).count() >= 1
+
+
+def test_import_slaat_regels_zonder_naam_over(client, app):
+    """Een export van een andere versie kan het naamveld missen; dat mag
+    geen KeyError geven."""
+    import json
+    payload = {'cookbooks': [], 'recipes': [{
+        'name': 'Half recept', 'serves': 2, 'instructions': '',
+        'ingredients': [{'category': 'Overig', 'amount': 1, 'unit': 'tl'},
+                        {'name': 'kaneel', 'category': 'Kruiden & Specerijen',
+                         'amount': 1, 'unit': 'tl'}],
+    }]}
+    resp = client.post('/import', data={'file': (
+        __import__('io').BytesIO(json.dumps(payload).encode()), 'export.json')},
+        content_type='multipart/form-data')
+    assert resp.status_code == 200, resp.get_data(as_text=True)[:200]
+    assert Ingredient.query.filter_by(name='kaneel').count() == 1
+
+
+# ── v14: spookingredienten uit de parserbug ─────────────────────────────
+
+def test_v14_voegt_spookingredient_samen_met_het_echte(client, app):
+    from weekmenu.migrations import _migrate_v14
+    echt = _ing('tomaat', 'Groente, Fruit & Aardappelen')
+    spook = _ing('stuk(s) tomaat', 'Groente, Fruit & Aardappelen')
+    r = Recipe(name='R', serves=2)
+    db.session.add(r)
+    db.session.flush()
+    db.session.add(RecipeIngredient(recipe_id=r.id, ingredient_id=spook.id,
+                                    amount=1, unit='stuks'))
+    db.session.commit()
+    spook_id, echt_id = spook.id, echt.id
+
+    with db.engine.connect() as conn:
+        _migrate_v14(conn)
+        conn.commit()
+    db.session.expire_all()
+
+    assert Ingredient.query.get(spook_id) is None
+    assert RecipeIngredient.query.filter_by(ingredient_id=echt_id).count() == 1
+    assert RecipeIngredient.query.filter_by(ingredient_id=spook_id).count() == 0
+
+
+def test_v14_hernoemt_als_het_echte_nog_niet_bestaat(client, app):
+    from weekmenu.migrations import _migrate_v14
+    spook = _ing('stuk(s) sjalot', 'Groente, Fruit & Aardappelen')
+    db.session.commit()
+    spook_id = spook.id
+
+    with db.engine.connect() as conn:
+        _migrate_v14(conn)
+        conn.commit()
+    db.session.expire_all()
+
+    bewaard = Ingredient.query.get(spook_id)
+    assert bewaard is not None and bewaard.name == 'sjalot'
+    assert bewaard.display_name == 'sjalot'
+
+
+def test_v14_laat_gewone_namen_met_haakjes_met_rust(client, app):
+    from weekmenu.migrations import _migrate_v14
+    ing = _ing('koriander (vers)', 'Groente, Fruit & Aardappelen')
+    db.session.commit()
+    with db.engine.connect() as conn:
+        _migrate_v14(conn)
+        conn.commit()
+    db.session.expire_all()
+    assert Ingredient.query.get(ing.id).name == 'koriander (vers)'

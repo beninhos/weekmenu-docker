@@ -93,10 +93,11 @@ def import_data():
             db.session.flush()
 
             for ing_data in r_data.get('ingredients', []):
+                naam = (ing_data.get('name') or '').strip()
+                if not naam:
+                    continue        # export van een andere versie, sla over
                 ingredient = _resolve_or_create_ingredient(
-                    ing_data['name'],
-                    ing_data.get('category', 'Overig')
-                )
+                    naam, ing_data.get('category', 'Overig'))
                 if not ingredient:
                     continue
                 counts['ingredients'] += 1
@@ -265,8 +266,11 @@ def import_zip():
                     # display_name en alias. Rechtstreeks Ingredient() aanmaken
                     # leverde rijen zonder display_name en met een categorie
                     # die niet meer bestaat.
+                    naam = (ing_data.get('name') or '').strip()
+                    if not naam:
+                        continue    # export van een andere versie, sla over
                     ingredient = _resolve_or_create_ingredient(
-                        ing_data['name'], ing_data.get('category'))
+                        naam, ing_data.get('category'))
                     if not ingredient:
                         continue
                     raw_amount = ing_data.get('amount') or 0

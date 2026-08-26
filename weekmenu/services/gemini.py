@@ -9,7 +9,9 @@ from flask import current_app
 from weekmenu.extensions import db  # noqa: F401 — reserved for future write flows
 from weekmenu.models import Settings
 from weekmenu.constants import DUTCH_UNITS
-from weekmenu.services.units import _guess_ingredient_category, parse_ingredients_from_list
+from weekmenu.services.units import (
+    _guess_ingredient_category, parse_ingredients_from_list, _parse_amount,
+)
 from weekmenu.services.recipes import _suggest_site_cookbook
 
 
@@ -81,17 +83,18 @@ def _sanitize_json(text):
 
 
 def _as_number(value):
-    """Gemini levert 'amount' soms als string ('140') of als bereik ('2-3').
+    """Gemini levert 'amount' soms als string ('140'), als Nederlandse komma
+    ('1,5'), als breuk ('3/4', '1 1/2', '½') of als bereik ('2-3').
 
-    Alles wat niet als getal te lezen is wordt None; dat is precies hoe de
-    app een onbekende hoeveelheid al behandelt.
+    _parse_amount kent al die vormen; float() kent alleen de punt. Alles wat
+    ook daarna niet te lezen is wordt None, precies zoals de app een
+    onbekende hoeveelheid al behandelt.
     """
     if value is None or value == '':
         return None
-    try:
+    if isinstance(value, (int, float)):
         return float(value)
-    except (TypeError, ValueError):
-        return None
+    return _parse_amount(str(value))
 
 
 def _build_gemini_ingredients(raw_list):
@@ -179,7 +182,7 @@ def _map_ah_recipe(url, recipe):
         name = _clean_control_chars((ing.get('name') or {}).get('singular') or '').strip()
         if not name:
             continue
-        amount = ing.get('quantity')
+        amount = _as_number(ing.get('quantity'))
         raw_unit = ((ing.get('quantityUnit') or {}).get('singular') or '').strip().lower()
         unit = DUTCH_UNITS.get(raw_unit, raw_unit)
         if not unit and amount is not None:

@@ -2,7 +2,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
 from weekmenu.extensions import db
-from weekmenu.constants import PRODUCT_CATEGORIES
 from weekmenu.services.units import _parse_product_size, _guess_ingredient_category
 
 
@@ -437,6 +436,56 @@ def _migrate_v13(conn):
         conn.execute(text('ALTER TABLE ingredient ADD COLUMN bron VARCHAR(20)'))
 
 
+def _migrate_v14(conn):
+    """Spookingredienten opruimen die de parser met 'stuk(s)' heeft gemaakt.
+
+    De parser liet de meervoudsstaart van de eenheid in de naam staan, zodat
+    'stuk(s) tomaat' als apart ingredient naast 'tomaat' belandde. De regex is
+    gerepareerd; deze migratie ruimt op wat er al stond.
+
+    Behoudend: alleen samenvoegen als het schone doel al bestaat en de bron
+    nergens anders aan hangt. Blijft er iets over, dan hernoemen we het zodat
+    het tenminste leesbaar is en op /twijfelgevallen opvalt.
+    """
+    import re
+
+    ghosts = conn.execute(text(
+        "SELECT id, name FROM ingredient "
+        "WHERE name LIKE '%(s) %' OR name LIKE '%(tjes) %' OR name LIKE '%(en) %'"
+    )).fetchall()
+
+    for ghost_id, ghost_name in ghosts:
+        schoon = re.sub(r'^\w+\((?:s|tjes|en|je|jes)\)\s+', '', ghost_name).strip()
+        if not schoon or schoon == ghost_name:
+            continue
+
+        doel = conn.execute(
+            text('SELECT id FROM ingredient WHERE name = :n'), {'n': schoon}).fetchone()
+
+        if doel:
+            doel_id = doel[0]
+            # Receptregels overzetten, daarna de dubbele rijen die daardoor
+            # zouden ontstaan in de UNIQUE-tabellen eerst weghalen.
+            conn.execute(text(
+                'UPDATE recipe_ingredient SET ingredient_id = :d WHERE ingredient_id = :g'),
+                {'d': doel_id, 'g': ghost_id})
+            for tabel in ('pantry_ingredient', 'ingredient_alias',
+                          'ingredient_unit_conversion', 'custom_shopping_ingredient',
+                          'shopping_list_exclusion', 'shopping_list_override',
+                          'shopping_check'):
+                try:
+                    conn.execute(
+                        text(f'DELETE FROM {tabel} WHERE ingredient_id = :g'),
+                        {'g': ghost_id})
+                except Exception:
+                    pass        # tabel bestaat niet in deze database
+            conn.execute(text('DELETE FROM ingredient WHERE id = :g'), {'g': ghost_id})
+        else:
+            conn.execute(
+                text('UPDATE ingredient SET name = :n, display_name = :d WHERE id = :g'),
+                {'n': schoon, 'd': schoon, 'g': ghost_id})
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -478,8 +527,10 @@ def migrate_db():
             _migrate_v12(conn)
         if current < 13:
             _migrate_v13(conn)
+        if current < 14:
+            _migrate_v14(conn)
 
-        target = 13
+        target = 14
         if current < target:
             if row:
                 conn.execute(

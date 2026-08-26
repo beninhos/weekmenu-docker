@@ -14,11 +14,10 @@
             <label class="block text-sm font-semibold text-[#2C2C2C] mb-1">Maaltijdtype</label>
             <div class="flex flex-wrap gap-2">
                 {% for code, label in meal_types %}
-                <label tabindex="0" role="checkbox"
-                       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.querySelector('input').click();}"
-                       class="mealtype-chip flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-sm
+                <label class="mealtype-chip flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-sm
+                              focus-within:ring-2 focus-within:ring-offset-1 focus-within:ring-[#8B4513]
                               {{ 'border-[#8B4513] bg-[#8B4513] text-white' if code in recipe_meal_types else 'border-[#D4CEC4] text-[#6B6B6B]' }}">
-                    <input type="checkbox" name="meal_type[]" value="{{ code }}" class="hidden"
+                    <input type="checkbox" name="meal_type[]" value="{{ code }}" class="sr-only"
                            {{ 'checked' if code in recipe_meal_types }}
                            onchange="this.closest('.mealtype-chip').classList.toggle('border-[#8B4513]', this.checked);
                                      this.closest('.mealtype-chip').classList.toggle('bg-[#8B4513]', this.checked);
