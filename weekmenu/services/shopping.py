@@ -15,10 +15,13 @@ from weekmenu.services.units import (
 from weekmenu.services.ah import ah_get_access_token
 
 
-def _build_shopping_dict(year, week):
+def _build_shopping_dict(year, week, with_sources=False):
     """Bouw geaggregeerde boodschappendict voor een week.
 
     Returns dict met key (ingredient_id, normalized_unit) -> totaal_hoeveelheid.
+    Met with_sources=True wordt een tweede dict teruggegeven:
+    ingredient_id -> set van receptnamen die dat ingrediënt deze week aanleveren
+    (voor de "hoort bij recept X"-hint op de boodschappenlijst).
 
     BUG 4 FIX: Custom items worden toegevoegd NA de exclusion filter,
     zodat handmatig toegevoegde items nooit verborgen worden door exclusions.
@@ -32,6 +35,7 @@ def _build_shopping_dict(year, week):
     }
 
     shopping_dict = {}
+    sources = defaultdict(set)
 
     # 1. Recepten uit weekmenu
     for item in MenuItem.query.filter_by(week_number=week, year=year).all():
@@ -43,6 +47,7 @@ def _build_shopping_dict(year, week):
             amount = ri.amount * m
             norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
             shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
+            sources[ri.ingredient_id].add(item.recipe.name)
 
     # 2. Quick-add items
     for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
@@ -54,10 +59,13 @@ def _build_shopping_dict(year, week):
             amount = ri.amount * m
             norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
             shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
+            sources[ri.ingredient_id].add(qi.recipe.name)
 
     # 3a. Pantry filter — ingrediënten die altijd in huis zijn nooit op de lijst
     pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
     shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in pantry_ids}
+    for pid in pantry_ids:
+        sources.pop(pid, None)
 
     # 3. Exclusion filter — VOOR custom items (BUG 4 FIX)
     excluded_ids = {
@@ -65,6 +73,8 @@ def _build_shopping_dict(year, week):
         for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
     }
     shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
+    for eid in excluded_ids:
+        sources.pop(eid, None)
 
     # 4. Custom shopping items — NA exclusion filter, zodat ze altijd zichtbaar zijn
     for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
@@ -91,6 +101,8 @@ def _build_shopping_dict(year, week):
             for unit, amount in entries:
                 merged[(ing_id, unit)] = amount
 
+    if with_sources:
+        return merged, sources
     return merged
 
 
@@ -117,7 +129,7 @@ def window_weeks(today=None):
     return sorted(weeks)
 
 
-def _row_base(ing, unit, amount):
+def _row_base(ing, unit, amount, recipe_names=None):
     from weekmenu.constants import CATEGORY_BG
     api_color = ing.ah_product_color or ''
     return {
@@ -127,6 +139,7 @@ def _row_base(ing, unit, amount):
         'unit': unit,
         'category': ing.category,
         'ingredient_id': ing.id,
+        'recipes': sorted(recipe_names) if recipe_names else [],
         'ah_product_id': ing.ah_product_id,
         'ah_product_name': ing.ah_product_name,
         'ah_product_size': ing.ah_product_size,
@@ -134,13 +147,20 @@ def _row_base(ing, unit, amount):
         'ah_product_price': ing.ah_product_price,
         'ah_product_bonus': ing.ah_product_bonus or False,
         'ah_product_bg': api_color or CATEGORY_BG.get(ing.category, '#f0ede8'),
+        'bron': ing.bron or 'ah',
     }
 
 
 def build_combined_shopping_list(today=None):
     """Combineer de per-week-lijsten van het venster tot één lijst met afvink-status."""
     weeks = window_weeks(today)
-    per_week = {wk: _build_shopping_dict(wk[0], wk[1]) for wk in weeks}
+    per_week = {}
+    sources_by_ingredient = defaultdict(set)
+    for wk in weeks:
+        d, srcs = _build_shopping_dict(wk[0], wk[1], with_sources=True)
+        per_week[wk] = d
+        for ing_id, names in srcs.items():
+            sources_by_ingredient[ing_id] |= names
 
     checks = {}
     for c in ShoppingCheck.query.filter(
@@ -186,12 +206,12 @@ def build_combined_shopping_list(today=None):
         if fully_checked:
             if r['checked_at'] and r['checked_at'] < cutoff:
                 continue
-            row = _row_base(ing, unit, r['total_amount'])
+            row = _row_base(ing, unit, r['total_amount'], sources_by_ingredient.get(ing_id))
             row['via_ah'] = r['via_ah']
             row['checked_at'] = r['checked_at']
             checked_rows.append(row)
         else:
-            row = _row_base(ing, unit, r['open_amount'])
+            row = _row_base(ing, unit, r['open_amount'], sources_by_ingredient.get(ing_id))
             qty = 0
             for (y, w) in r['weeks']:
                 if (y, w) in r['checked']:

@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from weekmenu.extensions import db
 from weekmenu.models import (
     Ingredient, MenuItem, QuickAddItem, Recipe, RecipeIngredient,
-    ShoppingCheck,
+    ShoppingCheck, CustomShoppingIngredient,
 )
 from weekmenu.services.shopping import build_combined_shopping_list, window_weeks
 
@@ -63,6 +63,47 @@ def test_same_ingredient_two_weeks_merges_and_checks_partially(app):
     assert not [x for x in result['open'] if x['ingredient_id'] == ing.id]
     checked = [x for x in result['checked'] if x['ingredient_id'] == ing.id]
     assert checked and checked[0]['via_ah'] is True
+
+
+def test_open_row_includes_recipe_hint(app):
+    r1, ing = _mk_recipe('Pasta bolognese', 'gehakt', 300)
+    r2, _ = _mk_recipe('Taco maandag', 'gehakt', 200)
+    _plan(r1, 2026, 28)
+    _plan(r2, 2026, 29)
+
+    result = build_combined_shopping_list(today=TODAY)
+    row = next(x for x in result['open'] if x['ingredient_id'] == ing.id)
+    assert row['recipes'] == ['Pasta bolognese', 'Taco maandag']
+
+
+def test_excluded_week_does_not_leak_into_recipe_hint(app):
+    from weekmenu.models import ShoppingListExclusion
+
+    r1, ing = _mk_recipe('Soep wk28', 'wortel', 200)
+    r2, _ = _mk_recipe('Ander recept wk29', 'wortel', 300)
+    _plan(r1, 2026, 28)
+    _plan(r2, 2026, 29)
+    db.session.add(ShoppingListExclusion(year=2026, week_number=29, ingredient_id=ing.id))
+    db.session.commit()
+
+    result = build_combined_shopping_list(today=TODAY)
+    row = next(x for x in result['open'] if x['ingredient_id'] == ing.id)
+    assert row['amount'] == 200
+    assert row['recipes'] == ['Soep wk28']
+
+
+def test_manual_item_has_no_recipe_hint(app):
+    ing = Ingredient(name='statiegeldflesje', display_name='Statiegeldflesje', category='overig')
+    db.session.add(ing)
+    db.session.commit()
+    iso = date.today().isocalendar()
+    db.session.add(CustomShoppingIngredient(year=iso[0], week_number=iso[1],
+                                            ingredient_id=ing.id, amount=1, unit='stuks'))
+    db.session.commit()
+
+    result = build_combined_shopping_list()
+    row = next(x for x in result['open'] if x['ingredient_id'] == ing.id)
+    assert row['recipes'] == []
 
 
 def test_checked_older_than_14_days_hidden(app):

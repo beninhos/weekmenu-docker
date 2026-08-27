@@ -9,6 +9,26 @@
             <input type="text" name="name" required value="{{ recipe.name }}"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-[#2C2C2C] mb-1">Maaltijdtype</label>
+            <div class="flex flex-wrap gap-2">
+                {% for code, label in meal_types %}
+                <label class="mealtype-chip flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-sm
+                              focus-within:ring-2 focus-within:ring-offset-1 focus-within:ring-[#8B4513]
+                              {{ 'border-[#8B4513] bg-[#8B4513] text-white' if code in recipe_meal_types else 'border-[#D4CEC4] text-[#6B6B6B]' }}">
+                    <input type="checkbox" name="meal_type[]" value="{{ code }}" class="sr-only"
+                           {{ 'checked' if code in recipe_meal_types }}
+                           onchange="this.closest('.mealtype-chip').classList.toggle('border-[#8B4513]', this.checked);
+                                     this.closest('.mealtype-chip').classList.toggle('bg-[#8B4513]', this.checked);
+                                     this.closest('.mealtype-chip').classList.toggle('text-white', this.checked);
+                                     this.closest('.mealtype-chip').classList.toggle('border-[#D4CEC4]', !this.checked);
+                                     this.closest('.mealtype-chip').classList.toggle('text-[#6B6B6B]', !this.checked);">
+                    {{ label }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
         
         <div>
             <label class="block text-sm font-semibold text-[#2C2C2C]">Standaard aantal personen</label>
@@ -82,35 +102,48 @@
 
         <div>
             <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-2">Ingrediënten</h3>
+            <div class="hidden md:grid grid-cols-12 gap-x-2 text-xs text-[#6B6B6B] mb-1 px-1">
+                <span class="col-span-4">Ingrediënt</span>
+                <span class="col-span-1">Aantal</span>
+                <span class="col-span-1">Eenheid</span>
+                <span class="col-span-3">Categorie</span>
+                <span class="col-span-2">Voorraad</span>
+                <span class="col-span-1"></span>
+            </div>
             <div id="ingredients" class="space-y-2">
                 {% for ri in recipe.ingredients %}
-                <div class="grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row">
+                {% set h = row_hints.get(ri.id, {}) %}
+                <div class="grid grid-cols-12 gap-x-2 gap-y-1 ingredient-row"
+                     data-pantry="{{ '1' if ri.ingredient_id in pantry_ids else '0' }}"
+                     data-hint="{{ h.hint or '' }}"
+                     {% if h.variant_of %}data-variant-id="{{ h.variant_of.id }}"
+                     data-variant-name="{{ h.variant_of.name }}"{% endif %}>
                     <div class="col-span-10 md:col-span-4 order-1 md:order-1 relative">
                         <input type="text" name="ingredient[]" value="{{ ri.ingredient.display }}" autocomplete="off"
                                class="ingredient-ac block w-full rounded-md border-[#D4CEC4] shadow-sm">
                         <input type="hidden" name="ingredient_id[]" value="{{ ri.ingredient.id }}">
+                        <input type="hidden" name="preparation[]" value="{{ ri.preparation or '' }}">
+                        <input type="hidden" name="pantry_flag[]" value="0">
                         <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
                     </div>
-                    <div class="col-span-1 order-2 md:order-5 flex items-center justify-center"
-                         title="Altijd in huis — wijzigt de voorraadkast voor de hele app">
-                        <input type="checkbox" name="pantry[]" value="{{ ri.ingredient.id }}"
-                               class="w-4 h-4 cursor-pointer rounded border-[#D4CEC4]"
-                               {{ 'checked' if ri.ingredient_id in pantry_ids }}>
-                    </div>
-                    <div class="col-span-1 order-3 md:order-6 flex items-center justify-center">
+                    <div class="col-span-1 order-2 md:order-5 flex items-center justify-center">
                         <button type="button" onclick="this.closest('.ingredient-row').remove()"
-                                class="w-8 h-8 flex items-center justify-center rounded text-red-400 hover:text-red-600 text-xl font-bold">×</button>
+                                class="w-8 h-8 flex items-center justify-center rounded text-red-400 hover:text-red-600 text-xl font-bold"
+                                aria-label="Ingrediënt verwijderen">×</button>
                     </div>
-                    <div class="col-span-6 md:col-span-2 order-4 md:order-2">
+                    <div class="col-span-5 md:col-span-1 order-3 md:order-2">
                         <input type="number" step="0.1" inputmode="decimal" name="amount[]" value="{{ ri.amount }}"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
-                    <div class="col-span-6 md:col-span-2 order-5 md:order-3">
+                    <div class="col-span-6 md:col-span-1 order-4 md:order-3">
                         <input type="text" name="unit[]" value="{{ ri.unit }}" list="unit-list"
                                class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
                     </div>
-                    <div class="col-span-12 md:col-span-3 order-6 md:order-4">
+                    <div class="col-span-12 md:col-span-3 order-5 md:order-4">
                         <select name="category[]" class="block w-full rounded-md border-[#D4CEC4] shadow-sm">
+                            {% if ri.ingredient.category not in categories %}
+                            <option value="{{ ri.ingredient.category }}" selected>{{ ri.ingredient.category }} (verouderd)</option>
+                            {% endif %}
                             {% for cat in categories %}
                             <option value="{{ cat }}" {{ 'selected' if ri.ingredient.category == cat }}>
                                 {{ cat }}
@@ -118,11 +151,19 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="col-span-12 md:col-span-2 order-6 md:order-6">
+                        <label class="pantry-label inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[#E8E4DC] cursor-pointer text-xs text-[#6B6B6B]">
+                            <input type="checkbox" class="pantry-cb sr-only">
+                            <span class="pantry-icon" aria-hidden="true"></span>
+                            <span class="pantry-text">op de lijst</span>
+                        </label>
+                    </div>
+                    <div class="col-span-12 order-7 md:order-7 pantry-variant hidden"></div>
                 </div>
                 {% endfor %}
             </div>
 
-            <button type="button" onclick="addIngredientRow('', '', '', '', '', '', true)"
+            <button type="button" onclick="addIngredientRow()"
                     class="mt-4 text-[#8B4513] hover:text-[#8B4513] text-sm">
                 + Ingrediënt toevoegen
             </button>
@@ -152,12 +193,6 @@ const quill = setupQuill('#quill-editor', null, document.getElementById('fieldIn
 
 document.querySelector('form').addEventListener('submit', function() {
   document.getElementById('fieldInstructions').value = quill.root.innerHTML;
-  // Sync pantry checkbox values from hidden ingredient_id fields (voor nieuwe rijen)
-  document.querySelectorAll('.ingredient-row').forEach(row => {
-    const hiddenId = row.querySelector('input[name="ingredient_id[]"]');
-    const cb = row.querySelector('.pantry-cb');
-    if (hiddenId && cb && hiddenId.value) cb.value = hiddenId.value;
-  });
 });
 </script>
 {% include '_crop_modal.html' %}

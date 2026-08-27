@@ -72,6 +72,38 @@ def price_per_unit(price, size_str):
     return (price / qty, unit)
 
 
+def parse_size_filter(raw):
+    """Maat-invoer van de gebruiker: "800", "800 g", "1,5 kg" → (qty, unit).
+
+    Zonder eenheid is unit '' en matcht elke eenheid. None bij onzin-invoer.
+    """
+    m = re.match(r'^(\d+(?:[.,]\d+)?)\s*([a-zA-Z]*)$', (raw or '').strip().lower())
+    if not m:
+        return None
+    unit_raw = m.group(2)
+    return (float(m.group(1).replace(',', '.')),
+            _SIZE_UNIT_MAP.get(unit_raw, unit_raw))
+
+
+def _to_base_size(qty, unit):
+    """Gewicht naar g en volume naar ml, zodat 0,8 kg en 800 g gelijk zijn."""
+    factors = {'kg': (1000, 'g'), 'l': (1000, 'ml'), 'cl': (10, 'ml'), 'dl': (100, 'ml')}
+    factor, base = factors.get(unit, (1, unit))
+    return qty * factor, base
+
+
+def size_matches(size_str, want, tolerance=0.02):
+    """True als een AH-maattekst overeenkomt met de gevraagde (qty, unit)."""
+    parsed = _parse_product_size(size_str)
+    if not parsed or not want:
+        return False
+    pkg_qty, pkg_unit = _to_base_size(parsed[0], (parsed[1] or '').lower())
+    want_qty, want_unit = _to_base_size(want[0], (want[1] or '').lower())
+    if want_unit and want_unit != pkg_unit:
+        return False
+    return abs(pkg_qty - want_qty) <= max(want_qty * tolerance, 0.01)
+
+
 def _norm_unit(u):
     """Normaliseer unit string via _UNIT_NORMALIZE lookup."""
     return _UNIT_NORMALIZE.get((u or '').lower().strip(), (u or '').lower().strip())

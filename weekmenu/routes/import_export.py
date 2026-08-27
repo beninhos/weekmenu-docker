@@ -93,10 +93,11 @@ def import_data():
             db.session.flush()
 
             for ing_data in r_data.get('ingredients', []):
+                naam = (ing_data.get('name') or '').strip()
+                if not naam:
+                    continue        # export van een andere versie, sla over
                 ingredient = _resolve_or_create_ingredient(
-                    ing_data['name'],
-                    ing_data.get('category', 'Overig')
-                )
+                    naam, ing_data.get('category', 'Overig'))
                 if not ingredient:
                     continue
                 counts['ingredients'] += 1
@@ -261,14 +262,17 @@ def import_zip():
                 db.session.flush()
 
                 for ing_data in r_data.get('ingredients', []):
-                    ingredient = Ingredient.query.filter_by(name=ing_data['name']).first()
+                    # Via de reguliere weg: die valideert de categorie en zet
+                    # display_name en alias. Rechtstreeks Ingredient() aanmaken
+                    # leverde rijen zonder display_name en met een categorie
+                    # die niet meer bestaat.
+                    naam = (ing_data.get('name') or '').strip()
+                    if not naam:
+                        continue    # export van een andere versie, sla over
+                    ingredient = _resolve_or_create_ingredient(
+                        naam, ing_data.get('category'))
                     if not ingredient:
-                        ingredient = Ingredient(
-                            name=ing_data['name'],
-                            category=ing_data.get('category', 'Overig'),
-                        )
-                        db.session.add(ingredient)
-                        db.session.flush()
+                        continue
                     raw_amount = ing_data.get('amount') or 0
                     norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
                     db.session.add(RecipeIngredient(

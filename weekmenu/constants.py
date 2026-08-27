@@ -18,70 +18,86 @@ MEAL_TYPES = [
     ('diner', 'Diner')
 ]
 
+# Receptclassificatie: breder dan de roostervakken in het weekmenu.
+# 'tussendoor' is wel een recepttype maar (bewust) geen rij in het weekrooster.
+RECIPE_MEAL_TYPES = MEAL_TYPES + [('tussendoor', 'Tussendoor')]
+
 # ── Productcategorieën ────────────────────────────────────────────────────
 
 PRODUCT_CATEGORIES = [
     'Groente, Fruit & Aardappelen',
-    'Vlees & Gevogelte',
-    'Vis & Schaaldieren',
-    'Vegetarisch & Plantaardig',
-    'Zuivel, Plantaardige Zuivel & Eieren',
-    'Kaas & Vleeswaren',
-    'Kruiden & Specerijen',
-    'Oliën, Sauzen & Smaakmakers',
-    'Pasta, Rijst & Granen',
-    'Conserven & Peulvruchten',
-    'Noten, Zaden & Gedroogd Fruit',
     'Brood & Bakkerij',
-    'Ontbijt, Bakken & Desserts',
+    'Kaas & Vleeswaren',
+    'Vlees & Vis',
+    'Zuivel & Eieren',
+    'Vegetarisch & Plantaardig',
     'Diepvries',
+    'Pasta, Rijst & Wereldkeuken',
+    'Conserven & Peulvruchten',
+    'Oliën, Sauzen & Smaakmakers',
+    'Kruiden & Specerijen',
+    'Bakken & Desserts',
+    'Ontbijt & Beleg',
+    'Noten & Snacks',
     'Dranken',
-    'Snacks & Zoetwaren',
     'Non-Food & Huishouden',
     'Overig',
 ]
 
+# De looproute door de winkel. Dit is de ENIGE winkelspecifieke lijst:
+# verse rand eerst, dan het vriesvak, dan de droge middenpaden, dan de
+# kassa-kant. Andere supermarkt = alleen deze volgorde herschikken.
 CATEGORY_ORDER_SUPERMARKET = [
     'Groente, Fruit & Aardappelen',
-    'Vlees & Gevogelte',
-    'Vis & Schaaldieren',
-    'Vegetarisch & Plantaardig',
-    'Kaas & Vleeswaren',
-    'Zuivel, Plantaardige Zuivel & Eieren',
-    'Kruiden & Specerijen',
-    'Oliën, Sauzen & Smaakmakers',
-    'Pasta, Rijst & Granen',
-    'Conserven & Peulvruchten',
-    'Noten, Zaden & Gedroogd Fruit',
     'Brood & Bakkerij',
-    'Ontbijt, Bakken & Desserts',
-    'Snacks & Zoetwaren',
-    'Dranken',
+    'Kaas & Vleeswaren',
+    'Vlees & Vis',
+    'Zuivel & Eieren',
+    'Vegetarisch & Plantaardig',
     'Diepvries',
+    'Pasta, Rijst & Wereldkeuken',
+    'Conserven & Peulvruchten',
+    'Oliën, Sauzen & Smaakmakers',
+    'Kruiden & Specerijen',
+    'Bakken & Desserts',
+    'Ontbijt & Beleg',
+    'Noten & Snacks',
+    'Dranken',
     'Non-Food & Huishouden',
     'Overig',
 ]
 
 CATEGORY_BG = {
-    'Groente, Fruit & Aardappelen':           '#fef9f5',
-    'Vlees & Gevogelte':                       '#f5f0eb',
-    'Vis & Schaaldieren':                      '#f0ede8',
-    'Vegetarisch & Plantaardig':               '#fef9f5',
-    'Zuivel, Plantaardige Zuivel & Eieren':    '#fdf6f0',
-    'Kaas & Vleeswaren':                       '#f5f0eb',
-    'Kruiden & Specerijen':                    '#fef9f5',
-    'Oliën, Sauzen & Smaakmakers':            '#fdf6f0',
-    'Pasta, Rijst & Granen':                   '#f0ede8',
-    'Conserven & Peulvruchten':                '#f5f0eb',
-    'Noten, Zaden & Gedroogd Fruit':           '#fdf6f0',
-    'Brood & Bakkerij':                        '#fef9f5',
-    'Ontbijt, Bakken & Desserts':              '#f5f0eb',
-    'Diepvries':                               '#ede9e3',
-    'Dranken':                                 '#f0ede8',
-    'Snacks & Zoetwaren':                      '#fdf6f0',
-    'Non-Food & Huishouden':                   '#ede9e3',
-    'Overig':                                  '#f0ede8',
+    'Groente, Fruit & Aardappelen': '#fef9f5',
+    'Brood & Bakkerij':             '#fdf6f0',
+    'Kaas & Vleeswaren':            '#f5f0eb',
+    'Vlees & Vis':                  '#f5f0eb',
+    'Zuivel & Eieren':              '#fdf6f0',
+    'Vegetarisch & Plantaardig':    '#fef9f5',
+    'Diepvries':                    '#ede9e3',
+    'Pasta, Rijst & Wereldkeuken':  '#f0ede8',
+    'Conserven & Peulvruchten':     '#f5f0eb',
+    'Oliën, Sauzen & Smaakmakers':  '#fdf6f0',
+    'Kruiden & Specerijen':         '#fef9f5',
+    'Bakken & Desserts':            '#f5f0eb',
+    'Ontbijt & Beleg':              '#fdf6f0',
+    'Noten & Snacks':               '#fdf6f0',
+    'Dranken':                      '#f0ede8',
+    'Non-Food & Huishouden':        '#ede9e3',
+    'Overig':                       '#f0ede8',
 }
+
+# Waar je een product haalt. Leeg of 'ah' = gewoon bij Albert Heijn; al het
+# andere komt op de boodschappenlijst in een apart blok onderaan.
+BRONNEN = [
+    ('ah',      'Albert Heijn'),
+    ('toko',    'Toko'),
+    ('slager',  'Slager'),
+    ('bakker',  'Bakker'),
+    ('markt',   'Markt'),
+    ('online',  'Online bestellen'),
+    ('elders',  'Elders'),
+]
 
 # ── AH verpakkings-eenheden ──────────────────────────────────────────────
 
@@ -174,8 +190,11 @@ DUTCH_UNITS = {
 
 _UNIT_KEYS = '|'.join(re.escape(k) for k in sorted(DUTCH_UNITS.keys(), key=len, reverse=True))
 _AMOUNT_RE = r'(?:[\d]+(?:[,.][\d]+)?(?:\s*[-–]\s*[\d]+(?:[,.][\d]+)?)?|[½¼¾⅓⅔⅛⅜⅝⅞]|\d+\s*/\s*\d+|\d+\s+\d+\s*/\s*\d+)'
+# Kookboeken schrijven 'stuk(s)' en 'teen(tjes)'. Zonder deze staart belandt
+# de eenheid in de ingredientnaam en ontstaat er een spookingredient.
+_UNIT_SUFFIX = r'(?:\((?:s|en|tjes|je|jes)\))?'
 _INGREDIENT_RE = re.compile(
-    r'^(' + _AMOUNT_RE + r')\s+(' + _UNIT_KEYS + r')\b\.?\s+(.+)$',
+    r'^(' + _AMOUNT_RE + r')\s+(' + _UNIT_KEYS + r')\b' + _UNIT_SUFFIX + r'\.?\s+(.+)$',
     re.IGNORECASE
 )
 _AMOUNT_ONLY_RE = re.compile(
@@ -185,36 +204,55 @@ _AMOUNT_ONLY_RE = re.compile(
 # ── Category guesser keywords ────────────────────────────────────────────
 
 _CATEGORY_KEYWORDS = [
-    ('Groente, Fruit & Aardappelen', ['vleestomaat', 'vleestomaten', 'bladspinazie', 'sperziebonen', 'sperzieboon', 'winterpeen', 'winterpenen', 'puntpaprika', 'bosui', 'bosuitje', 'bleekselderij', 'augurk', 'casave', 'cassave']),
-    ('Oliën, Sauzen & Smaakmakers', ['satésaus', 'sesamolie', 'ahornsiroop', 'boemboe', 'jus', 'saus']),
-    ('Ontbijt, Bakken & Desserts', ['maizena', 'maïzena', 'zelfrijzend']),
-    ('Brood & Bakkerij', ['volkoren bolletje', 'bolletje', 'papadum', 'chapati', 'wraps']),
-    ('Kaas & Vleeswaren', ['ontbijtspek', 'ontbijtspekje', 'burrata']),
-    ('Pasta, Rijst & Granen', ['basmatirijst', 'zilvervliesrijst', 'zilvervlies', 'conchiglie', 'bami goreng', 'nasi goreng', 'papadums']),
+    # ── Specifieke termen eerst: eerste treffer wint, dus deze moeten winnen
+    #    van generieke woorden verderop ('bloemkool' vóór 'bloem', 'pindakaas'
+    #    vóór 'kaas', 'banaan' vóór 'naan', 'rucola' vóór 'cola').
+    ('Groente, Fruit & Aardappelen', ['bloemkool', 'vleestomaat', 'vleestomaten', 'bladspinazie', 'sperziebonen', 'sperzieboon', 'winterpeen', 'winterpenen', 'puntpaprika', 'bosui', 'bosuitje', 'bleekselderij', 'augurk', 'casave', 'cassave', 'rucola', 'rucolo',
+                               'rode peper', 'groene peper', 'spaanse peper', 'chilipeper', 'peper (vers)', 'zoete aardappel', 'bataat', 'aardappel', 'tuinkers', 'waterkers', 'kerstomaat']),
+    ('Groente, Fruit & Aardappelen', ['banaan', 'banan', 'watermeloen', 'granaatappel']),
+    # De meel-familie: 'maismeel' matchte anders 'mais' (groente) en
+    # 'tarwemeel'/'roggemeel' hadden helemaal geen sleutelwoord.
+    # Griesmeel en polenta kook je, die horen bij de granen; de rest is bakwerk.
+    ('Pasta, Rijst & Wereldkeuken', ['maisgriesmeel', 'maisgries', 'griesmeel', 'polenta', 'bulghur']),
+    ('Bakken & Desserts', ['maismeel', 'maizemeel', 'tarwemeel', 'roggemeel', 'boekweitmeel',
+                           'speltmeel', 'volkorenmeel', 'havermeel', 'bakmeel', 'patentbloem']),
+    ('Ontbijt & Beleg', ['pindakaas', 'notenpasta', 'chocopasta', 'hagelslag', 'jam', 'marmelade', 'appelstroop', 'muesli', 'granola', 'cornflakes', 'havermout', 'vlokken', 'ontbijtkoek', 'beschuit', 'cracker']),
+    ('Kaas & Vleeswaren', ['achterham', 'beenham', 'rauwe ham', 'parmaham', 'serranoham', 'ontbijtspek', 'ontbijtspekje']),
+    ('Noten & Snacks', ['amandel', 'walnoot', 'walnoten', 'cashew', 'hazelnoot', 'hazelnoten', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'pinda']),
+    ('Oliën, Sauzen & Smaakmakers', ['satésaus', 'sesamolie', 'ahornsiroop', 'boemboe', 'jus', 'saus', 'bouillon', 'fond', 'soep', 'chutney', 'tapenade']),
+    ('Bakken & Desserts', ['maizena', 'maïzena', 'zelfrijzend']),
+    ('Brood & Bakkerij', ['hamburgerbroodje', 'volkoren bolletje', 'bolletje', 'broodje', 'papadum', 'chapati', 'wraps']),
+    ('Pasta, Rijst & Wereldkeuken', ['basmatirijst', 'zilvervliesrijst', 'zilvervlies', 'conchiglie', 'bami goreng', 'nasi goreng', 'papadums', 'eiernoedel', 'noedel', 'noodle']),
     ('Dranken', ['bronwater', 'kraanwater']),
-    ('Vlees & Gevogelte', ['kipfilet', 'kippendij', 'kip', 'gehakt', 'varkensvlees', 'varken', 'rundvlees', 'rund', 'lamsrack', 'lam', 'biefstuk', 'tartaar', 'ossenhaas', 'entrecote', 'speklap', 'kalkoen', 'eend', 'konijn', 'wild', 'hert', 'klapstuk', 'riblap', 'cordon bleu', 'saté ajam', 'saté', 'vlees']),
-    ('Vis & Schaaldieren', ['zalm', 'tonijn', 'vis', 'garnaal', 'mossel', 'inktvis', 'forel', 'haring', 'makreel', 'ansjovis', 'kabeljauw', 'tilapia', 'kreeft', 'krab', 'schol', 'sardine', 'zeebaars', 'dorade', 'paling', 'sint-jakobsschelp']),
+
+    # ── Gedroogde/gemalen kruiden expliciet vóór de verse variant ──
+    ('Kruiden & Specerijen', ['gedroogde tijm', 'gedroogde oregano', 'gedroogde rozemarijn', 'gedroogde basilicum', 'gedroogde peterselie', 'gedroogde dille', 'gedroogde munt', 'gedroogde koriander', 'gedroogde laurier', 'gedroogde salie',
+                              'gemalen koriander', 'gemalen komijn', 'gedroogde chipotle']),
+    ('Groente, Fruit & Aardappelen', ['basilicum', 'peterselie', 'bladpeterselie', 'bieslook', 'koriander', 'munt', 'salie', 'dille', 'dragon', 'kervel', 'citroengras', 'tijm', 'rozemarijn',
+                       'verse oregano', 'verse laurier', 'verse kruiden']),
+
+    # ── Brede blokken ──
+    ('Vlees & Vis', ['zalm', 'tonijn', 'vis', 'garnaal', 'mossel', 'inktvis', 'forel', 'haring', 'makreel', 'ansjovis', 'kabeljauw', 'tilapia', 'kreeft', 'krab', 'schol', 'sardine', 'zeebaars', 'dorade', 'paling', 'sint-jakobsschelp']),
     ('Vegetarisch & Plantaardig', ['tofu', 'tempeh', 'tahoe', 'seitan', 'quorn', 'soja', 'lupine']),
-    ('Kaas & Vleeswaren', ['kaas', 'parmezaan', 'mozzarella', 'feta', 'ricotta', 'mascarpone', 'grana', 'pecorino', 'emmentaler', 'gorgonzola', 'brie', 'camembert', 'cheddar', 'gouda', 'edam', 'gruyère',
-                           'ham', 'salami', 'rookworst', 'cervelaat', 'leverworst', 'worst', 'chorizo', 'pancetta', 'prosciutto', 'spek', 'bacon', 'rookvlees', 'pastrami']),
-    ('Zuivel, Plantaardige Zuivel & Eieren', ['slagroom', 'karnemelk', 'volle melk', 'melk', 'yoghurt', 'kwark', 'boter', 'margarine', 'crème fraîche', 'fromage frais', 'zure room', 'room', 'ei', 'quark',
-                                               'kokosmelk', 'amandelmelk', 'havermelk', 'sojamelk']),
-    ('Kruiden & Specerijen', ['paprikapoeder', 'chilipoeder', 'komijn', 'kaneel', 'kurkuma', 'oregano', 'laurier', 'nootmuskaat', 'kardemom', 'kruidnagel', 'steranijs', 'kerrie', 'curry', 'ras el hanout', 'five spice', 'za\'atar', 'sumak', 'garam', 'massala', 'zout', 'peper', 'italiaanse kruiden', 'kruiden',
-                              'peterselie', 'basilicum', 'rozemarijn', 'tijm', 'bieslook', 'dragon', 'koriander', 'munt', 'salie', 'dille']),
-    ('Oliën, Sauzen & Smaakmakers', ['tomatenpuree', 'olijfolie', 'zonnebloemolie', 'koolzaadolie', 'bouillon', 'fond', 'soep', 'ketchup', 'mosterd', 'mayonaise', 'sojasaus', 'ketjap', 'worcester', 'tabasco', 'pesto', 'sambal', 'harissa', 'hoisin', 'misopasta', 'tahini', 'honing', 'siroop', 'stroop', 'azijn', 'olie']),
-    ('Pasta, Rijst & Granen', ['spaghetti', 'penne', 'rigatoni', 'fusilli', 'lasagne', 'tagliatelle', 'fettuccine', 'noodle', 'noedel', 'couscous', 'bulgur', 'quinoa', 'polenta', 'gnocchi', 'tortellini', 'ravioli', 'macaroni', 'pasta', 'rijst', 'risotto', 'mie', 'orzo']),
-    ('Conserven & Peulvruchten', ['tomatenblokje', 'tomatenstukje', 'passata', 'kikkererwt', 'linzen', 'linze', 'bruine bonen', 'witte bonen', 'kidneybonen', 'kidney', 'zwarte bonen', 'chili boon', 'bonen', 'olijf']),
-    ('Noten, Zaden & Gedroogd Fruit', ['amandel', 'walnoot', 'cashew', 'hazelnoot', 'pistache', 'pijnboompit', 'sesamzaad', 'lijnzaad', 'chiazaad', 'zonnebloempit', 'pompoenpit', 'rozijn', 'cranberry', 'sultana', 'gedroogd fruit', 'dadel', 'pinda']),
-    ('Brood & Bakkerij', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'focaccia', 'brioche', 'tortilla', 'pitabrood', 'naan', 'brood']),
-    ('Ontbijt, Bakken & Desserts', ['bloem', 'zelfrijzend', 'bakpoeder', 'maizena', 'gist', 'baksoda', 'vanille', 'vanillesuiker', 'amandelpoeder', 'amandelmeel', 'suiker', 'poedersuiker', 'basterdsuiker', 'rietsuiker', 'cacaopoeder', 'cacao', 'paneermeel',
-                                    'jam', 'marmelade', 'pindakaas', 'notenpasta', 'hagelslag', 'vlokken', 'muesli', 'havermout', 'granola', 'cornflakes']),
-    ('Snacks & Zoetwaren', ['chocolade', 'pure chocolade', 'melkchocolade', 'witte chocolade', 'koek', 'stroopwafel', 'biscuit', 'marshmallow', 'chips', 'popcorn', 'snoep', 'kroepoek']),
+    ('Oliën, Sauzen & Smaakmakers', ['tomatenpuree', 'olijfolie', 'zonnebloemolie', 'koolzaadolie', 'ketchup', 'mosterd', 'mayonaise', 'sojasaus', 'ketjap', 'worcester', 'tabasco', 'pesto', 'sambal', 'harissa', 'hoisin', 'misopasta', 'tahini', 'honing', 'siroop', 'stroop', 'azijn', 'olie']),
+    ('Vlees & Vis', ['kipfilet', 'kippendij', 'kip', 'gehakt', 'varkensvlees', 'varken', 'rundvlees', 'rund', 'lamsrack', 'lam', 'biefstuk', 'tartaar', 'ossenhaas', 'entrecote', 'speklap', 'kalkoen', 'eend', 'konijn', 'wild', 'hert', 'klapstuk', 'riblap', 'cordon bleu', 'saté ajam', 'saté', 'hamburger', 'vlees']),
+    ('Kaas & Vleeswaren', ['ham', 'salami', 'rookworst', 'cervelaat', 'leverworst', 'worst', 'chorizo', 'pancetta', 'prosciutto', 'spek', 'bacon', 'rookvlees', 'pastrami']),
+    ('Kaas & Vleeswaren', ['kaas', 'parmezaan', 'mozzarella', 'feta', 'ricotta', 'mascarpone', 'grana', 'pecorino', 'emmentaler', 'gorgonzola', 'brie', 'camembert', 'cheddar', 'gouda', 'edam', 'gruyère', 'manchego', 'halloumi', 'burrata']),
+    ('Zuivel & Eieren', ['slagroom', 'karnemelk', 'volle melk', 'melk', 'yoghurt', 'kwark', 'boter', 'margarine', 'crème fraîche', 'fromage frais', 'zure room', 'room', 'ei', 'quark',
+                         'kokosmelk', 'amandelmelk', 'havermelk', 'sojamelk']),
+    ('Kruiden & Specerijen', ['paprikapoeder', 'chilipoeder', 'komijn', 'kaneel', 'kurkuma', 'oregano', 'laurier', 'nootmuskaat', 'kardemom', 'kruidnagel', 'steranijs', 'kerrie', 'curry', 'ras el hanout', 'five spice', 'za\'atar', 'sumak', 'garam', 'massala', 'zout', 'peper', 'italiaanse kruiden', 'kruiden']),
+    ('Pasta, Rijst & Wereldkeuken', ['spaghetti', 'penne', 'rigatoni', 'fusilli', 'lasagne', 'tagliatelle', 'fettuccine', 'couscous', 'bulgur', 'quinoa', 'polenta', 'gnocchi', 'tortellini', 'ravioli', 'macaroni', 'pasta', 'rijst', 'risotto', 'mie', 'orzo']),
+    ('Conserven & Peulvruchten', ['tomatenblokje', 'tomatenstukje', 'passata', 'kikkererwt', 'linzen', 'linze', 'bruine bonen', 'witte bonen', 'kidneybonen', 'kidney', 'zwarte bonen', 'chili boon', 'bonen', 'olijf', 'kappertjes']),
+    ('Brood & Bakkerij', ['stokbrood', 'ciabatta', 'baguette', 'croissant', 'focaccia', 'brioche', 'tortilla', 'pitabrood', 'pita', 'naan', 'brood']),
+    ('Ontbijt & Beleg', []),
+    ('Bakken & Desserts', ['bloem', 'meel', 'bakpoeder', 'gist', 'baksoda', 'vanille', 'vanillesuiker', 'amandelpoeder', 'amandelmeel', 'suiker', 'poedersuiker', 'basterdsuiker', 'rietsuiker', 'cacaopoeder', 'cacao', 'paneermeel']),
+    ('Noten & Snacks', ['chocolade', 'pure chocolade', 'melkchocolade', 'witte chocolade', 'koek', 'stroopwafel', 'biscuit', 'marshmallow', 'chips', 'popcorn', 'snoep', 'kroepoek']),
     ('Dranken', ['koffie', 'espresso', 'thee', 'groene thee',
                  'limonade', 'cola', 'spa', 'mineraalwater', 'appelsap', 'sinaasappelsap', 'tomatensap', 'water',
                  'wijn', 'rode wijn', 'witte wijn', 'rosé', 'bier', 'cognac', 'rum', 'wodka', 'gin', 'whisky', 'port', 'marsala', 'sherry', 'champagne', 'prosecco', 'likeur', 'calvados', 'armagnac']),
     ('Diepvries', ['diepvries', 'ingevroren', 'bevroren']),
-    ('Groente, Fruit & Aardappelen', ['ui', 'rode ui', 'sjalot', 'knoflook', 'wortel', 'aardappel', 'zoete aardappel', 'bataat', 'prei', 'courgette', 'paprika', 'paparika', 'champignon', 'paddenstoel', 'shiitake', 'broccoli', 'bloemkool', 'romanesco', 'spinazie', 'komkommer', 'tomaat', 'tomaten', 'tomat', 'venkel', 'asperge', 'doperwt', 'erwt', 'biet', 'radijs', 'spruitje', 'kool', 'rode kool', 'witlof', 'paksoi', 'aubergine', 'chilipeper', 'gember', 'andijvie', 'sla', 'ijsbergsla', 'selderij', 'knolselderij', 'pastinaak', 'rettich', 'raap', 'avocado', 'peen', 'groente', 'mais', 'maïs', 'palmhart', 'radicchio', 'rucola', 'rucolo', 'waterkers',
-                                      'appel', 'peer', 'citroen', 'limoen', 'sinaasappel', 'mandarijn', 'grapefruit', 'banaan', 'banan', 'aardbei', 'framboos', 'blauwe bes', 'bosbes', 'braambes', 'kiwi', 'mango', 'ananas', 'papaja', 'passievrucht', 'granaatappel', 'pruim', 'kers', 'abrikoos', 'perzik', 'nectarine', 'vijg', 'meloen', 'watermeloen', 'lychee', 'kokos', 'artisjok']),
+    ('Groente, Fruit & Aardappelen', ['appel', 'peer', 'citroen', 'limoen', 'sinaasappel', 'mandarijn', 'grapefruit', 'aardbei', 'framboos', 'blauwe bes', 'bosbes', 'braambes', 'braam', 'kiwi', 'mango', 'ananas', 'papaja', 'passievrucht', 'pruim', 'kers', 'abrikoos', 'perzik', 'nectarine', 'vijg', 'meloen', 'lychee', 'druif']),
+    ('Groente, Fruit & Aardappelen', ['ui', 'rode ui', 'sjalot', 'knoflook', 'wortel', 'aardappel', 'prei', 'courgette', 'paprika', 'paparika', 'champignon', 'paddenstoel', 'shiitake', 'broccoli', 'romanesco', 'spinazie', 'komkommer', 'tomaat', 'tomaten', 'tomat', 'venkel', 'asperge', 'doperwt', 'erwt', 'biet', 'radijs', 'spruitje', 'kool', 'rode kool', 'witlof', 'paksoi', 'aubergine', 'gember', 'andijvie', 'sla', 'ijsbergsla', 'selderij', 'knolselderij', 'pastinaak', 'rettich', 'raap', 'avocado', 'peen', 'groente', 'mais', 'maïs', 'palmhart', 'radicchio', 'waterkers', 'zuurkool', 'pompoen', 'kokos', 'artisjok', 'taugé', 'sugarsnap', 'okra']),
 ]
 
 # ── AH API constanten ────────────────────────────────────────────────────

@@ -231,7 +231,8 @@ async function doSearch(id) {
     const resultsEl = document.getElementById('searchResults-' + id);
     resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Zoeken...</p>';
     const resp = await fetch('/api/ah/product-search?q=' + encodeURIComponent(q) + '&size=12');
-    let products = await resp.json();
+    const data = await resp.json();
+    let products = data.products || [];
     if (!products.length) {
         resultsEl.innerHTML = '<p class="text-xs text-[#6B6B6B] col-span-2">Geen resultaten gevonden.</p>';
         return;

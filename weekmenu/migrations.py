@@ -235,6 +235,257 @@ def _migrate_v8(conn):
             pass
 
 
+def _migrate_v9(conn):
+    """Maaltijdtype-tags per recept (ontbijt/lunch/diner/tussendoor)."""
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS recipe_meal_type (
+            id INTEGER PRIMARY KEY,
+            recipe_id INTEGER NOT NULL REFERENCES recipe(id),
+            meal_type VARCHAR(20) NOT NULL,
+            UNIQUE(recipe_id, meal_type)
+        )
+    '''))
+
+
+def _migrate_v10(conn):
+    """Universele schapindeling: v4-samenvoegingen teruggedraaid.
+
+    Groente/Fruit, Kaas/Vleeswaren en Ontbijt&Beleg/Bakken zijn weer gesplitst,
+    'Verse Kruiden' is nieuw. Alleen rijen in gesplitste of hernoemde categorieën
+    worden aangeraakt; de guesser mag daarbij uitsluitend binnen de doelen van
+    die splitsing kiezen, zodat bewuste keuzes elders intact blijven.
+    """
+    RENAMES = {
+        'Soepen, Sauzen & Kruiden': 'Oliën, Sauzen & Smaakmakers',
+    }
+    # bron -> (default, toegestane doelen voor de guesser). De doelen zijn
+    # per bron begrensd zodat bewuste keuzes buiten de splitsing intact
+    # blijven, maar ruim genoeg om oude gokfouten binnen de bron te herstellen
+    # (pita bij de groente, eiernoedels bij de zuivel, manchego bij de zuivel).
+    GF = {'Groente & Aardappelen', 'Fruit', 'Verse Kruiden', 'Brood & Bakkerij',
+          'Conserven & Peulvruchten', 'Diepvries', 'Oliën, Sauzen & Smaakmakers'}
+    SPLITS = {
+        'Groente, Fruit & Aardappelen': ('Groente & Aardappelen', GF),
+        'Groente & Aardappelen':        ('Groente & Aardappelen', GF),   # wees uit v4
+        'Kaas & Vleeswaren': ('Kaas',
+            {'Kaas', 'Vleeswaren', 'Vlees & Gevogelte', 'Ontbijt & Beleg'}),
+        'Zuivel, Plantaardige Zuivel & Eieren': ('Zuivel & Eieren',
+            {'Zuivel & Eieren', 'Kaas', 'Pasta, Rijst & Granen'}),
+        'Ontbijt, Bakken & Desserts': ('Bakken & Desserts',
+            {'Ontbijt & Beleg', 'Bakken & Desserts', 'Groente & Aardappelen'}),
+        'Kruiden & Specerijen': ('Kruiden & Specerijen',
+            {'Kruiden & Specerijen', 'Verse Kruiden', 'Groente & Aardappelen'}),
+    }
+
+    # De guesser draait op het HUIDIGE vocabulaire, dat na v12 andere namen
+    # heeft. Een doel is dus ook geldig onder zijn latere naam, anders valt
+    # een verse database hier terug op de default.
+    LATER = {
+        'Groente & Aardappelen':         'Groente, Fruit & Aardappelen',
+        'Fruit':                         'Groente, Fruit & Aardappelen',
+        'Verse Kruiden':                 'Groente, Fruit & Aardappelen',
+        'Kaas':                          'Kaas & Vleeswaren',
+        'Vleeswaren':                    'Kaas & Vleeswaren',
+        'Vlees & Gevogelte':             'Vlees & Vis',
+        'Vis & Schaaldieren':            'Vlees & Vis',
+        'Noten, Zaden & Gedroogd Fruit': 'Noten & Snacks',
+        'Snacks & Zoetwaren':            'Noten & Snacks',
+        'Pasta, Rijst & Granen':         'Pasta, Rijst & Wereldkeuken',
+    }
+    SPLITS = {src: (default, allowed | {LATER[a] for a in allowed if a in LATER})
+              for src, (default, allowed) in SPLITS.items()}
+
+    rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
+    for ing_id, ing_name, old_cat in rows:
+        if old_cat in RENAMES:
+            new_cat = RENAMES[old_cat]
+        elif old_cat in SPLITS:
+            default, allowed = SPLITS[old_cat]
+            guess = _guess_ingredient_category(ing_name)
+            new_cat = guess if guess in allowed else default
+        else:
+            continue
+        if new_cat != old_cat:
+            conn.execute(
+                text('UPDATE ingredient SET category = :cat WHERE id = :id'),
+                {'cat': new_cat, 'id': ing_id}
+            )
+
+
+# Een migratie moet toetsen tegen het vocabulaire van HAAR EIGEN tijdperk.
+# Tegen het levende PRODUCT_CATEGORIES toetsen laat v11 alle v10-tussennamen
+# ongeldig verklaren en opnieuw raden, waarmee v12 zijn deterministische map
+# nooit meer te zien krijgt.
+_V11_CATEGORIES = frozenset({
+    'Groente & Aardappelen', 'Fruit', 'Verse Kruiden', 'Vlees & Gevogelte',
+    'Vis & Schaaldieren', 'Vegetarisch & Plantaardig', 'Vleeswaren', 'Kaas',
+    'Zuivel & Eieren', 'Brood & Bakkerij', 'Ontbijt & Beleg', 'Bakken & Desserts',
+    'Kruiden & Specerijen', 'Oliën, Sauzen & Smaakmakers', 'Pasta, Rijst & Granen',
+    'Conserven & Peulvruchten', 'Noten, Zaden & Gedroogd Fruit',
+    'Snacks & Zoetwaren', 'Dranken', 'Diepvries', 'Non-Food & Huishouden', 'Overig',
+})
+
+_V12_CATEGORIES = frozenset({
+    'Groente, Fruit & Aardappelen', 'Brood & Bakkerij', 'Kaas & Vleeswaren',
+    'Vlees & Vis', 'Zuivel & Eieren', 'Vegetarisch & Plantaardig', 'Diepvries',
+    'Pasta, Rijst & Wereldkeuken', 'Conserven & Peulvruchten',
+    'Oliën, Sauzen & Smaakmakers', 'Kruiden & Specerijen', 'Bakken & Desserts',
+    'Ontbijt & Beleg', 'Noten & Snacks', 'Dranken', 'Non-Food & Huishouden', 'Overig',
+})
+
+
+def _migrate_v11(conn):
+    """Restanten van de oude taxonomie opruimen.
+
+    Twee bronnen lekten na v10 nog oude categorienamen binnen: de
+    '(verouderd)'-optie in de receptdropdown, en de ingredients_json van
+    drafts die voor de migratie zijn ingelezen. De guesser draait hier
+    lokaal, dus dit kost geen enkele Gemini-aanroep.
+    """
+    import json
+
+    valid = _V11_CATEGORIES
+
+    rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
+    for ing_id, ing_name, cat in rows:
+        if cat not in valid:
+            conn.execute(
+                text('UPDATE ingredient SET category = :c WHERE id = :i'),
+                {'c': _guess_ingredient_category(ing_name), 'i': ing_id})
+
+    drafts = conn.execute(text(
+        "SELECT id, ingredients_json FROM recipe_draft WHERE status = 'pending'"
+    )).fetchall()
+    for draft_id, raw in drafts:
+        try:
+            items = json.loads(raw or '[]')
+        except (ValueError, TypeError):
+            continue
+        changed = False
+        for item in items:
+            if item.get('category') not in valid:
+                item['category'] = _guess_ingredient_category(item.get('name') or '')
+                changed = True
+        if changed:
+            conn.execute(
+                text('UPDATE recipe_draft SET ingredients_json = :j WHERE id = :i'),
+                {'j': json.dumps(items, ensure_ascii=False), 'i': draft_id})
+
+
+def _migrate_v12(conn):
+    """Vier samenvoegingen, puur op naam — geen gokwerk.
+
+    Gemeten over 16 echte weeklijsten waren Fruit, Verse Kruiden, Vis, Kaas,
+    Vleeswaren en Noten stuk voor stuk kopjes met gemiddeld een of twee regels,
+    terwijl je er in de winkel op dezelfde plek staat. Deze map is deterministisch:
+    de guesser wordt niet aangeroepen, dus er kan niets onverwachts verschuiven.
+    """
+    import json
+
+    MAP = {
+        'Groente & Aardappelen':        'Groente, Fruit & Aardappelen',
+        'Fruit':                        'Groente, Fruit & Aardappelen',
+        'Verse Kruiden':                'Groente, Fruit & Aardappelen',
+        'Kaas':                         'Kaas & Vleeswaren',
+        'Vleeswaren':                   'Kaas & Vleeswaren',
+        'Vlees & Gevogelte':            'Vlees & Vis',
+        'Vis & Schaaldieren':           'Vlees & Vis',
+        'Noten, Zaden & Gedroogd Fruit':'Noten & Snacks',
+        'Snacks & Zoetwaren':           'Noten & Snacks',
+        'Pasta, Rijst & Granen':        'Pasta, Rijst & Wereldkeuken',
+    }
+
+    for old_cat, new_cat in MAP.items():
+        conn.execute(
+            text('UPDATE ingredient SET category = :new WHERE category = :old'),
+            {'new': new_cat, 'old': old_cat})
+
+    # Wachtende drafts dragen hun categorie in JSON, dus die moeten mee.
+    drafts = conn.execute(text(
+        "SELECT id, ingredients_json FROM recipe_draft WHERE status = 'pending'"
+    )).fetchall()
+    for draft_id, raw in drafts:
+        try:
+            items = json.loads(raw or '[]')
+        except (ValueError, TypeError):
+            continue
+        changed = False
+        for item in items:
+            if item.get('category') in MAP:
+                item['category'] = MAP[item['category']]
+                changed = True
+        if changed:
+            conn.execute(
+                text('UPDATE recipe_draft SET ingredients_json = :j WHERE id = :i'),
+                {'j': json.dumps(items, ensure_ascii=False), 'i': draft_id})
+
+    # Alles wat na de samenvoeging nog buiten het vocabulaire valt, opnieuw raden.
+    valid = _V12_CATEGORIES
+    rows = conn.execute(text('SELECT id, name, category FROM ingredient')).fetchall()
+    for ing_id, ing_name, cat in rows:
+        if cat not in valid:
+            conn.execute(
+                text('UPDATE ingredient SET category = :c WHERE id = :i'),
+                {'c': _guess_ingredient_category(ing_name), 'i': ing_id})
+
+
+def _migrate_v13(conn):
+    """Herkomst per ingredient: waar haal je het, als het niet de AH is."""
+    cols = [r[1] for r in conn.execute(text('PRAGMA table_info(ingredient)'))]
+    if 'bron' not in cols:
+        conn.execute(text('ALTER TABLE ingredient ADD COLUMN bron VARCHAR(20)'))
+
+
+def _migrate_v14(conn):
+    """Spookingredienten opruimen die de parser met 'stuk(s)' heeft gemaakt.
+
+    De parser liet de meervoudsstaart van de eenheid in de naam staan, zodat
+    'stuk(s) tomaat' als apart ingredient naast 'tomaat' belandde. De regex is
+    gerepareerd; deze migratie ruimt op wat er al stond.
+
+    Behoudend: alleen samenvoegen als het schone doel al bestaat en de bron
+    nergens anders aan hangt. Blijft er iets over, dan hernoemen we het zodat
+    het tenminste leesbaar is en op /twijfelgevallen opvalt.
+    """
+    import re
+
+    ghosts = conn.execute(text(
+        "SELECT id, name FROM ingredient "
+        "WHERE name LIKE '%(s) %' OR name LIKE '%(tjes) %' OR name LIKE '%(en) %'"
+    )).fetchall()
+
+    for ghost_id, ghost_name in ghosts:
+        schoon = re.sub(r'^\w+\((?:s|tjes|en|je|jes)\)\s+', '', ghost_name).strip()
+        if not schoon or schoon == ghost_name:
+            continue
+
+        doel = conn.execute(
+            text('SELECT id FROM ingredient WHERE name = :n'), {'n': schoon}).fetchone()
+
+        if doel:
+            doel_id = doel[0]
+            # Receptregels overzetten, daarna de dubbele rijen die daardoor
+            # zouden ontstaan in de UNIQUE-tabellen eerst weghalen.
+            conn.execute(text(
+                'UPDATE recipe_ingredient SET ingredient_id = :d WHERE ingredient_id = :g'),
+                {'d': doel_id, 'g': ghost_id})
+            for tabel in ('pantry_ingredient', 'ingredient_alias',
+                          'ingredient_unit_conversion', 'custom_shopping_ingredient',
+                          'shopping_list_exclusion', 'shopping_list_override',
+                          'shopping_check'):
+                try:
+                    conn.execute(
+                        text(f'DELETE FROM {tabel} WHERE ingredient_id = :g'),
+                        {'g': ghost_id})
+                except Exception:
+                    pass        # tabel bestaat niet in deze database
+            conn.execute(text('DELETE FROM ingredient WHERE id = :g'), {'g': ghost_id})
+        else:
+            conn.execute(
+                text('UPDATE ingredient SET name = :n, display_name = :d WHERE id = :g'),
+                {'n': schoon, 'd': schoon, 'g': ghost_id})
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -266,8 +517,20 @@ def migrate_db():
             _migrate_v7(conn)
         if current < 8:
             _migrate_v8(conn)
+        if current < 9:
+            _migrate_v9(conn)
+        if current < 10:
+            _migrate_v10(conn)
+        if current < 11:
+            _migrate_v11(conn)
+        if current < 12:
+            _migrate_v12(conn)
+        if current < 13:
+            _migrate_v13(conn)
+        if current < 14:
+            _migrate_v14(conn)
 
-        target = 8
+        target = 14
         if current < target:
             if row:
                 conn.execute(

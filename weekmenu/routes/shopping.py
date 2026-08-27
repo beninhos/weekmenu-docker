@@ -9,9 +9,9 @@ from weekmenu.models import (
     ShoppingListExclusion, CustomShoppingIngredient,
     ShoppingCheck, QuickAddItem,
 )
-from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET
+from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET, BRONNEN
 from weekmenu.services.shopping import (
-    _build_shopping_dict, send_dict_to_ah, build_combined_shopping_list,
+    send_dict_to_ah, build_combined_shopping_list,
 )
 from weekmenu.services.units import _normalize_ri_unit
 from weekmenu.services.menu import clear_shopping_list as _clear_shopping_list
@@ -38,8 +38,23 @@ def boodschappen():
                                for r in recipes])
     weeks_json = json.dumps({str(k): v for k, v in data['weeks_by_ingredient'].items()})
     iso_now = date.today().isocalendar()
+    # Wat je niet bij de AH haalt komt in een eigen blok onderaan, zodat je
+    # het op papier los kunt afscheuren.
+    ah_items = [i for i in data['open'] if (i.get('bron') or 'ah') == 'ah']
+    elders_items = [i for i in data['open'] if (i.get('bron') or 'ah') != 'ah']
+    elders = []
+    for code, label in BRONNEN:
+        if code == 'ah':
+            continue
+        producten = sorted((i for i in elders_items if i['bron'] == code),
+                           key=lambda x: x['name'])
+        if producten:
+            elders.append({'category': label, 'producten': producten})
+
     return render_template('boodschappen.html',
-                           grouped_open=_grouped(data['open']),
+                           grouped_open=_grouped(ah_items),
+                           grouped_elders=elders,
+                           bronnen=BRONNEN,
                            checked_items=sorted(data['checked'],
                                                 key=lambda x: x['checked_at'] or datetime.min,
                                                 reverse=True),
@@ -112,6 +127,10 @@ def boodschappen_send_to_ah():
     data = build_combined_shopping_list()
     open_dict = {}
     for row in data['open']:
+        # Wat je bij de toko of de slager haalt hoort niet in het AH-mandje,
+        # en mag daarna ook niet als 'via AH besteld' worden afgevinkt.
+        if (row.get('bron') or 'ah') != 'ah':
+            continue
         open_dict[(row['ingredient_id'], row['unit'])] = row['amount']
     payload, status, sent_ids = send_dict_to_ah(open_dict, qty_overrides)
     if status == 200 and payload.get('status') == 'ok' and sent_ids:
@@ -255,9 +274,3 @@ def add_shopping_item(year, week):
     })
 
 
-@bp.route('/api/shopping-list/<int:year>/<int:week>/send-to-ah', methods=['POST'])
-def send_to_ah(year, week):
-    _body = request.get_json(force=True) or {}
-    qty_overrides = {int(k): v for k, v in _body.get('qty_overrides', {}).items()}
-    payload, status, _sent = send_dict_to_ah(_build_shopping_dict(year, week), qty_overrides)
-    return jsonify(payload), status

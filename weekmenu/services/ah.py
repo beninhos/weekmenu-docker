@@ -5,7 +5,10 @@ from collections import Counter
 
 from weekmenu.extensions import db
 from weekmenu.models import Settings
-from weekmenu.services.units import _parse_product_size, price_per_unit
+from weekmenu.services.units import (
+    _parse_product_size, price_per_unit, parse_size_filter, size_matches,
+    _to_base_size, format_amount,
+)
 from weekmenu.constants import (
     _AH_LOGIN_BASE, _AH_AUTHORIZE_PATH, _AH_ANON_TOKEN_URL,
     _AH_TOKEN_URL, _AH_REFRESH_URL, _AH_SEARCH_URL,
@@ -146,28 +149,123 @@ def ah_get_access_token():
         return data['access_token']
 
 
-def ah_search_products(query, size=8):
-    """Search AH product catalog. Returns list of product dicts."""
+def _ah_search_raw(query, size, taxonomy_id=None):
+    """Ruwe AH-zoekrespons (products + filters). Raises bij fouten."""
     import requests as _req
+
+    params = {'query': query, 'size': size}
+    if taxonomy_id:
+        params['taxonomyId'] = taxonomy_id
 
     def _do_search(token):
         headers = {**_AH_HEADERS, 'Authorization': f'Bearer {token}'}
-        return _req.get(
-            _AH_SEARCH_URL,
-            params={'query': query, 'size': size},
-            headers=headers,
-            timeout=10,
-        )
+        return _req.get(_AH_SEARCH_URL, params=params, headers=headers, timeout=10)
+
+    token = _ah_get_anon_token()
+    resp = _do_search(token)
+    if resp.status_code == 401:
+        token = _ah_get_anon_token(force=True)
+        resp = _do_search(token)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _ah_taxonomies(data, limit=8):
+    """Soort-facet uit de zoekrespons: [{id, label, count}], grootste eerst.
+
+    AH levert deze per zoekopdracht aan, dus geen eigen categorie-mapping nodig.
+    """
+    tax = next((f for f in data.get('filters', []) if f.get('id') == 'taxonomy'), None)
+    if not tax:
+        return []
+    options = sorted(tax.get('options') or [], key=lambda o: -(o.get('count') or 0))
+    return [
+        {'id': str(o.get('id')), 'label': o.get('label', ''), 'count': o.get('count') or 0}
+        for o in options[:limit] if o.get('id') and o.get('label')
+    ]
+
+
+def ah_search_products(query, size=8, taxonomy_id=None):
+    """Search AH product catalog. Returns list of product dicts."""
+    try:
+        return _ah_map_products(_ah_search_raw(query, size, taxonomy_id))
+    except Exception:
+        return []
+
+
+# AH's relevantie-volgorde zet afwijkende verpakkingen onderaan (800 g kipfilet
+# staat op ~276 van 283). We halen daarom altijd de hele uitslag op: dat kost
+# ~100 ms extra en levert de complete maten-lijst op. De browser krijgt alleen
+# de getoonde producten.
+_AH_DEEP_SIZE = 300
+
+# Gewicht eerst, dan volume, dan stuks-achtige maten.
+_SIZE_UNIT_ORDER = {'g': 0, 'kg': 0, 'ml': 1, 'l': 1, 'cl': 1, 'dl': 1}
+
+
+def _ah_sizes(products, limit=60):
+    """Welke verpakkingsmaten komen in deze uitslag voor?
+
+    [{label, count}], klein naar groot, gewicht vóór volume vóór stuks.
+    Niet afkappen op een handvol: juist de afwijkende maat (800 g kipfilet)
+    is degene die je zoekt, en die komt maar één keer voor.
+    """
+    groups = {}
+    for p in products:
+        if p['pkgQty'] is None or not p['pkgUnit']:
+            continue
+        key = (p['pkgQty'], p['pkgUnit'])
+        groups[key] = groups.get(key, 0) + 1
+
+    def sort_key(item):
+        (qty, unit), _ = item
+        base_qty, _base_unit = _to_base_size(qty, unit)
+        return (_SIZE_UNIT_ORDER.get(unit, 2), base_qty)
+
+    singular = {'stuks': 'stuk', 'plak': 'plak', 'bosje': 'bosje'}
+    sizes = []
+    for (qty, unit), count in sorted(groups.items(), key=sort_key)[:limit]:
+        label_unit = singular.get(unit, unit) if qty == 1 else unit
+        sizes.append({'label': f'{format_amount(qty)} {label_unit}'.replace('.', ','),
+                      'count': count})
+    return sizes
+
+
+def ah_search_with_facets(query, size=8, taxonomy_id=None, pkg=None):
+    """Zoekresultaten plus de soort- en maat-facet, voor de koppel-UI.
+
+    `pkg` is een maat zoals "800 g" (een van de maat-chips): dan blijven
+    alleen verpakkingen van die maat over.
+    """
+    want = parse_size_filter(pkg) if pkg else None
+    empty = {'products': [], 'taxonomies': [], 'sizes': [], 'total': 0, 'shown': 0}
+    if pkg and not want:
+        return {**empty, 'error': 'Maat niet begrepen — gebruik bijv. "800 g".'}
 
     try:
-        token = _ah_get_anon_token()
-        resp = _do_search(token)
-        if resp.status_code == 401:
-            token = _ah_get_anon_token(force=True)
-            resp = _do_search(token)
-        resp.raise_for_status()
+        data = _ah_search_raw(query, _AH_DEEP_SIZE, taxonomy_id)
+    except Exception:
+        return empty
+
+    products = _ah_map_products(data)
+    # Facetten over de volledige uitslag, niet over de getoonde kop ervan.
+    sizes = _ah_sizes(products)
+    if want:
+        products = [p for p in products if size_matches(p['size'], want)]
+    return {
+        'products':   products[:size],
+        'taxonomies': _ah_taxonomies(data),
+        'sizes':      sizes,
+        'total':      (data.get('page') or {}).get('totalElements', 0),
+        'shown':      len(products),
+    }
+
+
+def _ah_map_products(data):
+    """Map ruwe AH-producten naar onze dicts."""
+    try:
         products = []
-        for p in resp.json().get('products', []):
+        for p in data.get('products', []):
             images = p.get('images') or []
             img_url = next((i['url'] for i in images if i.get('width') == 200), '')
             if not img_url and images:
@@ -178,6 +276,7 @@ def ah_search_products(query, size=8):
             # Was-prijs alleen tonen bij een echte afprijzing.
             show_was = bool(was_raw and cur_raw and was_raw > cur_raw)
             size_str = p.get('salesUnitSize', '')
+            pkg = _parse_product_size(size_str)
             pu = price_per_unit(price_raw, size_str)
             unit_price = round(pu[0], 4) if pu else None
             unit_price_unit = pu[1] if pu else ''
@@ -201,6 +300,9 @@ def ah_search_products(query, size=8):
                 'bonusMechanism': p.get('bonusMechanism', '') or '',
                 'brand':          p.get('brand', '') or '',
                 'category':       p.get('mainCategory', '') or '',
+                'subCategory':    p.get('subCategory', '') or '',
+                'pkgQty':         pkg[0] if pkg else None,
+                'pkgUnit':        pkg[1] if pkg else '',
                 'unitPrice':      unit_price,
                 'unitPriceUnit':  unit_price_unit,
                 'unitPriceLabel': unit_price_label,

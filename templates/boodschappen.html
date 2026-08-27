@@ -15,6 +15,10 @@
                     class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
                 + Los item
             </button>
+            <button onclick="window.print()"
+                    class="border border-[#D4CEC4] text-[#2C2C2C] px-4 py-2 rounded hover:bg-[#FAF8F5] text-sm">
+                Printen
+            </button>
             <button onclick="checkAll()"
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
                 Alles afvinken
@@ -77,6 +81,7 @@
         </div>
     </div>
 
+    <div class="shopping-list-print">
     {% for group in grouped_open %}
         <h3 class="shopping-category text-sm font-semibold text-[#6B6B6B] uppercase tracking-wide mt-6 mb-1">{{ group.category }}</h3>
         <div class="shopping-group">
@@ -95,13 +100,25 @@
                                onchange="checkItem({{ item.ingredient_id }}, this.checked)">
                         <span class="item-text text-sm text-[#2C2C2C]">
                             <span class="font-semibold">{{ item.amount_display }}</span>{% if item.unit %}<span class="text-[#6B6B6B]"> {{ item.unit }}</span>{% endif %} {{ item.name }}
+                            {% if item.recipes %}
+                            <span class="text-xs text-[#9CA3AF]" title="{{ item.recipes | join(', ') }}">· {{ item.recipes | join(', ') }}</span>
+                            {% endif %}
                         </span>
+                        <select class="bron-select no-print ml-auto shrink-0 text-xs rounded border-[#E8E4DC] py-0.5 text-[#B4B2A9]"
+                                title="Waar haal je dit?"
+                                onchange="setBron({{ item.ingredient_id }}, this.value, this)">
+                            {% for code, label in bronnen %}
+                            <option value="{{ code }}" {{ 'selected' if item.bron == code }}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     {# RECHTS — AH-productstijl #}
                     {% if item.ah_product_id %}
                     <div class="list-right flex items-center gap-2 w-full md:flex-grow min-w-0">
-                        <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden"
+                        <div class="ah-product-block ah-badge flex items-center flex-grow min-w-0 rounded-xl overflow-hidden cursor-pointer"
+                             onclick="toggleSearch(this)"
+                             title="Klik om product te wijzigen"
                              style="background-color:{{ item.ah_product_bg }}">
                             <div class="shrink-0" style="width:80px;height:80px">
                                 <img src="{{ item.ah_product_image or '' }}"
@@ -136,18 +153,53 @@
                     </div>
                     {% else %}
                     <div class="list-right flex items-center gap-3 w-full md:flex-grow">
-                        <span class="text-sm text-[#9CA3AF]">Geen AH-koppeling</span>
+                        <button class="ah-badge text-sm text-[#6B6B6B] hover:text-[#8B4513] border border-dashed border-[#D4CEC4] hover:border-[#C9A882] rounded-lg px-3 py-2"
+                                onclick="toggleSearch(this)">
+                            + Koppel AH product
+                        </button>
                         <button onclick="excludeItem({{ item.ingredient_id }})" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-auto" style="font-size:0.75rem">✕</button>
                     </div>
                     {% endif %}
 
                 </div>
+
+                {% include '_ah_search_panel.html' %}
             </div>
             {% endfor %}
         </div>
     {% endfor %}
 
-    {% if not grouped_open %}
+    </div>
+
+    {% if grouped_elders %}
+    <div class="elders-blok mt-8 pt-5 border-t-2 border-dashed border-[#D4CEC4]">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-1">Niet bij de AH</h3>
+        <p class="text-xs text-[#6B6B6B] mb-3 no-print">Deze haal je ergens anders.</p>
+        {% for group in grouped_elders %}
+        <h4 class="shopping-category text-sm font-semibold text-[#6B6B6B] mt-4 mb-1">{{ group.category }}</h4>
+        <div class="shopping-group">
+            {% for item in group.producten %}
+            <div class="shopping-item item-row flex items-center gap-2 py-2 border-b border-[#E8E4DC]"
+                 data-ingredient-id="{{ item.ingredient_id }}">
+                <input type="checkbox" class="cursor-pointer shrink-0"
+                       onchange="checkItem({{ item.ingredient_id }}, this.checked)">
+                <span class="item-text text-sm text-[#2C2C2C]">
+                    <span class="font-semibold">{{ item.amount_display }}</span>{% if item.unit %}<span class="text-[#6B6B6B]"> {{ item.unit }}</span>{% endif %} {{ item.name }}
+                </span>
+                <select class="bron-select no-print ml-auto shrink-0 text-xs rounded border-[#E8E4DC] py-0.5 text-[#B4B2A9]"
+                        onchange="setBron({{ item.ingredient_id }}, this.value, this)">
+                    {% for code, label in bronnen %}
+                    <option value="{{ code }}" {{ 'selected' if item.bron == code }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not grouped_open and not grouped_elders %}
     <p class="text-sm text-[#6B6B6B] py-6 text-center">Geen open items — alles is al afgevinkt.</p>
     {% endif %}
 
@@ -164,6 +216,7 @@
                        onchange="checkItem({{ item.ingredient_id }}, this.checked)">
                 <span class="text-sm line-through text-[#9CA3AF]">
                     {{ item.amount_display }}{% if item.unit %} {{ item.unit }}{% endif %} {{ item.name }}
+                    {% if item.recipes %}· {{ item.recipes | join(', ') }}{% endif %}
                 </span>
                 {% if item.via_ah %}
                 <span class="bg-green-100 text-green-800 rounded-full px-2 text-xs">via AH</span>
@@ -175,6 +228,7 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ah_search.js') }}"></script>
 <script>
 const RECIPES = {{ recipes_json | safe }};
 const WEEKS_BY_ING = {{ weeks_by_ingredient_json | safe }};
@@ -408,5 +462,53 @@ async function addLosItem() {
         console.error('Item toevoegen mislukt:', e);
     }
 }
+
+async function setBron(ingredientId, bron, el) {
+    try {
+        const resp = await fetch(`/api/ingredient/${ingredientId}/bron`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({bron}),
+        });
+        const data = await resp.json();
+        if (data.status !== 'ok') return;
+        window.location.reload();   // item springt naar het juiste blok
+    } catch (e) { /* offline: keuze blijft staan tot de volgende keer */ }
+}
 </script>
+
+<style>
+@media print {
+    /* Alles wat geen boodschap is verdwijnt */
+    nav, header, footer, button, input, select, textarea,
+    .ah-badge, .ah-search-panel, .qty-control, .list-right,
+    #extraPicker, #addItemPicker, .no-print { display: none !important; }
+
+    /* Geen kaartranden en achtergronden op papier */
+    body { background: #fff !important; }
+    .bg-\[\#F5F2ED\], .bg-\[\#FAF8F5\] { background: #fff !important; }
+    .rounded-lg, .rounded { border: 0 !important; }
+    .shadow { box-shadow: none !important; }
+
+    /* Twee kolommen scheelt papier; koppen blijven bij hun groep */
+    .shopping-list-print { column-count: 2; column-gap: 1.5rem; }
+    .elders-blok { break-inside: avoid; page-break-inside: avoid; }
+    .bron-select { display: none !important; }
+    .shopping-category { break-after: avoid; page-break-after: avoid; }
+    .shopping-group { break-inside: avoid; page-break-inside: avoid; }
+    .shopping-item { break-inside: avoid; page-break-inside: avoid; }
+
+    /* Afvinkhokje op papier, want de echte checkbox is verborgen.
+       Mikken op .item-text: die span bestaat in beide blokken, terwijl
+       :first-child in het elders-blok de verborgen checkbox is. */
+    .shopping-item .item-text::before {
+        content: '';
+        display: inline-block;
+        width: .7em; height: .7em;
+        border: 1px solid #666;
+        margin-right: .5em;
+        vertical-align: middle;
+    }
+}
+</style>
 {% endblock %}

@@ -9,7 +9,7 @@ from weekmenu.models import Ingredient, Settings
 from weekmenu.constants import _AH_TOKEN_URL, _AH_HEADERS, _AH_CLIENT_ID
 from weekmenu.services.ah import (
     _ah_setting, ah_get_access_token, ah_search_products,
-    ah_login_with_password, ah_price_advice,
+    ah_search_with_facets, ah_login_with_password, ah_price_advice,
 )
 from weekmenu.services.units import _parse_product_size, _calc_ah_qty
 
@@ -152,11 +152,15 @@ def ah_verify():
 
 @bp.route('/api/ah/product-search')
 def ah_product_search():
+    """Zoekresultaten + soort-facet. Geeft {products, taxonomies, total}."""
     q = request.args.get('q', '').strip()
     if not q:
-        return jsonify([])
-    size = min(int(request.args.get('size', 8)), 20)
-    return jsonify(ah_search_products(q, size=size))
+        return jsonify({'products': [], 'taxonomies': [], 'sizes': [],
+                        'total': 0, 'shown': 0})
+    size = min(int(request.args.get('size', 8)), 100)
+    taxonomy_id = request.args.get('taxonomy_id', '').strip() or None
+    pkg = request.args.get('pkg', '').strip() or None
+    return jsonify(ah_search_with_facets(q, size=size, taxonomy_id=taxonomy_id, pkg=pkg))
 
 
 @bp.route('/api/ah/advice')
