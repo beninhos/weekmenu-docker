@@ -21,7 +21,11 @@ from flask import current_app
 from weekmenu.models import Settings
 
 _ENDPOINT = 'https://vision.googleapis.com/v1/images:annotate'
-_MAX_PER_REQUEST = 16  # harde grens van de Vision-API
+# De API staat 16 afbeeldingen per aanroep toe, maar begrenst de request ook op
+# 20 MB. Pagina's worden op schaal 4 gerenderd (~1 MB elk, ~1,4 MB na base64),
+# dus acht per keer houdt ruime marge. Het kost niets extra: Vision rekent per
+# pagina, ongeacht hoe je ze over aanroepen verdeelt.
+_MAX_PER_REQUEST = 8
 _TIMEOUT = 120
 
 

@@ -255,8 +255,14 @@ def _warn_if_truncated(response):
         pass
 
 
-def _pdf_page_jpegs(path, scale=2.5, quality=90):
-    """Render elke PDF-pagina naar JPEG-bytes voor de OCR-stap."""
+def _pdf_page_jpegs(path, scale=4.0, quality=92):
+    """Render elke PDF-pagina naar JPEG-bytes voor de OCR-stap.
+
+    Schaal 4 is gemeten, niet gegokt: op 2,5 las Cloud Vision '3 lente-uitjes'
+    als 'lente-uitjes' en viel de hoeveelheid weg. Vanaf 4 komt het cijfer mee;
+    daarboven levert het niets meer op. Het kost ook niets, want Vision rekent
+    per pagina en niet per byte.
+    """
     import pypdfium2 as pdfium
     pdf = pdfium.PdfDocument(path)
     try:
