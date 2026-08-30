@@ -13,6 +13,7 @@ Eerste 1.000 pagina's per maand zijn gratis; daarna $1,50 per 1.000.
 import base64
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -106,6 +107,20 @@ def ocr_pages(images, language='nl'):
     return texts
 
 
+_FRACTIONS = '½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞'
+
+
+def _clean_ocr_text(text):
+    """Ruim herkenbare OCR-artefacten op vóór het model de tekst ziet.
+
+    Een verdubbeld breukteken ('½½ el ketjap') komt in geen enkel recept voor.
+    Blijft het staan, dan gaat het model de passage 'repareren' en verandert het
+    ook getallen die wél goed gelezen waren — dat maakte van '½ el olijfolie'
+    een '2 el olijfolie'. Rommelige invoer is dus duurder dan alleen die ene fout.
+    """
+    return re.sub(rf'([{_FRACTIONS}])\1+', r'\1', text or '')
+
+
 def pages_as_labelled_text(texts):
     """Voeg de paginateksten samen met expliciete labels.
 
@@ -114,5 +129,5 @@ def pages_as_labelled_text(texts):
     """
     blokken = []
     for index, text in enumerate(texts, 1):
-        blokken.append(f'--- Pagina {index} ---\n{text.strip()}')
+        blokken.append(f'--- Pagina {index} ---\n{_clean_ocr_text(text).strip()}')
     return '\n\n'.join(blokken)
