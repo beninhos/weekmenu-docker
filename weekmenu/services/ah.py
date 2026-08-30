@@ -500,6 +500,7 @@ def ah_get_recipe(recipe_id):
     Geeft de ruwe recipe-dict terug, of None bij een fout.
     """
     from flask import current_app
+    from requests import HTTPError
     try:
         token = _ah_get_anon_token()
     except Exception as e:
@@ -507,6 +508,20 @@ def ah_get_recipe(recipe_id):
         return None
     try:
         data = _ah_graphql(token, _AH_RECIPE_QUERY, {'id': int(recipe_id)})
+    except HTTPError as e:
+        # AH trekt anonieme tokens soms vóór de opgegeven vervaltijd in (401,
+        # soms eerst een 400) — net als bij de productzoek: één keer opnieuw
+        # met een geforceerd vers token.
+        status = e.response.status_code if e.response is not None else None
+        if status not in (400, 401):
+            current_app.logger.warning('AH-recept %s: GraphQL-request mislukt: %r', recipe_id, e)
+            return None
+        try:
+            token = _ah_get_anon_token(force=True)
+            data = _ah_graphql(token, _AH_RECIPE_QUERY, {'id': int(recipe_id)})
+        except Exception as e2:
+            current_app.logger.warning('AH-recept %s: GraphQL-request mislukt na tokenverversing: %r', recipe_id, e2)
+            return None
     except Exception as e:
         current_app.logger.warning('AH-recept %s: GraphQL-request mislukt: %r', recipe_id, e)
         return None
