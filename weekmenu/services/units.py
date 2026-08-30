@@ -204,6 +204,19 @@ def _parse_amount(amount_str):
                          '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 1/6,
                          '⅚': 5/6, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875}
     s = str(amount_str).strip()
+    frac_chars = ''.join(unicode_fractions)
+    # OCR verdubbelt een breukteken af en toe ('½½ citroen'). Geen recept schrijft
+    # tweemaal hetzelfde breukteken achter elkaar, dus dat is altijd een artefact.
+    s = re.sub(rf'([{frac_chars}])\1+', r'\1', s)
+    # '1½' is anderhalf, niet 10.5: het hele getal vóór de breuk apart afvangen,
+    # want de tekstvervanging hieronder plakt '1' en '0.5' anders aan elkaar.
+    mixed_uni = re.match(rf'^(\d+)\s*([{frac_chars}])$', s)
+    if mixed_uni:
+        return float(mixed_uni.group(1)) + unicode_fractions[mixed_uni.group(2)]
+    # Een bereik ('1-2', '½-1') wordt de ondergrens; je kunt altijd minder gebruiken.
+    rng = re.match(rf'^([\d{frac_chars}][\d,./{frac_chars} ]*?)\s*[-–]\s*[\d{frac_chars}]', s)
+    if rng:
+        return _parse_amount(rng.group(1))
     for char, val in unicode_fractions.items():
         s = s.replace(char, str(val))
     mixed = re.match(r'^(\d+)[,. ](\d+/\d+)$', s)

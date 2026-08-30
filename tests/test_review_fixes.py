@@ -138,9 +138,12 @@ def test_gemini_amount_wordt_een_getal(app):
     rows = _build_gemini_ingredients([
         {'name': 'bloem', 'amount': '140', 'unit': 'g'},
         {'name': 'ui', 'amount': '2-3', 'unit': 'stuks'},
+        {'name': 'munt', 'amount': '½', 'unit': 'bosje'},
         {'name': 'zout', 'amount': None, 'unit': ''},
     ])
-    assert [r['amount'] for r in rows] == [140.0, None, None]
+    # Sinds de OCR-stap komt de hoeveelheid als tekst binnen ('½', '2-3').
+    # Een bereik werd hiervoor None; de ondergrens is bruikbaarder dan niets.
+    assert [r['amount'] for r in rows] == [140.0, 2.0, 0.5, None]
 
 
 # ── Migratieketen in de echte volgorde ──────────────────────────────────

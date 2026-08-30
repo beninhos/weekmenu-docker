@@ -76,3 +76,33 @@ def gemini_key():
 def gemini_status():
     configured = bool(_get_gemini_api_key())
     return jsonify({'configured': configured})
+
+
+@bp.route('/api/vision/key', methods=['POST', 'DELETE'])
+def vision_key():
+    if request.method == 'DELETE':
+        setting = Settings.query.filter_by(key='vision_api_key').first()
+        if setting:
+            db.session.delete(setting)
+            db.session.commit()
+        return jsonify({'status': 'ok'})
+
+    data = request.get_json() or {}
+    api_key = data.get('key', '').strip()
+    if not api_key:
+        return jsonify({'status': 'error', 'message': 'Geen API key opgegeven'}), 400
+
+    setting = Settings.query.filter_by(key='vision_api_key').first()
+    if setting:
+        setting.value = api_key
+    else:
+        setting = Settings(key='vision_api_key', value=api_key)
+        db.session.add(setting)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+
+@bp.route('/api/vision/status')
+def vision_status():
+    from weekmenu.services.ocr import vision_configured
+    return jsonify({'configured': vision_configured()})

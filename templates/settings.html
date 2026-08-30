@@ -96,6 +96,37 @@
         </div>
     </div>
 
+    <!-- Cloud Vision -->
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">Tekst uitlezen (Cloud Vision)</h3>
+        <p class="text-xs text-[#6B6B6B] mb-4">Leest de tekst van receptpagina's letterlijk uit, vóór Gemini er structuur van maakt. Nodig voor het inlezen van kookboeken: zonder deze stap worden breuken als ½ verkeerd gelezen. Gratis tot 1.000 pagina's per maand.</p>
+
+        <div id="visionConnected" class="hidden">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="font-medium text-[#8B4513]">✓ API key geconfigureerd</p>
+                </div>
+                <button onclick="visionRemoveKey()"
+                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50 shrink-0">
+                    Verwijderen
+                </button>
+            </div>
+        </div>
+
+        <div id="visionDisconnected" class="hidden">
+            <p class="text-sm text-[#6B6B6B] mb-3">Maak een API key aan in de <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="text-[#8B4513] hover:underline">Google Cloud Console</a> en beperk hem tot de Cloud Vision API. Zet de API zelf ook aan via <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank" class="text-[#8B4513] hover:underline">de API-bibliotheek</a>.</p>
+            <div class="flex gap-2">
+                <input type="password" id="visionKeyInput" placeholder="API key..."
+                       class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-sm">
+                <button onclick="visionSaveKey()"
+                        class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
+                    Opslaan
+                </button>
+            </div>
+            <div id="visionSaveError" class="hidden mt-2 text-sm text-red-600"></div>
+        </div>
+    </div>
+
     <!-- AH Account -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6" id="ah-account">
         <div class="flex items-center justify-between mb-4">
@@ -336,6 +367,48 @@ async function geminiRemoveKey() {
 }
 
 geminiRefreshStatus();
+
+/* ── Cloud Vision ────────────────────────────────────────── */
+async function visionRefreshStatus() {
+    try {
+        const data = await (await fetch('/api/vision/status')).json();
+        document.getElementById('visionConnected').classList.toggle('hidden', !data.configured);
+        document.getElementById('visionDisconnected').classList.toggle('hidden', data.configured);
+    } catch (e) {}
+}
+
+async function visionSaveKey() {
+    const key = document.getElementById('visionKeyInput').value.trim();
+    if (!key) return;
+    const errDiv = document.getElementById('visionSaveError');
+    errDiv.classList.add('hidden');
+    try {
+        const resp = await fetch('/api/vision/key', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key})
+        });
+        const data = await resp.json();
+        if (data.status === 'ok') {
+            document.getElementById('visionKeyInput').value = '';
+            visionRefreshStatus();
+        } else {
+            errDiv.textContent = data.message || 'Opslaan mislukt';
+            errDiv.classList.remove('hidden');
+        }
+    } catch (e) {
+        errDiv.textContent = 'Netwerkfout: ' + e.message;
+        errDiv.classList.remove('hidden');
+    }
+}
+
+async function visionRemoveKey() {
+    if (!confirm('Cloud Vision API key verwijderen?')) return;
+    await fetch('/api/vision/key', {method: 'DELETE'});
+    visionRefreshStatus();
+}
+
+visionRefreshStatus();
 
 let _ahPollInterval = null;
 
