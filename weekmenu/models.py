@@ -179,6 +179,12 @@ class DumpJob(db.Model):
     id = db.Column(db.String(36), primary_key=True)
     status = db.Column(db.String(20), nullable=False, default='processing')  # processing|done|error
     error_message = db.Column(db.Text, nullable=True)
+    # Aantal aangeleverde pagina's, en een melding als er onderweg iets is
+    # kwijtgeraakt (afgekapt antwoord, pagina zonder tekst). Een batch die
+    # minder recepten oplevert dan pagina's is niet per se fout — twee pagina's
+    # kunnen één recept zijn — maar de gebruiker hoort het wel te weten.
+    page_count = db.Column(db.Integer, nullable=True)
+    warning = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     drafts = db.relationship('RecipeDraft', backref='job', lazy=True, cascade='all, delete-orphan')
 

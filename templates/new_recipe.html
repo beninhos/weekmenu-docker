@@ -124,7 +124,7 @@
 
         <div>
             <label class="block text-sm font-semibold text-[#2C2C2C]">Pagina</label>
-            <input type="number" name="page"
+            <input type="number" name="page" id="fieldPage"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
         </div>
 
@@ -503,6 +503,12 @@ async function importFromUrl() {
         document.getElementById('fieldDraftId').value = draftId;
         if (data.name) document.getElementById('fieldName').value = data.name;
         if (data.serves) document.getElementById('fieldServes').value = data.serves;
+        // Pagina en kookboek gingen hier verloren: wie een concept eerst
+        // aanpaste, kreeg een recept zonder boek en zonder paginanummer,
+        // terwijl 'Opslaan' die twee wel meenam.
+        if (data.source_page) document.getElementById('fieldPage').value = data.source_page;
+        const cookbook = new URLSearchParams(location.search).get('cookbook');
+        if (cookbook) document.getElementById('fieldCookbook').value = cookbook;
         if (data.instructions) quill.root.innerHTML = data.instructions.replace(/\n/g, '<br>');
         if (data.image_path) {
             document.getElementById('fieldImagePath').value = data.image_path;

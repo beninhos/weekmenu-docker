@@ -1,6 +1,7 @@
 import json
 
-from flask import Blueprint, jsonify, redirect, render_template, request, url_for
+from flask import (Blueprint, current_app, jsonify, redirect, render_template,
+                   request, url_for)
 
 from weekmenu.extensions import db
 from weekmenu.models import Cookbook, DumpJob, Recipe, RecipeDraft, RecipeIngredient
@@ -22,6 +23,7 @@ def serialize_draft(d):
         'ingredients': annotate_pantry_status(json.loads(d.ingredients_json or '[]')),
         'image_path': d.image_path,
         'original_image_path': d.original_image_path,
+        'source_page': d.source_page,
         'status': d.status,
     }
 
@@ -29,12 +31,18 @@ def serialize_draft(d):
 @bp.route('/dump')
 def dump_page():
     drafts = RecipeDraft.query.filter_by(status='pending').order_by(RecipeDraft.created_at).all()
-    jobs = DumpJob.query.filter(DumpJob.status.in_(['processing', 'error'])) \
+    # Ook een geslaagde batch met een melding blijft zichtbaar: anders is de
+    # waarschuwing dat er pagina's zijn kwijtgeraakt weg zodra je de pagina
+    # herlaadt, en dat is precies het geval waarin je hem nodig hebt.
+    jobs = DumpJob.query.filter(db.or_(DumpJob.status.in_(['processing', 'error']),
+                                       DumpJob.warning.isnot(None))) \
                         .order_by(DumpJob.created_at.desc()).all()
     cookbooks = Cookbook.query.filter_by(is_archived=False).order_by(Cookbook.name).all()
     return render_template('dump.html',
                            drafts=[serialize_draft(d) for d in drafts],
-                           jobs=[{'id': j.id, 'status': j.status, 'error_message': j.error_message} for j in jobs],
+                           jobs=[{'id': j.id, 'status': j.status,
+                                  'error_message': j.error_message,
+                                  'warning': j.warning} for j in jobs],
                            cookbooks=cookbooks)
 
 
@@ -66,6 +74,8 @@ def dump_status(job_id):
                               .order_by(RecipeDraft.created_at).all()
     return jsonify({'status': job.status,
                     'error_message': job.error_message,
+                    'warning': job.warning,
+                    'page_count': job.page_count,
                     'drafts': [serialize_draft(d) for d in drafts]})
 
 
@@ -83,11 +93,40 @@ def dump_draft(id):
     return jsonify(payload)
 
 
+def _hoeveelheid_ontbreekt(ingredienten):
+    """Regels met een maat maar zonder getal ('g kipfilets').
+
+    Die mogen er niet stilzwijgend door: de kolom recipe_ingredient.amount kan
+    geen leegte bevatten, dus zo'n regel zou als 0 g worden opgeslagen. Op de
+    boodschappenlijst telt hij dan voor niets mee, en niets in de app laat nog
+    zien dat er ooit een getal had moeten staan. Een ingrediënt zonder maat
+    ('olijfolie', 'peper') is iets anders — daar hoort geen hoeveelheid bij.
+    """
+    return [i.get('name', '?') for i in ingredienten
+            if i.get('amount') in (None, '') and (i.get('unit') or '').strip()]
+
+
 @bp.route('/dump/draft/<int:id>/accept', methods=['POST'])
 def dump_draft_accept(id):
     d = RecipeDraft.query.get_or_404(id)
+    if d.status != 'pending':
+        # Twee tabbladen open, of tweemaal geklikt: zonder deze controle komt
+        # hetzelfde recept er een tweede keer in.
+        return jsonify({'status': 'error',
+                        'message': 'Dit concept is al afgehandeld.'}), 409
+
     body = request.get_json(silent=True) or {}
     cookbook_id = body.get('cookbook_id') or None
+
+    ingredienten = json.loads(d.ingredients_json or '[]')
+    ontbreekt = _hoeveelheid_ontbreekt(ingredienten)
+    if ontbreekt:
+        return jsonify({
+            'status': 'error',
+            'message': 'Bij {} ontbreekt de hoeveelheid. Kies "Aanpassen" en vul '
+                       'hem aan, anders komt het ingrediënt op 0 in de '
+                       'boodschappenlijst.'.format(', '.join(ontbreekt[:4])),
+        }), 409
 
     recipe = Recipe(name=d.name, serves=d.serves, cookbook_id=cookbook_id,
                     page=d.source_page, image_path=d.image_path,
@@ -95,11 +134,16 @@ def dump_draft_accept(id):
     db.session.add(recipe)
     db.session.flush()
 
-    for ing in json.loads(d.ingredients_json or '[]'):
+    for ing in ingredienten:
         ingredient = _resolve_or_create_ingredient(ing.get('name', ''), ing.get('category'))
         if not ingredient:
+            current_app.logger.warning(
+                'Ingredient %r overgeslagen bij concept %s', ing.get('name'), d.id)
             continue
-        raw_amount = float(ing['amount']) if ing.get('amount') else 0
+        try:
+            raw_amount = float(ing['amount']) if ing.get('amount') else 0
+        except (TypeError, ValueError):
+            raw_amount = 0
         norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing.get('unit') or '', raw_amount)
         db.session.add(RecipeIngredient(recipe_id=recipe.id, ingredient_id=ingredient.id,
                                         amount=norm_amount, unit=norm_unit))

@@ -20,6 +20,7 @@
         <span id="jobStatusText"></span>
         <button id="retryBtn" class="hidden underline text-[#8B4513]" onclick="retryJob()">Opnieuw proberen</button>
     </div>
+    <div id="jobWarning" class="hidden text-sm text-amber-700 border border-amber-200 bg-amber-50 rounded p-3 mt-2"></div>
 
     <!-- Kookboek-keuze voor de hele batch -->
     <div class="flex items-center gap-3">
@@ -91,8 +92,19 @@ async function pollJob() {
     if (data.status === 'processing') return;
     clearInterval(pollTimer);
     if (data.status === 'error') { setJobError(data.error_message); return; }
-    setJobStatus(`Klaar: ${data.drafts.length} recept(en) herkend.`, false);
+    const paginas = data.page_count ? ` uit ${data.page_count} pagina('s)` : '';
+    setJobStatus(`Klaar: ${data.drafts.length} recept(en) herkend${paginas}.`, false);
+    if (data.warning) setJobWarning(data.warning);
     data.drafts.forEach(renderCard);
+}
+
+/* Een melding die geen fout is: de batch is af, maar er kan iets zijn
+   kwijtgeraakt. Die moet blijven staan, want juist dan moet je gaan tellen. */
+function setJobWarning(msg) {
+    const box = document.getElementById('jobWarning');
+    if (!box) return;
+    box.textContent = msg;
+    box.classList.remove('hidden');
 }
 
 async function retryJob() {
@@ -126,18 +138,28 @@ function renderCard(d) {
     const card = document.createElement('div');
     card.id = `draft-${d.id}`;
     card.className = 'border border-[#E8E4DC] rounded-lg p-4 flex gap-4';
-    const ingHtml = d.ingredients.map(i =>
-        `<li>${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)}</li>`).join('');
+    // Een regel met een eenheid maar zonder getal ('g kipfilets') valt in een
+    // lijst van twintig niet op, terwijl hij bij opslaan geweigerd wordt. Hem
+    // markeren scheelt zoeken.
+    const ingHtml = d.ingredients.map(i => {
+        const mist = (i.amount === null || i.amount === '') && (i.unit || '').trim();
+        return mist
+            ? `<li class="text-red-600">hoeveelheid ontbreekt — ${esc(i.unit)} ${esc(i.name)}</li>`
+            : `<li>${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)}</li>`;
+    }).join('');
     const img = imageUrl(esc(d.image_path));
+    const cookbookSel = document.getElementById('cookbookSelect');
+    const cbParam = cookbookSel && cookbookSel.value ? `&cookbook=${encodeURIComponent(cookbookSel.value)}` : '';
     card.innerHTML = `
-        ${img ? `<img src="${img}" class="w-28 h-28 object-cover rounded shrink-0">` : ''}
+        ${img ? `<a href="${img}" target="_blank" title="Klik voor de volledige pagina" class="shrink-0">
+                   <img src="${img}" class="w-40 h-40 object-cover rounded"></a>` : ''}
         <div class="flex-1 min-w-0">
             <h3 class="font-bold">${esc(d.name)}</h3>
-            ${d.serves ? `<p class="text-sm text-[#6B6B6B]">${esc(d.serves)} personen</p>` : ''}
-            <ul class="text-sm mt-1 list-disc list-inside text-[#6B6B6B] max-h-28 overflow-y-auto">${ingHtml}</ul>
+            <p class="text-sm text-[#6B6B6B]">${d.serves ? esc(d.serves) + ' personen' : ''}${d.serves && d.source_page ? ' · ' : ''}${d.source_page ? 'scan ' + esc(d.source_page) : ''}</p>
+            <ul class="text-sm mt-1 list-disc list-inside text-[#6B6B6B] max-h-40 overflow-y-auto">${ingHtml}</ul>
             <div class="flex gap-2 mt-3">
                 <button onclick="acceptDraft(${d.id})" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">✓ Opslaan</button>
-                <a href="/recipe/new?draft=${d.id}" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✎ Aanpassen</a>
+                <a href="/recipe/new?draft=${d.id}${cbParam}" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✎ Aanpassen</a>
                 ${img ? `<button onclick="openCrop(${d.id})" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✂️ Bijsnijden</button>` : ''}
                 <button onclick="rejectDraft(${d.id})" class="px-3 py-1.5 border border-[#E8E4DC] text-red-600 rounded text-sm">✗ Weg</button>
             </div>
@@ -152,7 +174,21 @@ async function acceptDraft(id) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cookbook_id }),
     });
-    if ((await resp.json()).status === 'success') document.getElementById(`draft-${id}`).remove();
+    const data = await resp.json().catch(() => ({}));
+    if (data.status === 'success') {
+        document.getElementById(`draft-${id}`).remove();
+        return;
+    }
+    // Opslaan geweigerd (ontbrekende hoeveelheid, of al afgehandeld): de reden
+    // hoort bij de kaart te staan, anders lijkt de knop kapot.
+    const kaart = document.getElementById(`draft-${id}`);
+    let melding = kaart.querySelector('.accept-melding');
+    if (!melding) {
+        melding = document.createElement('p');
+        melding.className = 'accept-melding text-sm text-red-600 mt-2';
+        kaart.querySelector('div').appendChild(melding);
+    }
+    melding.textContent = data.message || 'Opslaan mislukt.';
 }
 
 async function rejectDraft(id) {
@@ -162,14 +198,18 @@ async function rejectDraft(id) {
 
 /* ── Init: bestaande drafts + lopende jobs ── */
 initialDrafts.forEach(renderCard);
+// De jobs komen nieuwste eerst binnen. Alleen de eerste is 'de lopende batch';
+// zonder deze grens wees activeJobId naar de OUDSTE, en stuurde 'Opnieuw
+// proberen' een oude job opnieuw door de molen.
 initialJobs.forEach(j => {
-    activeJobId = j.id;
-    if (j.status === 'processing') {
+    if (!activeJobId) activeJobId = j.id;
+    if (j.status === 'processing' && !pollTimer) {
         setJobStatus('Recepten worden herkend...', true);
         pollTimer = setInterval(pollJob, 2500);
-    } else if (j.status === 'error') {
+    } else if (j.status === 'error' && activeJobId === j.id) {
         setJobError(j.error_message);
     }
+    if (j.warning) setJobWarning(j.warning);
 });
 
 /* ── Croppen ── */

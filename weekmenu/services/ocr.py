@@ -174,8 +174,16 @@ def _clean_ocr_text(text):
     Blijft het staan, dan gaat het model de passage 'repareren' en verandert het
     ook getallen die wél goed gelezen waren — dat maakte van '½ el olijfolie'
     een '2 el olijfolie'. Rommelige invoer is dus duurder dan alleen die ene fout.
+
+    Dezelfde glyph levert soms het breukteken én een los cijfer op ('½2 citroen'
+    waar '½ citroen' staat): Vision leest de twee helften van het teken dan een
+    keer als geheel en een keer als cijfer. Ook dat komt in geen recept voor —
+    een hoeveelheid schrijf je niet als breuk met een cijfer erachter geplakt.
+    Beide opruimingen laten een losse breuk en een gemengd getal als '1½'
+    ongemoeid, want daar staat het cijfer vóór de breuk.
     """
-    return re.sub(rf'([{_FRACTIONS}])\1+', r'\1', text or '')
+    schoon = re.sub(rf'([{_FRACTIONS}])\1+', r'\1', text or '')
+    return re.sub(rf'(?<![0-9])([{_FRACTIONS}])[0-9](?![0-9])', r'\1', schoon)
 
 
 def pages_as_labelled_text(texts):

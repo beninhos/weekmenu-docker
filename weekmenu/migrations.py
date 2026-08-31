@@ -486,6 +486,23 @@ def _migrate_v14(conn):
                 {'n': schoon, 'd': schoon, 'g': ghost_id})
 
 
+def _migrate_v15(conn):
+    """Een importbatch onthoudt hoeveel pagina's erin gingen en wat er misging.
+
+    Zonder die twee velden eindigt een batch waarvan het model maar de helft
+    teruggaf gewoon op 'klaar', met minder recepten dan pagina's en niets dat
+    daarop wijst. Wie zestien pagina's aanlevert en elf kaarten terugkrijgt
+    hoort dat te zien.
+    """
+    cols = [row[1] for row in conn.execute(text('PRAGMA table_info(dump_job)')).fetchall()]
+    for col, col_def in [('page_count', 'INTEGER'), ('warning', 'TEXT')]:
+        if col not in cols:
+            try:
+                conn.execute(text(f'ALTER TABLE dump_job ADD COLUMN {col} {col_def}'))
+            except OperationalError:
+                pass
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -529,8 +546,10 @@ def migrate_db():
             _migrate_v13(conn)
         if current < 14:
             _migrate_v14(conn)
+        if current < 15:
+            _migrate_v15(conn)
 
-        target = 14
+        target = 15
         if current < target:
             if row:
                 conn.execute(

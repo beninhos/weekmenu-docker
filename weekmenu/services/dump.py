@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import threading
 import uuid
 
@@ -41,14 +42,29 @@ Regels:
   ("1 volle theelepel (zoet)" + "paprikapoeder" is samen 1 tl paprikapoeder)
 - "volle" hoort niet bij de hoeveelheid: "1 volle theelepel harissa" is 1 tl harissa,
   "4 volle eetlepels yoghurt" is 4 el yoghurt
-- Staat er wel een maat maar geen getal ("een handvol augurken", "een scheutje melk"),
-  gebruik dan amount "1"
+- Staat er OP DE INGREDIËNTREGEL wel een maat maar geen getal ("een handvol
+  augurken", "een scheutje melk"), gebruik dan amount "1" met die maat als unit
+- Een gewicht of inhoud die IN de ingrediëntregel staat is de hoeveelheid, ook
+  achter "van" of tussen haakjes. Zet die in "amount"+"unit", niet in "name":
+    "1 blik van 400 g gemengde bonen" -> amount "400", unit "g"
+    "1 mok (300 g) bulghur"           -> amount "300", unit "g"
+  Tussen haakjes staat het TOTAAL, dus niet vermenigvuldigen:
+    "2 bundels asperges (600 g)"      -> amount "600", unit "g"
+  Bij "van N g elk" of "à N g" is het gewicht PER stuk; vermenigvuldig aantal
+  maal gewicht. Dit is de ENIGE berekening die je mag maken:
+    "2 kipfilets van 200 g elk"       -> amount "400", unit "g"
+    "2 blikken van 400 g linzen"      -> amount "800", unit "g"
+  Breuken doen hier NOOIT aan mee: "½ komkommer" blijft "½"
 - "instructions" LETTERLIJK overnemen uit de tekst, alleen opgeknipt in stappen
   met newlines ertussen. Niets weglaten, niets toevoegen, niets herschrijven
 - "photo_page": het paginanummer waarop dit recept staat
 - "yields": het aantal personen als dat op de pagina staat, anders null
-- Verzin NIETS dat niet in de tekst staat. Ontbreekt een hoeveelheid, gebruik null
-- "title" in normale schrijfwijze, NIET in volledige kapitalen. Behoud eigennamen,
+- Neem alleen ingrediënten uit de INGREDIËNTENLIJST over, niet uit de bereiding.
+  Staat "een snuf peper" alleen in een bereidingsstap, dan hoort het er niet bij
+- Verzin NIETS dat niet in de tekst staat. Staat er op de ingrediëntregel echt
+  geen hoeveelheid en ook geen maat ("olijfolie", "peper"), gebruik dan null
+- "title": schrijf de titel in normale schrijfwijze, ook als de pagina hem in
+  HOOFDLETTERS drukt ("KIP-DIMSUM" wordt "Kip-dimsum"). Behoud eigennamen,
   merknamen en afkortingen zoals ze horen (Cajun, Koreaanse, BBQ, Tikka)
 - Staat er een hoofdtitel met daaronder een ondertitel? Verbind ze met " - "
 - Sla onvolledige fragmenten (alleen een inhoudsopgave, half recept zonder ingrediënten) over
@@ -109,12 +125,28 @@ def parse_batch_response(text):
         photo_page = item.get('photo_page')
         recipes.append({
             'name': name[:100],
-            'serves': item.get('yields'),
+            'serves': _eerste_getal(item.get('yields')),
             'instructions': item.get('instructions') or '',
-            'ingredients': _build_gemini_ingredients(item.get('ingredients', [])),
+            'ingredients': _build_gemini_ingredients(item.get('ingredients') or []),
             'photo_page': int(photo_page) if isinstance(photo_page, (int, float)) else None,
         })
     return recipes
+
+
+def _eerste_getal(waarde):
+    """Het aantal personen als heel getal, of None.
+
+    Het model hoort een getal te geven maar schrijft soms '4-6' of '4 personen'.
+    Dat mag de rest van de batch niet kosten: eerder liep de lus die de
+    concepten aanmaakt daarop stuk, waarna de al aangemaakte concepten bleven
+    staan en de job op 'error' sprong — een halve oogst die er compleet uitzag.
+    """
+    if isinstance(waarde, bool) or waarde is None:
+        return None
+    if isinstance(waarde, (int, float)):
+        return int(waarde)
+    treffer = re.search(r'\d+', str(waarde))
+    return int(treffer.group()) if treffer else None
 
 
 def _job_dir(job_id):
@@ -154,13 +186,29 @@ def start_dump_job(files):
 
 
 def retry_dump_job(job_id):
-    """Verwijder oude drafts, zet de job terug op processing en verwerk opnieuw."""
+    """Lees de job opnieuw in met de huidige pijplijn.
+
+    Wat de gebruiker al heeft afgehandeld blijft staan: een geaccepteerd
+    concept is een recept geworden, en dat recept mag niet stilzwijgend zijn
+    herkomst verliezen. Alleen wat nog open stond of was afgewezen verdwijnt.
+    De pagina's achter de geaccepteerde concepten worden bij het opnieuw
+    inlezen overgeslagen (zie _accepted_pages), anders krijgt de gebruiker een
+    tweede concept voor een recept dat hij al heeft.
+    """
     job = DumpJob.query.get_or_404(job_id)
-    RecipeDraft.query.filter_by(job_id=job_id).delete()
+    RecipeDraft.query.filter(RecipeDraft.job_id == job_id,
+                             RecipeDraft.status != 'accepted').delete()
     job.status = 'processing'
     job.error_message = None
     db.session.commit()
     _start_thread(job_id)
+
+
+def _accepted_pages(job_id):
+    """Paginanummers waarvoor al een recept is aangemaakt."""
+    return {d.source_page for d in
+            RecipeDraft.query.filter_by(job_id=job_id, status='accepted').all()
+            if d.source_page is not None}
 
 
 def _start_thread(job_id):
@@ -176,6 +224,12 @@ def process_dump_job(app, job_id):
             _process(job)
             job.status = 'done'
         except Exception as e:
+            # Alles terugdraaien wat _process al had klaargezet. Zonder deze
+            # rollback bleven de concepten staan die vóór de fout waren
+            # aangemaakt: de gebruiker zag dan zeven kaarten naast een
+            # foutmelding en kon niet weten dat er negen ontbraken.
+            db.session.rollback()
+            job = DumpJob.query.get(job_id)
             msg = str(e)
             if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
                 msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
@@ -222,26 +276,64 @@ def _process(job):
         raise ValueError('Geen tekst gevonden op de aangeleverde pagina\'s. '
                          'Is de scan scherp genoeg?')
 
+    job.page_count = len(images)
+    meldingen = []
+    zonder_tekst = [n for n, t in enumerate(texts, 1) if not t.strip()]
+    if zonder_tekst:
+        meldingen.append(
+            'Pagina {} leverde geen tekst op — opnieuw fotograferen helpt meestal.'
+            .format(', '.join(str(n) for n in zonder_tekst)))
+
+    # Temperatuur 0: het structureren van een pagina is geen creatief werk, en
+    # zonder deze instelling gokt het model. Gemeten op dezelfde uitgelezen
+    # tekst gaf drie aanroepen drie verschillende uitkomsten — in één ervan
+    # werd '½ komkommer' (door de OCR gelezen als '12 komkommer') letterlijk
+    # 12 komkommers, in de andere twee terecht een halve. Ook de hoeveelheden
+    # bij 'kipfilets van 200 g elk' vielen willekeurig weg. Met temperatuur 0
+    # bleef de breukafhandeling over drie aanroepen gelijk.
     client = _genai.Client(api_key=api_key)
     response = client.models.generate_content(
         model='gemini-2.5-flash',
-        contents=[_BATCH_PROMPT + '\n\n' + pages_as_labelled_text(texts)])
-    _warn_if_truncated(response)
+        contents=[_BATCH_PROMPT + '\n\n' + pages_as_labelled_text(texts)],
+        config=_gtypes.GenerateContentConfig(temperature=0))
+    if _warn_if_truncated(response):
+        meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
+                         'ontbreken. Probeer het opnieuw of splits de batch.')
     recipes = parse_batch_response(response.text)
 
-    for idx, r in enumerate(recipes):
+    al_afgehandeld = _accepted_pages(job.id)
+    overgeslagen = 0
+    for r in recipes:
+        if r['photo_page'] in al_afgehandeld:
+            current_app.logger.info(
+                'Pagina %s overgeslagen: daar is al een recept van gemaakt', r['photo_page'])
+            overgeslagen += 1
+            continue
         image_path = _resolve_image(job.id, r['photo_page'], page_map)
         db.session.add(RecipeDraft(
             job_id=job.id, name=r['name'],
-            serves=int(r['serves']) if r['serves'] else None,
+            serves=r['serves'],
             instructions=r['instructions'],
             ingredients_json=json.dumps(r['ingredients']),
             image_path=image_path, source_page=r['photo_page'], status='pending',
         ))
 
+    # Twee pagina's kunnen samen één recept zijn, dus minder recepten dan
+    # pagina's is niet per se fout — maar het is wel het patroon waarmee een
+    # halve batch er compleet uitziet, dus de gebruiker krijgt het te zien.
+    gemaakt = len(recipes) - overgeslagen
+    if gemaakt < len(images) - len(zonder_tekst):
+        meldingen.append(f'{len(images)} pagina\'s aangeleverd, {gemaakt} recept(en) '
+                         f'herkend. Controleer of er niets ontbreekt.')
+    job.warning = ' '.join(meldingen) or None
+
 
 def _warn_if_truncated(response):
-    """Log waarom een antwoord onvolledig is, zodat een halve batch verklaarbaar is."""
+    """Meld of het antwoord onvolledig is, zodat een halve batch verklaarbaar is.
+
+    Geeft True als het model niet netjes is uitgestopt; de aanroeper zet dat
+    door naar de gebruiker, want alleen in de log zien is hier niet genoeg.
+    """
     try:
         candidate = (response.candidates or [None])[0]
         reason = getattr(candidate, 'finish_reason', None)
@@ -251,8 +343,10 @@ def _warn_if_truncated(response):
                 'Gemini stopte met %s (output %s, thinking %s). Upload eventueel in kleinere delen.',
                 reason, usage.candidates_token_count,
                 getattr(usage, 'thoughts_token_count', None))
+            return True
     except Exception:  # diagnostiek mag de import nooit laten vallen
         pass
+    return False
 
 
 def _pdf_page_jpegs(path, scale=4.0, quality=92):

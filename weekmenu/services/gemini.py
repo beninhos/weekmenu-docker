@@ -312,13 +312,18 @@ def _llm_fallback_from_html(url, html):
         return {'status': 'error', 'message': 'Geen receptinformatie gevonden op deze pagina. De site ondersteunt geen gestructureerde receptdata.'}, 400
 
     from google import genai as _genai
+    from google.genai import types as _gtypes
 
     text = _clean_html(html)
     prompt = _GEMINI_RECIPE_PROMPT + f"\n\nTekst van de pagina:\n{text}"
 
     try:
         client = _genai.Client(api_key=api_key)
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        # Zie de toelichting bij temperatuur 0 in services/dump.py: een recept
+        # overnemen is overschrijfwerk, geen creatief werk.
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', contents=prompt,
+            config=_gtypes.GenerateContentConfig(temperature=0))
         sanitized = _sanitize_json(response.text)
         result = json.loads(sanitized)
 
@@ -478,7 +483,9 @@ def recipe_from_photos(photos):
     try:
         client = _genai.Client(api_key=api_key)
         content = [prompt] + image_parts
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=content)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', contents=content,
+            config=_gtypes.GenerateContentConfig(temperature=0))
         sanitized = _sanitize_json(response.text)
         result = json.loads(sanitized)
 
