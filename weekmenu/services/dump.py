@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import threading
@@ -10,11 +11,13 @@ from weekmenu.models import DumpJob, RecipeDraft
 from weekmenu.services.gemini import (
     _get_gemini_api_key, _sanitize_json, _build_gemini_ingredients, _UNITS_STR,
 )
+from weekmenu.services.ocr import ocr_pages, pages_as_labelled_text
 
 _ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/avif'}
 
-_BATCH_PROMPT = f"""Dit zijn pagina's uit een kookboek (foto's en/of een PDF). Er kunnen MEERDERE recepten in staan.
-Extraheer ALLE volledige recepten. Geef ALLEEN geldige JSON terug, geen markdown: een array van recepten.
+_BATCH_PROMPT = f"""Hieronder staat de uitgelezen tekst van kookboekpagina's, per pagina gescheiden
+door een regel '--- Pagina N ---'. Er kunnen MEERDERE recepten in staan.
+Zet ALLE volledige recepten om naar JSON. Geef ALLEEN geldige JSON terug, geen markdown.
 
 [
   {{
@@ -22,7 +25,8 @@ Extraheer ALLE volledige recepten. Geef ALLEEN geldige JSON terug, geen markdown
     "yields": 4,
     "photo_page": 2,
     "ingredients": [
-      {{"name": "bloem", "amount": 200, "unit": "g"}}
+      {{"name": "bloem", "amount": "200", "unit": "g"}},
+      {{"name": "verse munt", "amount": "½", "unit": "bosje"}}
     ],
     "instructions": "Stap 1. ...\\nStap 2. ..."
   }}
@@ -30,23 +34,66 @@ Extraheer ALLE volledige recepten. Geef ALLEEN geldige JSON terug, geen markdown
 
 Regels:
 - Gebruik ALLEEN deze eenheden voor "unit": {_UNITS_STR}
-- "amount" is een getal (int of float), of null als onbekend
-- Converteer breuken naar decimalen: ½ → 0.5, ¼ → 0.25, "anderhalve" → 1.5
+- "amount" is TEKST: neem de hoeveelheid LETTERLIJK over uit de pagina ("½", "1½", "200").
+  Reken breuken NIET zelf om naar decimalen; de software doet dat
 - "name" is de ingrediëntnaam zonder hoeveelheid of eenheid
-- "instructions" als enkele string met stappen gescheiden door newlines
-- Een recept dat over meerdere pagina's doorloopt is ÉÉN recept: combineer de pagina's
-- "photo_page": het 1-gebaseerde paginanummer (over alle invoer heen, in volgorde) met de mooiste foto van het gerecht, of null als er geen gerechtfoto is
+- Een ingrediënt dat over twee regels doorloopt is ÉÉN ingrediënt
+  ("1 volle theelepel (zoet)" + "paprikapoeder" is samen 1 tl paprikapoeder)
+- "volle" hoort niet bij de hoeveelheid: "1 volle theelepel harissa" is 1 tl harissa,
+  "4 volle eetlepels yoghurt" is 4 el yoghurt
+- Staat er wel een maat maar geen getal ("een handvol augurken", "een scheutje melk"),
+  gebruik dan amount "1"
+- "instructions" LETTERLIJK overnemen uit de tekst, alleen opgeknipt in stappen
+  met newlines ertussen. Niets weglaten, niets toevoegen, niets herschrijven
+- "photo_page": het paginanummer waarop dit recept staat
+- "yields": het aantal personen als dat op de pagina staat, anders null
+- Verzin NIETS dat niet in de tekst staat. Ontbreekt een hoeveelheid, gebruik null
+- "title" in normale schrijfwijze, NIET in volledige kapitalen. Behoud eigennamen,
+  merknamen en afkortingen zoals ze horen (Cajun, Koreaanse, BBQ, Tikka)
+- Staat er een hoofdtitel met daaronder een ondertitel? Verbind ze met " - "
 - Sla onvolledige fragmenten (alleen een inhoudsopgave, half recept zonder ingrediënten) over
 - Als er helemaal geen recept te vinden is: []
 """
 
 
+def _salvage_objects(text):
+    """Haal de complete objecten uit een afgekapte JSON-array.
+
+    Loopt het model tegen zijn outputplafond, dan eindigt het antwoord midden in
+    een recept. De recepten die er al helemaal in staan zijn prima bruikbaar en
+    veel beter dan de hele batch weggooien.
+    """
+    decoder = json.JSONDecoder()
+    objects = []
+    i = text.find('[')
+    if i < 0:
+        return objects
+    i += 1
+    while i < len(text):
+        while i < len(text) and text[i] in ' \t\r\n,':
+            i += 1
+        if i >= len(text) or text[i] != '{':
+            break
+        try:
+            obj, i = decoder.raw_decode(text, i)
+        except ValueError:
+            break
+        objects.append(obj)
+    return objects
+
+
 def parse_batch_response(text):
     """Parse het Gemini-batchantwoord naar een lijst receptdicts. Raises ValueError."""
+    if not text:
+        raise ValueError('Gemini gaf een leeg antwoord terug. Probeer het opnieuw.')
     try:
         data = json.loads(_sanitize_json(text))
     except json.JSONDecodeError as e:
-        raise ValueError(f'Onleesbaar antwoord van Gemini: {str(e)[:100]}')
+        data = _salvage_objects(text)
+        if not data:
+            raise ValueError(f'Onleesbaar antwoord van Gemini: {str(e)[:100]}')
+        current_app.logger.warning(
+            'Batchantwoord afgekapt; %d volledige recepten gered', len(data))
     if isinstance(data, dict):
         data = [data]
     if not isinstance(data, list):
@@ -151,28 +198,35 @@ def _process(job):
         if not n.startswith('page_')  # eerder gerenderde PDF-pagina's overslaan bij retry
     )
 
-    parts = []
+    # Elke pagina wordt eerst uitgelezen door Cloud Vision. Het taalmodel krijgt
+    # dus tekst en geen beeld: het kan een hoeveelheid niet meer verkeerd lezen
+    # en niets verzinnen wat het niet kan ontcijferen.
+    images = []
     # page_map: 1-gebaseerd paginanummer → (bronpad, pdf_page_index|None)
     page_map = {}
     page_no = 0
     for path in file_paths:
-        with open(path, 'rb') as fh:
-            data = fh.read()
         if path.endswith('.pdf'):
-            parts.append(_gtypes.Part.from_bytes(data=data, mime_type='application/pdf'))
-            for pdf_idx in range(_pdf_page_count(path)):
+            for pdf_idx, jpeg in enumerate(_pdf_page_jpegs(path)):
                 page_no += 1
+                images.append(jpeg)
                 page_map[page_no] = (path, pdf_idx)
         else:
-            mime = {'jpg': 'image/jpeg', 'png': 'image/png',
-                    'webp': 'image/webp', 'avif': 'image/avif'}[path.rsplit('.', 1)[1]]
-            parts.append(_gtypes.Part.from_bytes(data=data, mime_type=mime))
+            with open(path, 'rb') as fh:
+                images.append(fh.read())
             page_no += 1
             page_map[page_no] = (path, None)
 
+    texts = ocr_pages(images)
+    if not any(t.strip() for t in texts):
+        raise ValueError('Geen tekst gevonden op de aangeleverde pagina\'s. '
+                         'Is de scan scherp genoeg?')
+
     client = _genai.Client(api_key=api_key)
     response = client.models.generate_content(
-        model='gemini-2.5-flash', contents=[_BATCH_PROMPT] + parts)
+        model='gemini-2.5-flash',
+        contents=[_BATCH_PROMPT + '\n\n' + pages_as_labelled_text(texts)])
+    _warn_if_truncated(response)
     recipes = parse_batch_response(response.text)
 
     for idx, r in enumerate(recipes):
@@ -186,11 +240,37 @@ def _process(job):
         ))
 
 
-def _pdf_page_count(path):
+def _warn_if_truncated(response):
+    """Log waarom een antwoord onvolledig is, zodat een halve batch verklaarbaar is."""
+    try:
+        candidate = (response.candidates or [None])[0]
+        reason = getattr(candidate, 'finish_reason', None)
+        usage = response.usage_metadata
+        if reason is not None and getattr(reason, 'name', str(reason)) != 'STOP':
+            current_app.logger.warning(
+                'Gemini stopte met %s (output %s, thinking %s). Upload eventueel in kleinere delen.',
+                reason, usage.candidates_token_count,
+                getattr(usage, 'thoughts_token_count', None))
+    except Exception:  # diagnostiek mag de import nooit laten vallen
+        pass
+
+
+def _pdf_page_jpegs(path, scale=4.0, quality=92):
+    """Render elke PDF-pagina naar JPEG-bytes voor de OCR-stap.
+
+    Schaal 4 is gemeten, niet gegokt: op 2,5 las Cloud Vision '3 lente-uitjes'
+    als 'lente-uitjes' en viel de hoeveelheid weg. Vanaf 4 komt het cijfer mee;
+    daarboven levert het niets meer op. Het kost ook niets, want Vision rekent
+    per pagina en niet per byte.
+    """
     import pypdfium2 as pdfium
     pdf = pdfium.PdfDocument(path)
     try:
-        return len(pdf)
+        for idx in range(len(pdf)):
+            buf = io.BytesIO()
+            pdf[idx].render(scale=scale).to_pil().convert('RGB').save(
+                buf, 'JPEG', quality=quality)
+            yield buf.getvalue()
     finally:
         pdf.close()
 

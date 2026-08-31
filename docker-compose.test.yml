@@ -1,0 +1,16 @@
+# Losstaande testopstelling voor de dev-cloudvision-worktree.
+# Draait naast de echte installatie: eigen poort, eigen database, uploads alleen lezen.
+# Gebruik: docker compose -p weekmenu-cv -f docker-compose.test.yml up -d --build
+services:
+  weekmenu:
+    build: .
+    ports:
+      - "5002:5001"
+    volumes:
+      - ./data:/data
+      - /pool/apps/weekmenu-planner/static/uploads:/app/static/uploads
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - DATABASE_URL=sqlite:////data/weekmenu.db
+      - SECRET_KEY=test-only
