@@ -1,0 +1,35 @@
+# Wat niet in het image hoort. Zonder dit bestand kopieert `COPY . .` ook de
+# receptfoto's mee (bijna 200 MB), terwijl static/uploads bij het draaien toch
+# als volume overheen gemonteerd wordt: die kopie wordt nooit gelezen.
+#
+# Alleen uitsluiten wat groot is of er aantoonbaar niet toe doet. De
+# onderhoudsscripts in scripts/ blijven er bewust wel in, zodat ze met
+# `docker exec` te draaien zijn; ze kosten samen een paar honderd kilobyte.
+
+# Gebruikersdata — komt als volume binnen, niet uit het image. Ook losse
+# databasekopieën in de projectmap: die horen niet mee te reizen in een image
+# dat je kunt exporteren of pushen.
+static/uploads/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Versiebeheer en gereedschap van de ontwikkelmachine
+.git/
+.gitignore
+.claude/
+.superpowers/
+.pytest_cache/
+**/__pycache__/
+*.pyc
+
+# Tests draaien niet in het image (pytest zit niet in requirements.txt)
+tests/
+
+# Bouwbestanden zelf: die zitten al in de image-definitie
+docker-compose*.yml
+Dockerfile
+.dockerignore
+.env
+*.log

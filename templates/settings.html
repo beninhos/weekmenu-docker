@@ -62,10 +62,44 @@
         </div>
     </div>
 
-    <!-- Gemini Vision -->
+    <!-- Cloud Vision — stap 1 van het inlezen, en de lastigste om aan te zetten -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">Foto herkenning (Gemini)</h3>
-        <p class="text-xs text-[#6B6B6B] mb-4">Maak foto's van kookboekpagina's en laat het recept automatisch herkennen via Google Gemini. Gratis tot 250 verzoeken per dag.</p>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">Tekst uitlezen (Cloud Vision)</h3>
+        <p class="text-xs text-[#6B6B6B] mb-4">Leest de tekst van receptpagina's letterlijk uit, vóór Gemini er structuur van maakt. Nodig voor het inlezen van kookboeken: zonder deze stap worden breuken als ½ verkeerd gelezen. Gratis tot 1.000 pagina's per maand.</p>
+
+        <div id="visionConnected" class="hidden">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="font-medium text-[#8B4513]">✓ API key geconfigureerd</p>
+                </div>
+                <button onclick="visionRemoveKey()"
+                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50 shrink-0">
+                    Verwijderen
+                </button>
+            </div>
+        </div>
+
+        <div id="visionDisconnected" class="hidden">
+            <p class="text-sm text-[#6B6B6B] mb-3">Maak een API key aan in de <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="text-[#8B4513] hover:underline">Google Cloud Console</a> en beperk hem tot de Cloud Vision API. Zet de API zelf ook aan via <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank" class="text-[#8B4513] hover:underline">de API-bibliotheek</a>. Cloud Vision vraagt een gekoppelde betaalmethode, ook al blijven de eerste 1.000 pagina's per maand gratis.</p>
+            <div class="flex gap-2">
+                <input type="password" id="visionKeyInput" placeholder="API key..."
+                       class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-sm">
+                <button onclick="visionSaveKey(this)"
+                        class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0 disabled:opacity-60">
+                    Opslaan
+                </button>
+            </div>
+        </div>
+
+        <!-- Buiten de twee statusblokken: anders verdwijnt een melding meteen
+             weer zodra de status ververst wordt. -->
+        <div id="visionSaveError" class="hidden mt-3 text-sm text-red-600"></div>
+    </div>
+
+    <!-- Gemini -->
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">Recept opmaken (Gemini)</h3>
+        <p class="text-xs text-[#6B6B6B] mb-4">Herkent recepten uit een link of losse foto's, en maakt bij het inlezen van een heel kookboek een recept van de tekst die Cloud Vision hierboven uitleest. Gratis tot 250 verzoeken per dag.</p>
 
         <!-- Status: verbonden -->
         <div id="geminiConnected" class="hidden">
@@ -93,37 +127,6 @@
                 </button>
             </div>
             <div id="geminiSaveError" class="hidden mt-2 text-sm text-red-600"></div>
-        </div>
-    </div>
-
-    <!-- Cloud Vision -->
-    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-4">Tekst uitlezen (Cloud Vision)</h3>
-        <p class="text-xs text-[#6B6B6B] mb-4">Leest de tekst van receptpagina's letterlijk uit, vóór Gemini er structuur van maakt. Nodig voor het inlezen van kookboeken: zonder deze stap worden breuken als ½ verkeerd gelezen. Gratis tot 1.000 pagina's per maand.</p>
-
-        <div id="visionConnected" class="hidden">
-            <div class="flex items-start justify-between">
-                <div>
-                    <p class="font-medium text-[#8B4513]">✓ API key geconfigureerd</p>
-                </div>
-                <button onclick="visionRemoveKey()"
-                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50 shrink-0">
-                    Verwijderen
-                </button>
-            </div>
-        </div>
-
-        <div id="visionDisconnected" class="hidden">
-            <p class="text-sm text-[#6B6B6B] mb-3">Maak een API key aan in de <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="text-[#8B4513] hover:underline">Google Cloud Console</a> en beperk hem tot de Cloud Vision API. Zet de API zelf ook aan via <a href="https://console.cloud.google.com/apis/library/vision.googleapis.com" target="_blank" class="text-[#8B4513] hover:underline">de API-bibliotheek</a>.</p>
-            <div class="flex gap-2">
-                <input type="password" id="visionKeyInput" placeholder="API key..."
-                       class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-sm">
-                <button onclick="visionSaveKey()"
-                        class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm shrink-0">
-                    Opslaan
-                </button>
-            </div>
-            <div id="visionSaveError" class="hidden mt-2 text-sm text-red-600"></div>
         </div>
     </div>
 
@@ -369,7 +372,23 @@ async function geminiRemoveKey() {
 geminiRefreshStatus();
 
 /* ── Cloud Vision ────────────────────────────────────────── */
+/* Elke statuswissel begint met een schone melding: anders blijft een
+   waarschuwing van een vorige poging staan onder een leeg sleutelveld. */
+function visionMelding(tekst, soort) {
+    const div = document.getElementById('visionSaveError');
+    div.classList.remove('text-red-600', 'text-amber-700');
+    if (!tekst) {
+        div.textContent = '';
+        div.classList.add('hidden');
+        return;
+    }
+    div.textContent = tekst;
+    div.classList.add(soort === 'waarschuwing' ? 'text-amber-700' : 'text-red-600');
+    div.classList.remove('hidden');
+}
+
 async function visionRefreshStatus() {
+    visionMelding('');
     try {
         const data = await (await fetch('/api/vision/status')).json();
         document.getElementById('visionConnected').classList.toggle('hidden', !data.configured);
@@ -377,28 +396,34 @@ async function visionRefreshStatus() {
     } catch (e) {}
 }
 
-async function visionSaveKey() {
+async function visionSaveKey(button) {
     const key = document.getElementById('visionKeyInput').value.trim();
-    if (!key) return;
-    const errDiv = document.getElementById('visionSaveError');
-    errDiv.classList.add('hidden');
+    if (!key) {
+        visionMelding('Vul eerst een API key in.');
+        return;
+    }
+    visionMelding('');
+    // De sleutel wordt bij Cloud Vision uitgeprobeerd, dus dit duurt even.
+    if (button) { button.disabled = true; button.textContent = 'Controleren...'; }
     try {
         const resp = await fetch('/api/vision/key', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({key})
         });
-        const data = await resp.json();
-        if (data.status === 'ok') {
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.status === 'ok') {
             document.getElementById('visionKeyInput').value = '';
-            visionRefreshStatus();
+            // Eerst verversen (dat wist de melding), dan pas waarschuwen.
+            await visionRefreshStatus();
+            if (data.warning) visionMelding(data.warning, 'waarschuwing');
         } else {
-            errDiv.textContent = data.message || 'Opslaan mislukt';
-            errDiv.classList.remove('hidden');
+            visionMelding(data.message || `Opslaan mislukt (HTTP ${resp.status})`);
         }
     } catch (e) {
-        errDiv.textContent = 'Netwerkfout: ' + e.message;
-        errDiv.classList.remove('hidden');
+        visionMelding('Netwerkfout: ' + e.message);
+    } finally {
+        if (button) { button.disabled = false; button.textContent = 'Opslaan'; }
     }
 }
 

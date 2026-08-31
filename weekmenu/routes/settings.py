@@ -92,6 +92,14 @@ def vision_key():
     if not api_key:
         return jsonify({'status': 'error', 'message': 'Geen API key opgegeven'}), 400
 
+    # Meteen uitproberen: een verse sleutel werkt meestal nog niet omdat de
+    # Vision-API in het project nog uitstaat. Dat hoor je hier te merken en niet
+    # pas halverwege een import, want die draait in een achtergrondthread.
+    from weekmenu.services.ocr import verify_vision_key
+    werkt, reden = verify_vision_key(api_key)
+    if werkt is False:
+        return jsonify({'status': 'error', 'message': reden}), 400
+
     setting = Settings.query.filter_by(key='vision_api_key').first()
     if setting:
         setting.value = api_key
@@ -99,6 +107,9 @@ def vision_key():
         setting = Settings(key='vision_api_key', value=api_key)
         db.session.add(setting)
     db.session.commit()
+    if werkt is None:
+        return jsonify({'status': 'ok', 'warning':
+                        f'Sleutel opgeslagen, maar niet kunnen controleren: {reden}'})
     return jsonify({'status': 'ok'})
 
 

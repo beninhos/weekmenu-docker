@@ -21,6 +21,14 @@ from flask import current_app
 
 from weekmenu.models import Settings
 
+class VisionKeyError(ValueError):
+    """Vision weigert de sleutel zelf; het nog eens proberen helpt niet.
+
+    Apart van de overige fouten omdat de instellingenpagina hierop een sleutel
+    mag weigeren, terwijl een haperende verbinding niets zegt over de sleutel.
+    """
+
+
 _ENDPOINT = 'https://vision.googleapis.com/v1/images:annotate'
 # De API staat 16 afbeeldingen per aanroep toe, maar begrenst de request ook op
 # 20 MB. Pagina's worden op schaal 4 gerenderd (~1 MB elk, ~1,4 MB na base64),
@@ -28,6 +36,10 @@ _ENDPOINT = 'https://vision.googleapis.com/v1/images:annotate'
 # pagina, ongeacht hoe je ze over aanroepen verdeelt.
 _MAX_PER_REQUEST = 8
 _TIMEOUT = 120
+# De proefaanroep bij het opslaan van een sleutel stuurt één blanco vierkantje
+# en laat de gebruiker wachten. Die mag de batch-timeout niet erven: acht
+# kookboekpagina's mogen twee minuten duren, een klik op Opslaan niet.
+_TIMEOUT_PROEF = 15
 
 
 def _get_vision_api_key():
@@ -42,7 +54,7 @@ def vision_configured():
     return bool(_get_vision_api_key())
 
 
-def _annotate(api_key, images, language):
+def _annotate(api_key, images, language, timeout=_TIMEOUT):
     """Één aanroep naar de Vision-API voor maximaal 16 pagina's."""
     body = {'requests': [{
         'image': {'content': base64.b64encode(img).decode()},
@@ -56,7 +68,7 @@ def _annotate(api_key, images, language):
         headers={'Content-Type': 'application/json'},
     )
     try:
-        with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.load(response).get('responses', [])
     except urllib.error.HTTPError as e:
         detail = ''
@@ -65,15 +77,60 @@ def _annotate(api_key, images, language):
         except Exception:
             pass
         if e.code in (401, 403):
-            raise ValueError('Cloud Vision weigert de sleutel. Controleer of de '
-                             'Vision-API aanstaat en of de sleutel bij het juiste '
-                             f'project hoort. ({detail[:120]})')
+            raise VisionKeyError('Cloud Vision weigert de sleutel. Controleer of de '
+                                 'Vision-API aanstaat en of de sleutel bij het juiste '
+                                 f'project hoort. ({detail[:120]})')
+        # Een verkeerd overgenomen sleutel komt niet terug als 401 maar als 400
+        # met 'API key not valid'; zonder deze tak zou een typefout een vage
+        # HTTP 400 opleveren in plaats van 'de sleutel klopt niet'.
+        if e.code == 400 and 'api key' in detail.lower():
+            raise VisionKeyError('Cloud Vision herkent deze sleutel niet. Controleer '
+                                 f'of hij volledig is overgenomen. ({detail[:120]})')
         if e.code == 429:
             raise ValueError('Cloud Vision is even niet beschikbaar (limiet bereikt). '
                              'Probeer het over een minuut opnieuw.')
         raise ValueError(f'Cloud Vision gaf een fout (HTTP {e.code}). {detail[:120]}')
     except urllib.error.URLError as e:
         raise ValueError(f'Cloud Vision niet bereikbaar: {str(e.reason)[:80]}')
+
+
+def verify_vision_key(api_key):
+    """Leg een sleutel even aan Cloud Vision voor.
+
+    Geeft (True, '') als Vision hem accepteert, (False, reden) als Vision hem
+    weigert, en (None, reden) als het niet vast te stellen was. Dat laatste is
+    een eigen geval: bij een haperende verbinding mag een sleutel die misschien
+    prima is niet geweigerd worden.
+
+    Kost één van de duizend gratis pagina's per maand — een blanco vierkantje
+    is de goedkoopste manier om te weten of de sleutel het echt doet, want
+    alleen een volledige aanroep laat zien of de Vision-API ook aanstaat.
+    """
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new('RGB', (32, 32), 'white').save(buffer, format='JPEG')
+    try:
+        _annotate(api_key, [buffer.getvalue()], 'nl', timeout=_TIMEOUT_PROEF)
+        return True, ''
+    except VisionKeyError as e:
+        return False, str(e)
+    except Exception as e:
+        # Bewust alles: urllib wikkelt lang niet elke storing in een URLError.
+        # Een leestimeout komt als kale TimeoutError naar boven en een proxy die
+        # de verbinding dichtgooit als ConnectionResetError. Zou zo'n fout hier
+        # ontsnappen, dan geeft de instellingenpagina een 500 en raakt de
+        # gebruiker een sleutel kwijt die waarschijnlijk gewoon goed was — het
+        # tegenovergestelde van wat deze functie moet doen. Wel loggen, want zo
+        # breed vangen verbergt ook een programmeerfout.
+        try:
+            current_app.logger.warning('Sleutelcontrole afgebroken: %s: %s',
+                                       e.__class__.__name__, str(e)[:200])
+        except Exception:
+            pass
+        return None, str(e) or e.__class__.__name__
 
 
 def ocr_pages(images, language='nl'):
