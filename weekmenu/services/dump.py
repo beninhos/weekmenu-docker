@@ -12,7 +12,8 @@ from weekmenu.models import DumpJob, RecipeDraft
 from weekmenu.services.gemini import (
     _get_gemini_api_key, _sanitize_json, _build_gemini_ingredients, _UNITS_STR,
 )
-from weekmenu.services.ocr import lees_paginas, pages_as_labelled_text
+from weekmenu.services.ankers import knip_stappen
+from weekmenu.services.ocr import _clean_ocr_text, lees_paginas, pages_as_labelled_text
 
 _ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/avif'}
 
@@ -29,7 +30,10 @@ Zet ALLE volledige recepten om naar JSON. Geef ALLEEN geldige JSON terug, geen m
       {{"name": "bloem", "amount": "200", "unit": "g"}},
       {{"name": "verse munt", "amount": "½", "unit": "bosje"}}
     ],
-    "instructions": "Stap 1. ...\\nStap 2. ..."
+    "steps": [
+      {{"start": "Verkruimel de gedroogde peper", "end": "laat hem even zo staan"}},
+      {{"start": "Snijd de steeltjes van", "end": "schroei ze rondom"}}
+    ]
   }}
 ]
 
@@ -55,8 +59,13 @@ Regels:
     "2 kipfilets van 200 g elk"       -> amount "400", unit "g"
     "2 blikken van 400 g linzen"      -> amount "800", unit "g"
   Breuken doen hier NOOIT aan mee: "½ komkommer" blijft "½"
-- "instructions" LETTERLIJK overnemen uit de tekst, alleen opgeknipt in stappen
-  met newlines ertussen. Niets weglaten, niets toevoegen, niets herschrijven
+- "steps": schrijf de bereidingstekst NIET over. Geef per bereidingsstap alleen
+  de eerste 3 à 5 woorden ("start") en de laatste 3 à 5 woorden ("end"), exact
+  zoals ze in de tekst staan (zelfde spelling, zelfde hoofdletters). De software
+  knipt de stap zelf uit de tekst
+- Een stap eindigt waar een nieuwe zin met een bullet of op een nieuwe alinea
+  begint. Neem ALLE stappen op, van de eerste tot de laatste, en laat geen zin
+  tussen twee stappen vallen
 - "photo_page": het paginanummer waarop dit recept staat
 - "yields": het aantal personen als dat op de pagina staat, anders null
 - Neem alleen ingrediënten uit de INGREDIËNTENLIJST over, niet uit de bereiding.
@@ -98,8 +107,14 @@ def _salvage_objects(text):
     return objects
 
 
-def parse_batch_response(text):
-    """Parse het Gemini-batchantwoord naar een lijst receptdicts. Raises ValueError."""
+def parse_batch_response(text, page_texts=None):
+    """Parse het Gemini-batchantwoord naar een lijst receptdicts. Raises ValueError.
+
+    `page_texts` is de opgeschoonde OCR-tekst per pagina (index 0 = pagina 1).
+    Daaruit wordt de bereidingstekst geknipt op de ankers die het model geeft;
+    zie services/ankers.py. Geeft het model toch een 'instructions'-tekst
+    (ouder antwoordformaat), dan wordt die gebruikt zoals vroeger.
+    """
     if not text:
         raise ValueError('Gemini gaf een leeg antwoord terug. Probeer het opnieuw.')
     try:
@@ -123,14 +138,31 @@ def parse_batch_response(text):
         if not name:
             continue
         photo_page = item.get('photo_page')
+        photo_page = int(photo_page) if isinstance(photo_page, (int, float)) else None
+        ingredients = _build_gemini_ingredients(item.get('ingredients') or [])
+        instructions, meldingen = _bereiding(item, photo_page, page_texts,
+                                             [i['name'] for i in ingredients])
         recipes.append({
             'name': name[:100],
             'serves': _eerste_getal(item.get('yields')),
-            'instructions': item.get('instructions') or '',
-            'ingredients': _build_gemini_ingredients(item.get('ingredients') or []),
-            'photo_page': int(photo_page) if isinstance(photo_page, (int, float)) else None,
+            'instructions': instructions,
+            'ingredients': ingredients,
+            'photo_page': photo_page,
+            'meldingen': meldingen,
         })
     return recipes
+
+
+def _bereiding(item, photo_page, page_texts, ingredienten):
+    """Bereidingstekst van één recept: geknipt op ankers, anders zoals het model hem gaf."""
+    steps = item.get('steps')
+    if not steps:
+        return item.get('instructions') or '', []
+    if not page_texts or not photo_page or photo_page > len(page_texts):
+        return item.get('instructions') or '', [
+            'bereidingsstappen aangewezen maar geen paginatekst om uit te knippen']
+    return knip_stappen(page_texts[photo_page - 1], steps,
+                        corpus='\n'.join(page_texts), ingredienten=ingredienten)
 
 
 def _eerste_getal(waarde):
@@ -299,8 +331,12 @@ def _process(job):
     if _warn_if_truncated(response):
         meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
                          'ontbreken. Probeer het opnieuw of splits de batch.')
-    recipes = parse_batch_response(response.text)
+    recipes = parse_batch_response(response.text, [_clean_ocr_text(t) for t in texts])
     meldingen += _markeer_twijfels(recipes, twijfels)
+    for r in recipes:
+        for m in r.get('meldingen') or []:
+            meldingen.append(f"Pagina {r['photo_page']} ({r['name']}): {m}. "
+                             "Controleer de bereiding tegen de foto.")
 
     al_afgehandeld = _accepted_pages(job.id)
     overgeslagen = 0
