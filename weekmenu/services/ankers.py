@@ -14,14 +14,30 @@ Vision las: het model heeft hem nooit uitgesproken. Wisselen van model raakt
 de bereidingstekst daardoor niet meer, en een inhoudsfilter dat boektekst in
 modeluitvoer herkent heeft niets om op af te gaan.
 
-Gemeten op 22 pagina's: 252 van 252 ankers pasten exact. Wat wél voorkomt is
-dat Vision de eerste regel van de bereiding aan de ingrediëntkolom plakt
-(kolommen die elkaar op 16 px raken), zodat een stap in de tekst onderbroken
-wordt door de ingrediëntenlijst. Die lijst wordt uit de stap gehaald op wat
-hem verraadt: een blok korte regels die met een hoeveelheid beginnen. En het
-model laat soms een zin tussen een eindanker en het volgende beginanker
-vallen; die tekst gaat dan bij de vorige stap, want tekst kwijtraken is erger
-dan een stapgrens die iets verschoven is.
+Gemeten op 22 pagina's: 252 van 252 ankers pasten exact, en over vier modellen
+(2.5-flash, 3.5-flash, 3.8-flash, flash-latest) is de geknipte tekst op 21 tot
+22 van de 22 pagina's byte-gelijk. Wat wél voorkomt, en waar de rest van dit
+bestand over gaat:
+
+* Vision plakt de eerste regel van de bereiding aan de ingrediëntkolom
+  (kolommen die elkaar op 16 px raken), zodat een stap in de tekst onderbroken
+  wordt door de ingrediëntenlijst. Die lijst wordt uit de stap gehaald op wat
+  hem verraadt: een blok korte regels die met een hoeveelheid beginnen en bij
+  een ingrediënt van het recept horen (_zonder_ingredientregels).
+* Het model laat soms een zin tussen een eindanker en het volgende beginanker
+  vallen. Die tekst gaat bij de vorige stap, want tekst kwijtraken is erger
+  dan een stapgrens die iets verschoven is. Maar op een receptkaart staat in
+  zo'n gat ook de ingrediënten- en voedingswaardentabel; een aaneengesloten
+  blok regels zonder één zin erin wordt daarom uit het gat gehaald
+  (_zonder_meubilair).
+* Alles na het laatste eindanker valt buiten de knip. Staat daar nog een zin
+  bereidingstekst, dan wordt dat gemeld, met de zin erbij; het model zei dat
+  het recept daar ophield, dus we voegen niets toe maar laten het ook niet
+  stil verdwijnen.
+
+Elke regel die hier wordt weggehaald komt met zijn tekst in de meldingen
+terug. Dat is de eigenlijke waarborg: de heuristieken hierboven verkleinen de
+ruis, maar wat ze weghalen is altijd na te kijken.
 """
 import difflib
 import re
@@ -76,7 +92,12 @@ def _zoek(anker, tekst, vanaf=0):
     laatste vangt een OCR-tekenfout in het anker of een afbreking die het
     model als heel woord schreef.
     """
-    anker = re.sub(r'\s+', ' ', anker or '').strip()
+    # Het model hoort een string te geven; geeft het een getal, lijst of object,
+    # dan is dat 'anker niet gevonden' en geen reden om de hele batch te laten
+    # omvallen met een TypeError.
+    if not isinstance(anker, str):
+        return None
+    anker = re.sub(r'\s+', ' ', anker).strip()
     if not anker:
         return None
     i = tekst.find(anker, vanaf)
@@ -152,21 +173,130 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
         stukken.append((begin[0], max(eind[1], begin[0])))
 
     # Een gat tussen twee stappen gaat bij de vorige: een zin die het model
-    # oversloeg mag niet verdwijnen. Overlap (volgend begin vóór dit einde)
-    # laten we zoals het is; dat is een dubbel woord, geen verloren tekst.
-    uit, weggelaten = [], 0
+    # oversloeg mag niet verdwijnen. Wat in dat gat op een tabel lijkt gaat er
+    # wel uit. Overlap (volgend begin vóór dit einde) laten we zoals het is;
+    # dat is een dubbel woord, geen verloren tekst.
+    uit, weggelaten = [], []
     for i, (b, e) in enumerate(stukken):
+        if i and (b, e) == stukken[i - 1]:
+            continue                            # zelfde ankers twee keer: dezelfde tekst niet twee keer
+        stuk = regels[b:e]
         if i + 1 < len(stukken) and stukken[i + 1][0] > e:
-            e = stukken[i + 1][0]
-        stuk, n = _zonder_ingredientregels(regels[b:e], ingredienten)
-        weggelaten += n
+            gat, meubilair = _zonder_meubilair(regels[e:stukken[i + 1][0]])
+            stuk += gat
+            weggelaten += meubilair
+        stuk, weg = _zonder_ingredientregels(stuk, ingredienten)
+        weggelaten += weg
         stuk = re.sub(r'\s+', ' ', stuk).strip().lstrip('.,;: ')
         if stuk:
             uit.append(stuk)
     if weggelaten:
-        meldingen.append(f'{weggelaten} ingrediëntregels die door de bereiding heen liepen '
-                         'zijn weggelaten')
+        meldingen.append(_weggelaten_melding(weggelaten))
+
+    # Na het laatste eindanker houdt de knip op. Het model zei dat het recept
+    # daar eindigt, dus er wordt niets toegevoegd — maar staat er nog een zin
+    # bereidingstekst, dan hoort de gebruiker dat te zien.
+    staart = regels[stukken[-1][1]:].split('\n')
+    zin = next((i for i, r in enumerate(staart) if _is_zin(r)), None)
+    if zin is not None:
+        citaat = ' '.join(r.strip() for r in staart[:zin + 1] if r.strip())
+        meldingen.append(f"na de laatste stap staat nog tekst die op bereiding lijkt "
+                         f"({_kort(citaat, 100)}); die is niet overgenomen")
     return '\n'.join(uit), meldingen
+
+
+def _weggelaten_melding(regels):
+    """Eén melding voor alles wat uit de bereiding is gehaald, mét de tekst.
+
+    Een aantal alleen ('27 regels weggelaten') is niet na te kijken. Regels
+    die een hoeveelheid en een ingrediëntnaam hebben zijn zo goed als zeker
+    ingrediënten en worden geteld; alles wat op grond van vorm is weggehaald
+    (blokkoppen, tabelregels, een afgeknipt voorvoegsel) staat er letterlijk in.
+    """
+    zeker = [r for r in regels if r.startswith('~')]
+    twijfel = [r for r in regels if not r.startswith('~')]
+    delen = []
+    if zeker:
+        delen.append(f'{len(zeker)} ingrediëntregels')
+    if twijfel:
+        delen.append('op vorm: ' + ', '.join(_kort(r) for r in twijfel[:8])
+                      + (f' en {len(twijfel) - 8} meer' if len(twijfel) > 8 else ''))
+    return 'uit de bereiding weggelaten: ' + '; '.join(delen)
+
+
+# Een zin bereidingstekst: vijf gewone woorden achter elkaar. Tabelregels,
+# koppen en de paginavoet komen daar niet aan ('Peper en zout', '32 KIP',
+# 'Energie (kJ/kcal)'); een regel proza vrijwel altijd wel. Gemeten op vier
+# boeken (36 recepten): geen enkele tabelregel haalt het, en van de echte
+# bereidingsregels alleen de korte staart van een afgebroken zin niet.
+_ZIN_WOORDEN = 5
+
+
+def _gewone_woorden_op_rij(regel):
+    """Langste reeks opeenvolgende gewone woorden (letters, geen kapitalen)."""
+    beste = reeks = 0
+    for w in regel.split():
+        kaal = w.strip('.,;:()!?*\'"').replace('-', '').replace("'", '')
+        if kaal and kaal.isalpha() and not kaal.isupper():
+            reeks += 1
+            beste = max(beste, reeks)
+        else:
+            reeks = 0
+    return beste
+
+
+def _is_zin(regel):
+    return _gewone_woorden_op_rij(regel) >= _ZIN_WOORDEN
+
+
+def _is_meubilair(regel):
+    """Een regel met hooguit één gewoon woord: een getal, een eenheid, een kop."""
+    return sum(1 for w in regel.split()
+               if w.strip('.,;:()!?*\'"').replace('-', '').isalpha()) <= 1
+
+
+def _zonder_meubilair(gat):
+    """Haal een tabel uit het gat tussen twee stappen. Geeft (tekst, weggelaten).
+
+    Het gat begint en eindigt midden in een regel (daar staan de ankers); die
+    twee stukken blijven altijd staan. Van de hele regels ertussen gaat een
+    aaneengesloten blok weg dat met een meubilairregel begint én eindigt, en
+    waar geen zin in voorkomt. Een korte regel vlak vóór of ná zo'n blok
+    ('met sambal en/of ketchup.', 'Hamburgers bakken') blijft dus staan: die
+    kan het staartje van een zin zijn. Op de HelloFresh-kaart is het blok 50
+    regels tabel; op de kookboekpagina's komt er geen enkel blok in voor.
+    """
+    delen = gat.split('\n')
+    if len(delen) < 5:
+        return gat, []
+    midden = delen[1:-1]
+    houden = [True] * len(midden)
+    weggelaten = []
+    i = 0
+    while i < len(midden):
+        if not _is_meubilair(midden[i]):
+            i += 1
+            continue
+        j = i
+        laatste_meubilair = i
+        while j < len(midden) and not _is_zin(midden[j]):
+            if _is_meubilair(midden[j]):
+                laatste_meubilair = j
+            j += 1
+        if laatste_meubilair - i + 1 >= _MEUBILAIR_MIN:
+            for k in range(i, laatste_meubilair + 1):
+                houden[k] = False
+                weggelaten.append(midden[k])
+        i = max(j, laatste_meubilair + 1)
+    if not weggelaten:
+        return gat, []
+    return '\n'.join([delen[0]] + [r for r, h in zip(midden, houden) if h] + [delen[-1]]), weggelaten
+
+
+# Zo veel regels moet een blok minstens zijn om als tabel te tellen. Eén los
+# stapnummer of paginanummer ('4') in een gat blijft dan gewoon staan: dat is
+# zichtbare ruis, en een enkele regel weghalen op vorm alleen is het niet waard.
+_MEUBILAIR_MIN = 3
 
 
 # Een ingrediëntregel is kort; een regel bereidingstekst in dezelfde kolom is
@@ -185,48 +315,98 @@ def _zonder_ingredientregels(stuk, ingredienten):
     en waarvan de naam bij een ingrediënt van het recept hoort, en alles
     daartussen kort (blokkoppen, doorlopende namen). Het blok van de eerste
     tot de laatste zo'n regel wordt weggelaten; de regels ervoor en erna zijn
-    de stap. Geeft (tekst, aantal weggelaten regels).
+    de stap.
+
+    Een genummerde bereidingsstap begint óók met een cijfer ('2 Bak de kip
+    gaar'), en die mag hier nooit voor een ingrediëntregel doorgaan. Twee
+    dingen verraden hem: na het cijfer komt een hoofdletterwoord dat in geen
+    ingrediëntnaam voorkomt (een werkwoord), en de cijfers van zulke regels
+    tellen op: 1, 2, 3. Een ingrediëntenlijst doet geen van beide.
+
+    Geeft (tekst, weggelaten): de weggelaten regels letterlijk, met een '~'
+    ervoor als ze een hoeveelheid én een ingrediëntnaam hadden.
     """
     regels = stuk.split('\n')
     if len(regels) < 3:
-        return stuk, 0
+        return stuk, []
     namen = set()
     for naam in ingredienten or []:
         namen |= set(re.findall(r'[^\W\d_]{3,}', naam.lower()))
     treffers = [i for i, r in enumerate(regels[1:-1], 1)
-                if _HOEVEELHEID.match(r) and len(r) <= _INGREDIENTREGEL_MAX
-                and namen & set(re.findall(r'[^\W\d_]{3,}', r.lower()))]
-    if len(treffers) < 2:
-        return stuk, 0
+                if _is_ingredientregel(r, namen)]
+    if len(treffers) < 2 or _is_nummering([regels[i] for i in treffers]):
+        return stuk, []
     eerste, laatste = treffers[0], treffers[-1]
     if any(len(r) > _INGREDIENTREGEL_MAX for r in regels[eerste:laatste + 1]):
-        return stuk, 0
-    # Blokkoppen, doorlopende namen en de paginavoet horen bij de lijst en
-    # zijn net zo kort; de bereiding zelf hervat met een regel over de volle
-    # kolombreedte. De eerste en laatste regel van het stuk blijven altijd
-    # staan, want daar staan de ankers.
-    while eerste > 1 and len(regels[eerste - 1]) <= _INGREDIENTREGEL_MAX:
+        return stuk, []
+    # Blokkoppen, doorlopende namen en de paginavoet horen bij de lijst: kort,
+    # hooguit drie gewone woorden. De bereiding zelf hervat met een regel over
+    # de volle kolombreedte. De eerste en laatste regel van het stuk blijven
+    # altijd staan, want daar staan de ankers.
+    while eerste > 1 and _is_lijstregel(regels[eerste - 1], namen):
         eerste -= 1
-    while laatste < len(regels) - 2 and len(regels[laatste + 1]) <= _INGREDIENTREGEL_MAX:
+    while laatste < len(regels) - 2 and _is_lijstregel(regels[laatste + 1], namen):
         laatste += 1
-    weggelaten = laatste - eerste + 1
+    weggelaten = [('~' if i in treffers else '') + regels[i] for i in range(eerste, laatste + 1)]
     # Soms plakt Vision de laatste ingrediëntregel vóór de lijst aan een regel
     # bereidingstekst ('1 handvol verse tijm, rozemarijn en/ spinazie geslonken
-    # is, ...'). Die regel is lang en begint met een hoeveelheid; wat eraf mag
-    # is het stuk dat woord voor woord met een ingrediëntnaam overeenkomt.
+    # is, ...'). Wat eraf mag is het stuk dat woord voor woord met het begin
+    # van een ingrediëntnaam overeenkomt — en alleen als die naam op deze regel
+    # níét afloopt, want dan weten we dat de regel afgebroken en geplakt is.
     if eerste > 1 and _HOEVEELHEID.match(regels[eerste - 1]):
         rest = _zonder_ingredientprefix(regels[eerste - 1], ingredienten)
         if rest is not None:
+            weggelaten.append(regels[eerste - 1][:len(regels[eerste - 1]) - len(rest)].rstrip())
             regels[eerste - 1] = rest
-            weggelaten += 1
     return '\n'.join(regels[:eerste] + regels[laatste + 1:]), weggelaten
+
+
+def _is_ingredientregel(regel, namen):
+    """Hoeveelheid vooraan, kort, deelt een woord met een ingrediëntnaam, en
+    geen zinsbegin (hoofdletterwoord dat geen ingrediënt is) na het cijfer."""
+    if not _HOEVEELHEID.match(regel) or len(regel) > _INGREDIENTREGEL_MAX:
+        return False
+    woorden = re.findall(r'[^\W\d_]{3,}', regel.lower())
+    if not namen & set(woorden):
+        return False
+    delen = regel.split()
+    tweede = delen[1] if len(delen) > 1 else ''
+    if tweede[:1].isupper() and not tweede[1:2].isupper() and tweede.lower() not in namen:
+        return False
+    return True
+
+
+def _is_lijstregel(regel, namen):
+    """Mag het weg te laten blok over deze buurregel heen worden uitgebreid?"""
+    if len(regel) > _INGREDIENTREGEL_MAX:
+        return False
+    if _HOEVEELHEID.match(regel):
+        return _is_ingredientregel(regel, namen) or _gewone_woorden_op_rij(regel) <= 3
+    return _gewone_woorden_op_rij(regel) <= 3
+
+
+def _is_nummering(regels):
+    """Beginnen deze regels met 1, 2, 3, ...? Dan is het een genummerde lijst
+    stappen en geen ingrediëntenlijst."""
+    getallen = []
+    for r in regels:
+        m = re.match(r'(\d+)\s', r)
+        if not m:
+            return False
+        getallen.append(int(m.group(1)))
+    return all(b == a + 1 for a, b in zip(getallen, getallen[1:]))
 
 
 def _zonder_ingredientprefix(regel, ingredienten):
     """De regel zonder de ingrediëntregel waarmee hij begint, of None.
 
     Na de hoeveelheid en een eventueel maatwoord moeten minstens twee woorden
-    van een ingrediëntnaam volgen; alleen dat stuk gaat eraf.
+    van een ingrediëntnaam volgen, en de naam mag op deze regel niet afgelopen
+    zijn: 'verse tijm, rozemarijn en/' loopt door op de volgende regel ('of
+    laurier'), en dát is het bewijs dat hier een afgebroken ingrediëntregel aan
+    de bereiding is geplakt. Een regel waarin de hele naam staat ('1 el extra
+    vierge olijfolie erbij en roer') kan net zo goed een bereidingszin zijn,
+    en blijft heel.
     """
     woorden = regel.split()
     kaal = [re.sub(r'[^\w/]+$', '', w).lower() for w in woorden]
@@ -236,14 +416,14 @@ def _zonder_ingredientprefix(regel, ingredienten):
             n = 0
             while n < len(naamw) and begin + n < len(kaal) and _zelfde_woord(kaal[begin + n], naamw[n]):
                 n += 1
-            if n >= 2 and begin + n < len(woorden):
+            if 2 <= n < len(naamw) and begin + n < len(woorden):
                 return ' '.join(woorden[begin + n:])
     return None
 
 
-def _kort(anker):
-    anker = (anker or '').strip()
-    return repr(anker[:_ANKER_KORT] + ('…' if len(anker) > _ANKER_KORT else ''))
+def _kort(anker, n=_ANKER_KORT):
+    anker = (anker if isinstance(anker, str) else repr(anker) if anker is not None else '').strip()
+    return repr(anker[:n] + ('…' if len(anker) > n else ''))
 
 
 def _zelfde_woord(regelwoord, naamwoord):

@@ -157,7 +157,8 @@ def _bereiding(item, photo_page, page_texts, ingredienten):
     """Bereidingstekst van één recept: geknipt op ankers, anders zoals het model hem gaf."""
     steps = item.get('steps')
     if not steps:
-        return item.get('instructions') or '', []
+        tekst = item.get('instructions') or ''
+        return tekst, [] if tekst else ['geen bereidingsstappen aangewezen']
     if not page_texts or not photo_page or photo_page > len(page_texts):
         return item.get('instructions') or '', [
             'bereidingsstappen aangewezen maar geen paginatekst om uit te knippen']
