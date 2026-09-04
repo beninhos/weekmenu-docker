@@ -35,9 +35,10 @@ bestand over gaat:
   het recept daar ophield, dus we voegen niets toe maar laten het ook niet
   stil verdwijnen.
 
-Elke regel die hier wordt weggehaald komt met zijn tekst in de meldingen
-terug. Dat is de eigenlijke waarborg: de heuristieken hierboven verkleinen de
-ruis, maar wat ze weghalen is altijd na te kijken.
+Wat hier wordt weggehaald komt in de meldingen terug: elke regel die tekst
+zou kunnen zijn letterlijk, de regels met alleen een getal of één woord en de
+herkende ingrediëntregels als aantal. Dat is de eigenlijke waarborg: de
+heuristieken hierboven verkleinen de ruis, maar wat ze weghalen is na te kijken.
 """
 import difflib
 import re
@@ -206,22 +207,32 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
 
 
 def _weggelaten_melding(regels):
-    """Eén melding voor alles wat uit de bereiding is gehaald, mét de tekst.
+    """Eén melding voor alles wat uit de bereiding is gehaald.
 
-    Een aantal alleen ('27 regels weggelaten') is niet na te kijken. Regels
-    die een hoeveelheid en een ingrediëntnaam hebben zijn zo goed als zeker
-    ingrediënten en worden geteld; alles wat op grond van vorm is weggehaald
-    (blokkoppen, tabelregels, een afgeknipt voorvoegsel) staat er letterlijk in.
+    Een aantal alleen ('27 regels weggelaten') is niet na te kijken. Wat er
+    letterlijk in komt is elke regel die tekst zou kúnnen zijn: minstens twee
+    gewone woorden. Regels met alleen een getal, een eenheid of één woord
+    ('2 st', '40 g', 'Komkommer') en regels die een hoeveelheid én een
+    ingrediëntnaam van het recept hadden, worden geteld: die zijn geen
+    bereiding.
     """
     zeker = [r for r in regels if r.startswith('~')]
-    twijfel = [r for r in regels if not r.startswith('~')]
+    rest = [r for r in regels if not r.startswith('~')]
+    tekst = [r for r in rest if _gewone_woorden_op_rij(r) >= 2]
+    kaal = len(rest) - len(tekst)
     delen = []
     if zeker:
         delen.append(f'{len(zeker)} ingrediëntregels')
-    if twijfel:
-        delen.append('op vorm: ' + ', '.join(_kort(r) for r in twijfel[:8])
-                      + (f' en {len(twijfel) - 8} meer' if len(twijfel) > 8 else ''))
+    if kaal:
+        delen.append(f'{kaal} regels met alleen een getal, eenheid of los woord')
+    if tekst:
+        delen.append('en verder: ' + ', '.join(_kort(r) for r in tekst[:_MELDING_MAX])
+                      + (f' en {len(tekst) - _MELDING_MAX} meer' if len(tekst) > _MELDING_MAX else ''))
     return 'uit de bereiding weggelaten: ' + '; '.join(delen)
+
+
+# Zo veel weggelaten tekstregels komen hooguit letterlijk in één melding.
+_MELDING_MAX = 20
 
 
 # Een zin bereidingstekst: vijf gewone woorden achter elkaar. Tabelregels,

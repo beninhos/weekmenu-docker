@@ -72,3 +72,23 @@ def test_twijfel_zonder_ingredient_wordt_een_melding():
     assert len(meldingen) == 1
     assert "Pagina 1" in meldingen[0] and "'12 komkommer'" in meldingen[0]
     assert 'check' not in recipes[0]['ingredients'][0]
+
+
+def test_eol_sure_space_is_ook_een_regeleinde():
+    # Vision markeert een regeleinde als LINE_BREAK óf EOL_SURE_SPACE; beide moeten knippen.
+    woorden = [_woord('2', [0.4], 'EOL_SURE_SPACE'), _woord('theelepel', [0.9] * 9, 'LINE_BREAK'),
+               _woord('12', [0.3, 0.4], 'SPACE'), _woord('komkommer', [0.9] * 9, 'EOL_SURE_SPACE')]
+    ann = {'pages': [{'blocks': [{'paragraphs': [{'words': woorden}]}]}]}
+    uit = onzekere_hoeveelheden(ann)
+    # '2' staat alleen op zijn regel (geen vervolgwoord), '12 komkommer' wel
+    assert [(t['regel'], t['cijfer']) for t in uit] == [('12 komkommer', '12')]
+
+
+def test_bovenrand_van_de_drempel():
+    # Het laagste echte cijfer op de meetlat scoorde 0,81; het randartefact '0' 0,72 maar zonder vervolgwoord.
+    ann = _annotatie([
+        [('1', [0.81]), ('wortel', [0.95] * 6)],
+        [('0', [0.72])],
+        [('2', [0.60]), ('limoenen', [0.95] * 8)],
+    ])
+    assert onzekere_hoeveelheden(ann) == []

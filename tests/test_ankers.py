@@ -1,6 +1,10 @@
 """Bereidingstekst knippen op ankers: de tekst komt uit de OCR, nooit uit het model."""
+import json
+import os
+
 from weekmenu.services.ankers import knip_stappen, normaliseer
 from weekmenu.services.dump import parse_batch_response
+from weekmenu.services.ocr import _clean_ocr_text
 
 PAGINA = """KIP MET RIJST
 2 kipfilets
@@ -61,7 +65,8 @@ def test_ingredientenlijst_dwars_door_een_stap_wordt_weggelaten():
     namen = ['gedroogde peper', 'lente-uitjes', 'rijpe tomaat', 'verse koriander']
     tekst, meldingen = knip_stappen(pagina, stappen, ingredienten=namen)
     # De melding noemt wat er weg is: de zekere ingrediëntregels geteld, de rest letterlijk.
-    assert meldingen == ['uit de bereiding weggelaten: 3 ingrediëntregels; op vorm: "Fajita\'s", \'32 KIP\'']
+    assert meldingen == ['uit de bereiding weggelaten: 3 ingrediëntregels; '
+                         '2 regels met alleen een getal, eenheid of los woord']
     assert tekst == ('Verkruimel de peper in de blender en giet er water '
                      'bij om ze te laten wellen Maak de lente-uitjes schoon en doe ze bij de tomaat')
 
@@ -74,7 +79,7 @@ def test_ingredientregel_die_aan_een_stapregel_vastzit_gaat_eraf():
     stappen = [{'start': 'Voeg wanneer de linzen', 'end': 'bak ze goudbruin'}]
     namen = ['verse tijm, rozemarijn en/ of laurier', 'gerookte pancetta', 'groene asperges']
     tekst, meldingen = knip_stappen(pagina, stappen, ingredienten=namen)
-    assert meldingen == ["uit de bereiding weggelaten: 2 ingrediëntregels; op vorm: 'of laurier', "
+    assert meldingen == ["uit de bereiding weggelaten: 2 ingrediëntregels; en verder: 'of laurier', "
                          "'Voor erbij', '1 handvol verse tijm, rozemarijn en/'"]
     assert tekst == ('Voeg wanneer de linzen koken en de spinazie geslonken is, peper en zout naar '
                      'smaak toe Doe de pancetta en de asperges in de koekenpan en bak ze goudbruin')
@@ -211,8 +216,10 @@ def test_tabel_in_een_gat_gaat_eruit_de_tip_en_de_kop_blijven():
     assert 'Hamburgers bakken' in stap1                 # kort, vlak na het blok: kan een zinstaart zijn
     assert 'Gekruide runderburger' not in tekst and 'Voedingswaarden' not in tekst
     assert stap2 == 'Verhit de olie in een koekenpan en bak de hamburger gaar.'
-    assert len(meldingen) == 1 and meldingen[0].startswith('uit de bereiding weggelaten: op vorm:')
-    assert "'Gekruide runderburger'" in meldingen[0]
+    assert len(meldingen) == 1 and meldingen[0].startswith('uit de bereiding weggelaten: ')
+    # elke regel die tekst zou kunnen zijn staat erin, de rest is geteld
+    assert "'Gekruide runderburger'" in meldingen[0] and "'Peper en zout'" in meldingen[0]
+    assert 'regels met alleen een getal' in meldingen[0]
 
 
 def test_los_stapnummer_in_een_gat_blijft_staan():
@@ -259,3 +266,34 @@ def test_antwoord_zonder_stappen_en_zonder_tekst_wordt_gemeld(app):
     recepten = parse_batch_response(antwoord, page_texts=[PAGINA])
     assert recepten[0]['instructions'] == ''
     assert recepten[0]['meldingen'] == ['geen bereidingsstappen aangewezen']
+
+
+def test_stappen_op_een_andere_pagina_worden_als_zodanig_gemeld(app):
+    """Recept over twee pagina's, of een verkeerd paginanummer: de ankers staan er wel, elders."""
+    antwoord = ('[{"title": "Kip", "photo_page": 1, "ingredients": [], '
+                '"steps": [{"start": "Snijd de kip in reepjes", "end": "in de pan"}]}]')
+    recepten = parse_batch_response(antwoord, page_texts=['Alleen een titel en ingrediënten', PAGINA])
+    assert recepten[0]['instructions'] == ''
+    assert any('staan op pagina 2, niet op pagina 1' in m for m in recepten[0]['meldingen'])
+
+
+def test_echte_pagina_met_ingredientenlijst_door_de_bereiding():
+    """Pagina 5 van de kipbundel, zoals Vision hem las en zoals gemini-2.5-flash de ankers gaf.
+
+    De eerste regel van de bereiding zit aan de ingrediëntkolom vast en de rest komt pas
+    na de hele lijst. Wat eruit moet komen: elke stap letterlijk uit de OCR-tekst, geen
+    enkele ingrediëntregel in de bereiding, en de lijst herkend in de melding.
+    """
+    pad = os.path.join(os.path.dirname(__file__), 'fixtures', 'kookboek_p5.json')
+    f = json.load(open(pad, encoding='utf-8'))
+    ocr = _clean_ocr_text(f['ocr'])                 # zoals _process de tekst aanlevert
+    tekst, meldingen = knip_stappen(ocr, f['steps'], ingredienten=f['ingredienten'])
+    genorm = normaliseer(ocr).replace('\n', ' ')
+    stappen = tekst.split('\n')
+    assert len(stappen) == len(f['steps'])
+    assert stappen[0].startswith('Verkruimel de gedroogde peper in de blender en giet er voldoende water '
+                                 'bij om ze te laten wellen')
+    assert '2 lente-uitjes' not in tekst and '½ bosje verse koriander' not in tekst
+    for stap in stappen[1:]:
+        assert stap in genorm                       # letterlijk, en de eerste is gelijmd uit twee fragmenten
+    assert len(meldingen) == 1 and meldingen[0].startswith('uit de bereiding weggelaten: 19 ingrediëntregels')

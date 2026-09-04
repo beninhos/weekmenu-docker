@@ -162,8 +162,32 @@ def _bereiding(item, photo_page, page_texts, ingredienten):
     if not page_texts or not photo_page or photo_page > len(page_texts):
         return item.get('instructions') or '', [
             'bereidingsstappen aangewezen maar geen paginatekst om uit te knippen']
-    return knip_stappen(page_texts[photo_page - 1], steps,
-                        corpus='\n'.join(page_texts), ingredienten=ingredienten)
+    tekst, meldingen = knip_stappen(page_texts[photo_page - 1], steps,
+                                    corpus='\n'.join(page_texts), ingredienten=ingredienten)
+    if not tekst:
+        elders = _pagina_met_anker(steps, page_texts, photo_page)
+        if elders:
+            # Een recept dat over twee pagina's loopt, of een verkeerd
+            # paginanummer van het model: de ankers staan er wel, maar op een
+            # andere pagina. Dat is een andere fout dan 'niet gevonden', en de
+            # gebruiker moet weten welke.
+            meldingen.append(f'de bereidingsstappen staan op pagina {elders}, niet op '
+                             f'pagina {photo_page}; loopt dit recept over twee pagina\'s?')
+    return tekst, meldingen
+
+
+def _pagina_met_anker(steps, page_texts, behalve):
+    """Paginanummer waar het eerste beginanker wél letterlijk staat, of None."""
+    from weekmenu.services.ankers import normaliseer
+    eerste = next((s.get('start') for s in steps if isinstance(s, dict)
+                   and isinstance(s.get('start'), str) and s.get('start').strip()), None)
+    if not eerste:
+        return None
+    anker = re.sub(r'\s+', ' ', eerste).strip()
+    for nummer, tekst in enumerate(page_texts, 1):
+        if nummer != behalve and anker in normaliseer(tekst).replace('\n', ' '):
+            return nummer
+    return None
 
 
 def _eerste_getal(waarde):
