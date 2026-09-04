@@ -86,7 +86,7 @@ def test_afgehandelde_pagina_levert_geen_tweede_concept(app, tmp_path):
     jobmap.mkdir()
 
     with patch('weekmenu.services.dump._get_gemini_api_key', return_value='x'), \
-         patch('weekmenu.services.dump.ocr_pages', return_value=['tekst pagina 1', 'tekst pagina 2']), \
+         patch('weekmenu.services.dump.lees_paginas', return_value=(['tekst pagina 1', 'tekst pagina 2'], [[], []])), \
          patch('weekmenu.services.dump._pdf_page_jpegs', return_value=[b'a', b'b']), \
          patch('weekmenu.services.dump._job_dir', return_value=str(jobmap)), \
          patch('weekmenu.services.dump._resolve_image', return_value=None), \
@@ -120,7 +120,7 @@ def test_temperatuur_staat_op_nul(app, tmp_path):
     jobmap.mkdir()
 
     with patch('weekmenu.services.dump._get_gemini_api_key', return_value='x'), \
-         patch('weekmenu.services.dump.ocr_pages', return_value=['tekst']), \
+         patch('weekmenu.services.dump.lees_paginas', return_value=(['tekst'], [[]])), \
          patch('weekmenu.services.dump._pdf_page_jpegs', return_value=[b'a']), \
          patch('weekmenu.services.dump._job_dir', return_value=str(jobmap)), \
          patch('google.genai.Client') as client:

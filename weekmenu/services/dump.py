@@ -12,7 +12,7 @@ from weekmenu.models import DumpJob, RecipeDraft
 from weekmenu.services.gemini import (
     _get_gemini_api_key, _sanitize_json, _build_gemini_ingredients, _UNITS_STR,
 )
-from weekmenu.services.ocr import ocr_pages, pages_as_labelled_text
+from weekmenu.services.ocr import lees_paginas, pages_as_labelled_text
 
 _ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/avif'}
 
@@ -271,7 +271,7 @@ def _process(job):
             page_no += 1
             page_map[page_no] = (path, None)
 
-    texts = ocr_pages(images)
+    texts, twijfels = lees_paginas(images)
     if not any(t.strip() for t in texts):
         raise ValueError('Geen tekst gevonden op de aangeleverde pagina\'s. '
                          'Is de scan scherp genoeg?')
@@ -300,6 +300,7 @@ def _process(job):
         meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
                          'ontbreken. Probeer het opnieuw of splits de batch.')
     recipes = parse_batch_response(response.text)
+    meldingen += _markeer_twijfels(recipes, twijfels)
 
     al_afgehandeld = _accepted_pages(job.id)
     overgeslagen = 0
@@ -326,6 +327,50 @@ def _process(job):
         meldingen.append(f'{len(images)} pagina\'s aangeleverd, {gemaakt} recept(en) '
                          f'herkend. Controleer of er niets ontbreekt.')
     job.warning = ' '.join(meldingen) or None
+
+
+def _markeer_twijfels(recipes, twijfels):
+    """Zet Vision's twijfel over een begingetal op het bijbehorende ingrediënt.
+
+    Het model heeft de regel al omgezet naar naam, getal en eenheid, dus de
+    twijfel moet van de OCR-regel naar die ingrediëntregel worden overgezet.
+    Dat gaat op de naam: het ingrediënt van dezelfde pagina dat de meeste
+    woorden met de regel deelt. Vindt dat niets — het model heeft de regel
+    overgeslagen of samengevoegd — dan blijft de twijfel niet stil liggen maar
+    komt hij als melding bij de batch.
+
+    Geeft de meldingen terug; de treffers krijgen een 'check'-tekst in de
+    ingrediëntregel, en de nakijkkaart laat die zien.
+    """
+    meldingen = []
+    per_pagina = {}
+    for r in recipes:
+        if r.get('photo_page'):
+            per_pagina.setdefault(r['photo_page'], []).append(r)
+    for pagina, lijst in enumerate(twijfels or [], 1):
+        for twijfel in lijst:
+            tekst = (f"Vision las '{twijfel['cijfer']}' met {twijfel['zekerheid']:.0%} "
+                     f"zekerheid; mogelijk een breukteken (½)")
+            treffer = _ingredient_bij_regel(twijfel['regel'], per_pagina.get(pagina, []))
+            if treffer is not None:
+                treffer['check'] = tekst
+            else:
+                meldingen.append(f"Pagina {pagina}: {tekst} in '{twijfel['regel']}', "
+                                 f"maar die regel is niet als ingrediënt terug te vinden.")
+    return meldingen
+
+
+def _ingredient_bij_regel(regel, recipes):
+    """Het ingrediënt (dict) dat het best bij een OCR-regel past, of None."""
+    woorden = {w for w in re.findall(r'[^\W\d_]{3,}', regel.lower())}
+    beste, beste_score = None, 0
+    for r in recipes:
+        for ing in r['ingredients']:
+            naam = set(re.findall(r'[^\W\d_]{3,}', (ing.get('name') or '').lower()))
+            score = len(woorden & naam)
+            if score > beste_score:
+                beste, beste_score = ing, score
+    return beste
 
 
 def _warn_if_truncated(response):

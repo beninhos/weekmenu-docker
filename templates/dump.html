@@ -141,11 +141,14 @@ function renderCard(d) {
     // Een regel met een eenheid maar zonder getal ('g kipfilets') valt in een
     // lijst van twintig niet op, terwijl hij bij opslaan geweigerd wordt. Hem
     // markeren scheelt zoeken.
+    // Een regel waar Vision zelf aan twijfelde (een ½ die als kaal cijfer is
+    // gelezen laat in de tekst geen spoor na) krijgt oranje en de reden erbij,
+    // zodat je weet welke regel je tegen de bronfoto moet leggen.
     const ingHtml = d.ingredients.map(i => {
         const mist = (i.amount === null || i.amount === '') && (i.unit || '').trim();
-        return mist
-            ? `<li class="text-red-600">hoeveelheid ontbreekt — ${esc(i.unit)} ${esc(i.name)}</li>`
-            : `<li>${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)}</li>`;
+        if (mist) return `<li class="text-red-600">hoeveelheid ontbreekt — ${esc(i.unit)} ${esc(i.name)}</li>`;
+        if (i.check) return `<li class="text-orange-600" title="${esc(i.check)}">${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)} — controleer: ${esc(i.check)}</li>`;
+        return `<li>${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)}</li>`;
     }).join('');
     const img = imageUrl(esc(d.image_path));
     const cookbookSel = document.getElementById('cookbookSelect');

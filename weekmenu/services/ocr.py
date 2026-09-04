@@ -134,17 +134,25 @@ def verify_vision_key(api_key):
 
 
 def ocr_pages(images, language='nl'):
-    """Lees JPEG-pagina's uit als tekst; geeft even veel teksten terug als pagina's.
+    """Lees JPEG-pagina's uit als tekst; geeft even veel teksten terug als pagina's."""
+    return lees_paginas(images, language)[0]
+
+
+def lees_paginas(images, language='nl'):
+    """Lees JPEG-pagina's uit; geeft (teksten, twijfels) terug, beide per pagina.
 
     Een pagina die niets oplevert wordt een lege string in plaats van dat hij
     wegvalt: de paginanummering moet blijven kloppen met de aanroeper, want die
     koppelt er de receptfoto aan.
+
+    De twijfels zijn de hoeveelheden waar Vision zelf niet zeker van was; zie
+    onzekere_hoeveelheden. Ze komen uit dezelfde aanroep en kosten dus niets.
     """
     api_key = _get_vision_api_key()
     if not api_key:
         raise ValueError('Cloud Vision API key niet geconfigureerd')
 
-    texts = []
+    texts, twijfels = [], []
     for start in range(0, len(images), _MAX_PER_REQUEST):
         responses = _annotate(api_key, images[start:start + _MAX_PER_REQUEST], language)
         for offset in range(len(images[start:start + _MAX_PER_REQUEST])):
@@ -154,14 +162,83 @@ def ocr_pages(images, language='nl'):
                     'Vision-fout op pagina %d: %s',
                     start + offset + 1, item['error'].get('message', '')[:120])
                 texts.append('')
+                twijfels.append([])
                 continue
-            texts.append((item.get('fullTextAnnotation') or {}).get('text', ''))
+            annotation = item.get('fullTextAnnotation') or {}
+            texts.append(annotation.get('text', ''))
+            twijfels.append(onzekere_hoeveelheden(annotation))
 
     leeg = sum(1 for t in texts if not t.strip())
     if leeg:
         current_app.logger.warning('Vision: %d van %d pagina\'s leverden geen tekst op',
                                    leeg, len(texts))
-    return texts
+    return texts, twijfels
+
+
+# Onder deze zekerheid is een cijfer aan het begin van een ingrediëntregel
+# verdacht. Gemeten op 22 kookboekpagina's (539 cijferwoorden): een echt cijfer
+# haalt minstens 0,81; het breukteken ½ zelf scoort altijd 0,19–0,39, en de
+# twee keer dat Vision een ½ als kaal cijfer schreef ('2 theelepel', '12
+# komkommer') scoorden die cijfers 0,49 en 0,31. Tussen 0,49 en 0,81 ligt de
+# grens dus ruim; 0,6 is het midden.
+TWIJFEL_DREMPEL = 0.6
+
+
+def onzekere_hoeveelheden(annotation, drempel=TWIJFEL_DREMPEL):
+    """Regels waarvan het begingetal door Vision met weinig zekerheid is gelezen.
+
+    Leest Vision een ½ als gewoon cijfer, dan staat er in de tekst niets meer
+    dat dat verraadt: '2 theelepel komijnzaad' is een prima regel. Wat wél
+    overblijft is Vision's eigen zekerheid per teken. Die is bij zo'n misser
+    laag, bij een echt cijfer hoog. Dit levert alleen een markering op, geen
+    correctie: de gebruiker kijkt met de bronfoto ernaast en beslist zelf.
+
+    Alleen een cijferwoord aan het begin van een regel telt, en alleen als er
+    nog een woord op volgt: een los cijfer in de marge (paginanummer, een als
+    '0' gelezen vlekje) is geen hoeveelheid.
+
+    Geeft per regel {'regel', 'cijfer', 'zekerheid'}.
+    """
+    twijfels = []
+    for regel in _regels(annotation):
+        eerste = regel[0]
+        if len(regel) < 2 or not re.fullmatch(r'\d+', eerste['text']):
+            continue
+        zekerheid = min(eerste['confidences'])
+        if zekerheid < drempel:
+            twijfels.append({
+                'regel': ' '.join(w['text'] for w in regel),
+                'cijfer': eerste['text'],
+                'zekerheid': round(zekerheid, 2),
+            })
+    return twijfels
+
+
+def _regels(annotation):
+    """Woorden uit een fullTextAnnotation, gegroepeerd tot regels.
+
+    Vision markeert een regeleinde per symbool (detectedBreak); daarop knippen
+    geeft dezelfde regels als in de platte tekst.
+    """
+    regels, huidige = [], []
+    for page in annotation.get('pages') or []:
+        for block in page.get('blocks') or []:
+            for paragraph in block.get('paragraphs') or []:
+                for word in paragraph.get('words') or []:
+                    symbols = word.get('symbols') or []
+                    if not symbols:
+                        continue
+                    huidige.append({
+                        'text': ''.join(s.get('text', '') for s in symbols),
+                        'confidences': [s.get('confidence', 1.0) for s in symbols],
+                    })
+                    einde = (symbols[-1].get('property') or {}).get('detectedBreak') or {}
+                    if einde.get('type') in ('LINE_BREAK', 'EOL_SURE_SPACE'):
+                        regels.append(huidige)
+                        huidige = []
+    if huidige:
+        regels.append(huidige)
+    return regels
 
 
 _FRACTIONS = '½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞'
