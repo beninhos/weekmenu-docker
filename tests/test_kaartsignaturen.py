@@ -1,4 +1,7 @@
 """Wat een receptkaart per merk verraadt: alleen hier staat iets merkspecifieks."""
+import re
+
+from weekmenu.services import kaartsignaturen
 from weekmenu.services.kaartsignaturen import (bereidingstijd, is_benodigdheden_kop,
                                                is_voorkant, is_voorraadkop)
 
@@ -38,6 +41,21 @@ def test_bereidingstijd_kaartvarianten():
     assert bereidingstijd(
         'Scandinavische salade BALANS 40 min. (totaal voor 2 personen)') == 40
     assert bereidingstijd('Kooktijd onbekend') is None
+
+
+def test_hoofdpatroon_van_een_ander_merk_wint_van_een_losse_variant(monkeypatch):
+    # Met twee merken in de lijst mag de losse terugvalvorm van het eerste merk
+    # ('Totale tijd') niet winnen van de exacte tijd van het tweede: eerst alle
+    # hoofdpatronen, dan pas alle varianten.
+    nepmerk = {
+        'naam': 'Nepmerk',
+        'voorkant': re.compile(r'NEPMERK'),
+        'voorraadkop': re.compile(r'^\s*zelf erbij\s*$', re.IGNORECASE),
+        'benodigdheden': re.compile(r'^\s*nodig\s*$', re.IGNORECASE),
+        'bereidingstijd': re.compile(r'kooktijd\s*:?\s*(\d+)\s*min', re.IGNORECASE),
+    }
+    monkeypatch.setattr(kaartsignaturen, 'MERKEN', kaartsignaturen.MERKEN + [nepmerk])
+    assert bereidingstijd('Totale tijd: 20 min.\nKooktijd: 35 min.') == 35
 
 
 def test_bereidingstijd_wint_niet_van_oventijd():

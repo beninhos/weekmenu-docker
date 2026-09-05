@@ -475,10 +475,12 @@ def _verwerk_kaarten(texts, annotaties, client, config):
         voor, achter, rijen = paar['voor'], paar['achter'], paar['rijen']
         voortekst = _clean_ocr_text(texts[voor - 1])
         achtertekst = _clean_ocr_text(texts[achter - 1])
-        gecombineerd = voortekst.strip() + '\n' + zonder_tabelregels(achtertekst, rijen).strip()
+        achter_zonder_tabel = zonder_tabelregels(achtertekst, rijen)
+        gecombineerd = voortekst.strip() + '\n' + achter_zonder_tabel.strip()
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=[_KAART_PROMPT + '\n\n' + kaart_invoer(voortekst, achtertekst, rijen, voor, achter)],
+            contents=[_KAART_PROMPT + '\n\n'
+                      + kaart_invoer(voortekst, achter_zonder_tabel, rijen, voor, achter)],
             config=config)
         waar = f"Pagina's {voor}+{achter}"
         if _warn_if_truncated(response):

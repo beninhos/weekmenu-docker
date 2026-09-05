@@ -7,8 +7,7 @@ wél een melding met paginanummers: een half recept is erger dan geen.
 """
 import re
 
-from weekmenu.services.kaartsignaturen import (bereidingstijd, is_benodigdheden_kop,
-                                               is_voorkant)
+from weekmenu.services.kaartsignaturen import is_benodigdheden_kop
 from weekmenu.services.tabel import tabelrijen
 from weekmenu.services.units import _norm_unit, _parse_amount
 
@@ -71,12 +70,17 @@ def zonder_tabelregels(achtertekst, rijen):
                      if re.sub(r'\s+', ' ', regel).strip().lower() not in cellen)
 
 
-def kaart_invoer(voortekst, achtertekst, rijen, voor, achter):
-    """De tekst die het model krijgt: voorkant, schone tabelrijen, achterkant."""
+def kaart_invoer(voortekst, achtertekst_zonder_tabel, rijen, voor, achter):
+    """De tekst die het model krijgt: voorkant, schone tabelrijen, achterkant.
+
+    De achterkant komt er al zonder tabelregels in (`zonder_tabelregels`): de
+    aanroeper heeft diezelfde tekst ook nodig om de bereiding uit te knippen,
+    en tweemaal strippen levert alleen een tweede kans op verschil op.
+    """
     tabel = '\n'.join(f"{r['naam']} | {r['hoeveelheid']}" for r in rijen)
     return (f'--- Voorkant (pagina {voor}) ---\n{voortekst.strip()}\n\n'
             f'--- Ingrediënten (tabel) ---\n{tabel}\n\n'
-            f'--- Achterkant (pagina {achter}) ---\n{zonder_tabelregels(achtertekst, rijen).strip()}')
+            f'--- Achterkant (pagina {achter}) ---\n{achtertekst_zonder_tabel.strip()}')
 
 
 def benodigdheden(tekst):

@@ -98,11 +98,19 @@ def test_zonder_tabelregels_haalt_alleen_celregels_weg():
 
 
 def test_kaart_invoer_heeft_drie_blokken_in_deze_volgorde():
-    uit = kaart_invoer('HELLO FRESH\nPrei-ui', ACHTER, RIJEN, 1, 2)
+    uit = kaart_invoer('HELLO FRESH\nPrei-ui', zonder_tabelregels(ACHTER, RIJEN), RIJEN, 1, 2)
     assert uit.index('--- Voorkant (pagina 1) ---') < uit.index('--- Ingrediënten (tabel) ---') \
         < uit.index('--- Achterkant (pagina 2) ---')
     assert 'Ui | 1 st\nPrei | 2 st\nOlijfolie | 1 el' in uit
     assert 'Snijd de ui' in uit
+    assert '\n1 st\n' not in uit          # de aanroeper heeft de tabelregels er al uit
+
+
+def test_kaart_invoer_strijkt_de_achterkant_niet_zelf_glad():
+    # De aanroeper strijkt de tabelregels eruit (en gebruikt diezelfde tekst
+    # ook voor de ankerknip); kaart_invoer zet alleen de blokken op een rij.
+    uit = kaart_invoer('HELLO FRESH', ACHTER, RIJEN, 1, 2)
+    assert '\n1 st\n' in uit
 
 
 def test_benodigdheden_onder_de_kop_tot_de_regel_zonder_komma_aan_het_eind():

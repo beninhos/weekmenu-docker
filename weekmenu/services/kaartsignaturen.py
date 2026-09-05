@@ -46,16 +46,17 @@ def is_benodigdheden_kop(regel):
 def bereidingstijd(tekst):
     """Minuten uit 'Bereidingstijd: 40 min.', of None.
 
-    'Bereidingstijd' gaat voor de kaartvarianten in 'bereidingstijd_alt'
-    ('Totale tijd: N min.' en een kale 'N min. (totaal voor … personen)'),
-    zodat 'Bereidingstijd: 40 min. Oventijd: 15 min.' bij 40 blijft.
+    Eerst het hoofdpatroon van élk merk, pas daarna de kaartvarianten in
+    'bereidingstijd_alt' ('Totale tijd: N min.' en een kale 'N min. (totaal
+    voor … personen)'). Zo blijft 'Bereidingstijd: 40 min. Oventijd: 15 min.'
+    bij 40, en wint de losse terugvalvorm van het ene merk nooit van de exacte
+    tijd van het andere — merkvolgorde in MERKEN mag de uitkomst niet bepalen.
     """
-    for m in MERKEN:
-        treffer = m['bereidingstijd'].search(tekst or '')
-        if treffer:
-            return int(treffer.group(1))
-        for patroon in m.get('bereidingstijd_alt', []):
-            treffer = patroon.search(tekst or '')
+    tekst = tekst or ''
+    for patronen in ([m['bereidingstijd'] for m in MERKEN],
+                     [p for m in MERKEN for p in m.get('bereidingstijd_alt', [])]):
+        for patroon in patronen:
+            treffer = patroon.search(tekst)
             if treffer:
                 return int(treffer.group(1))
     return None
