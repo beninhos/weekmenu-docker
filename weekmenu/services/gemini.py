@@ -97,6 +97,25 @@ def _as_number(value):
     return _parse_amount(str(value))
 
 
+def _prep_minuten(waarde):
+    """De bereidingstijd van het model als positief heel aantal minuten, of None.
+
+    De prompt vraagt een int of null, maar het model schrijft hem ook wel eens
+    als tekst ('45'). Alles wat geen positief geheel getal oplevert wordt None,
+    net zoals het formulierveld dat doet (routes/recipes.py::_minuten): een 0
+    of een tekstuele schatting is geen bereidingstijd om voor te vullen.
+    """
+    if isinstance(waarde, bool) or waarde is None:
+        return None
+    if isinstance(waarde, (int, float)):
+        minuten = int(waarde)
+    elif str(waarde).strip().isdigit():
+        minuten = int(str(waarde).strip())
+    else:
+        return None
+    return minuten if minuten > 0 else None
+
+
 def _build_gemini_ingredients(raw_list):
     """Convert structured LLM ingredient dicts to app format with category."""
     ingredients = []
@@ -342,6 +361,7 @@ def _llm_fallback_from_html(url, html):
             'status': 'success',
             'name': result.get('title', ''),
             'serves': result.get('yields'),
+            'prep_time': _prep_minuten(result.get('prep_time')),
             'url': url,
             'instructions': result.get('instructions', ''),
             'ingredients': _build_gemini_ingredients(result.get('ingredients', [])),
@@ -496,6 +516,7 @@ def recipe_from_photos(photos):
             'status': 'success',
             'name': result.get('title', ''),
             'serves': result.get('yields'),
+            'prep_time': _prep_minuten(result.get('prep_time')),
             'url': None,
             'instructions': result.get('instructions', ''),
             'ingredients': _build_gemini_ingredients(result.get('ingredients', [])),

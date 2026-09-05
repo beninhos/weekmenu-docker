@@ -1,5 +1,6 @@
 """Bereidingstijd bestaat als veld, en de kaartmodus heeft zijn kolommen."""
 import json
+from unittest.mock import patch
 
 from sqlalchemy import create_engine, text
 
@@ -87,3 +88,54 @@ def test_serialize_draft_en_recipe_geven_prep_time(app, client):
     assert serialize_draft(d)['prep_time'] == 15
     assert serialize_draft(d)['back_image_path'] == 'static/uploads/b.jpg'
     assert serialize_recipe(r)['prep_time'] == 20
+
+
+# ── De bereidingstijd die het model bij foto- en linkimport teruggeeft ──
+# Hij stond wél in de prompt maar viel uit het antwoord: het formulier kreeg
+# hem nooit te zien, dus de prefill-regels in new_recipe.html waren dood.
+
+def _antwoord(prep_time):
+    return json.dumps({'title': 'Soep', 'yields': 4, 'prep_time': prep_time,
+                       'ingredients': [{'name': 'ui', 'amount': 1, 'unit': 'stuks'}],
+                       'instructions': 'Stap 1.'})
+
+
+class _Foto:
+    filename = 'a.jpg'
+    content_type = 'image/jpeg'
+
+    def read(self):
+        return b'\xff\xd8\xff'
+
+
+def _met_gemini(tekst):
+    """Patch de Gemini-aanroep; geeft de contextmanagers voor één antwoord."""
+    class _Antwoord:
+        text = tekst
+    return patch('weekmenu.services.gemini._get_gemini_api_key', return_value='x'), \
+        patch('google.genai.Client', **{'return_value.models.generate_content.return_value': _Antwoord()})
+
+
+def test_linkimport_geeft_de_bereidingstijd_van_het_model_terug(app):
+    from weekmenu.services.gemini import _llm_fallback_from_html
+    sleutel, client_patch = _met_gemini(_antwoord(30))
+    with sleutel, client_patch:
+        data, status = _llm_fallback_from_html('https://voorbeeld.nl/soep', '<html>soep</html>')
+    assert status == 200 and data['prep_time'] == 30
+
+
+def test_fotoimport_geeft_de_bereidingstijd_van_het_model_terug(app):
+    from weekmenu.services.gemini import recipe_from_photos
+    sleutel, client_patch = _met_gemini(_antwoord('45'))   # het model schrijft hem soms als tekst
+    with sleutel, client_patch:
+        data, status = recipe_from_photos([_Foto()])
+    assert status == 200 and data['prep_time'] == 45
+
+
+def test_onbruikbare_bereidingstijd_van_het_model_wordt_none(app):
+    from weekmenu.services.gemini import _llm_fallback_from_html
+    for waarde in (None, 'ongeveer een uur', 0, -5, True):
+        sleutel, client_patch = _met_gemini(_antwoord(waarde))
+        with sleutel, client_patch:
+            data, _status = _llm_fallback_from_html('https://voorbeeld.nl/soep', '<html>soep</html>')
+        assert data['prep_time'] is None, waarde
