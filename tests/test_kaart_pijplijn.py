@@ -6,6 +6,88 @@ from unittest.mock import patch
 from weekmenu.extensions import db
 from weekmenu.models import DumpJob, RecipeDraft
 
+VOOR = 'HELLO Patatje oorlog\nFRESH\nBereidingstijd:40 min. (totaal voor 2 personen)\n'
+ACHTER = ('Benodigdheden\nPan met deksel\nIngrediënten voor 2 personen\nUi\n1 st\nPrei\n2 st\nOlijfolie\n1 el\n'
+          'Snijd de ui in ringen.\nBak de prei 5 minuten.\n')
+RIJEN = [{'naam': 'Ui', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 1},
+         {'naam': 'Prei', 'hoeveelheid': '2 st', 'blok': 'kaart', 'y': 2},
+         {'naam': 'Olijfolie', 'hoeveelheid': '1 el', 'blok': 'voorraad', 'y': 3}]
+ANTWOORD = json.dumps([{'title': 'Patatje oorlog', 'yields': 2,
+                        'ingredients': [{'name': 'ui', 'amount': '1', 'unit': 'stuks'},
+                                        {'name': 'prei', 'amount': '3', 'unit': 'stuks'},
+                                        {'name': 'olijfolie', 'amount': '1', 'unit': 'el'}],
+                        'steps': [{'start': 'Snijd de ui', 'end': '5 minuten.'}]}])
+
+
+class _Antwoord:
+    text = ANTWOORD
+    candidates = []
+
+
+def _draai(tmp_path, mode, texts, annotaties, tabel):
+    job = DumpJob(id=f'job-{mode}', status='processing', mode=mode)
+    db.session.add(job)
+    db.session.commit()
+    jobmap = tmp_path / 'job'
+    jobmap.mkdir()
+    twijfels = [[] for _ in texts]
+    with patch('weekmenu.services.dump._get_gemini_api_key', return_value='x'), \
+         patch('weekmenu.services.dump.lees_paginas_met_annotaties', return_value=(texts, twijfels, annotaties)), \
+         patch('weekmenu.services.dump.lees_paginas', return_value=(texts, twijfels)), \
+         patch('weekmenu.services.kaart.tabelrijen', side_effect=tabel), \
+         patch('weekmenu.services.dump._pdf_page_jpegs', return_value=[b'a'] * len(texts)), \
+         patch('weekmenu.services.dump._job_dir', return_value=str(jobmap)), \
+         patch('weekmenu.services.dump._resolve_image', side_effect=lambda j, p, m: f'static/uploads/p{p}.jpg'), \
+         patch('google.genai.Client') as client:
+        (jobmap / '000.pdf').write_bytes(b'%PDF-')
+        client.return_value.models.generate_content.return_value = _Antwoord()
+        from weekmenu.services.dump import _process
+        _process(job)
+        db.session.commit()
+        return job, client
+
+
+def test_kaartmodus_maakt_een_concept_van_twee_paginas(app, tmp_path):
+    job, client = _draai(tmp_path, 'kaart', [VOOR, ACHTER], [{'p': 1}, {'p': 2}],
+                         lambda ann, personen=None: (RIJEN, None) if ann['p'] == 2 else (None, 'geen tabel'))
+    drafts = RecipeDraft.query.filter_by(job_id=job.id).all()
+    assert len(drafts) == 1
+    d = drafts[0]
+    assert (d.name, d.serves, d.prep_time, d.source_page) == ('Patatje oorlog', 2, 40, 1)
+    assert d.image_path == 'static/uploads/p1.jpg' and d.back_image_path == 'static/uploads/p2.jpg'
+    assert d.instructions.startswith('Benodigdheden: Pan met deksel\n')
+    assert 'Snijd de ui in ringen.' in d.instructions and 'Bak de prei 5 minuten.' in d.instructions
+    ing = json.loads(d.ingredients_json)
+    assert ing[1]['check'] == "tabel zegt '2 st'"
+    assert ing[2]['kaart_voorraad'] is True
+    assert client.return_value.models.generate_content.call_count == 1
+    prompt = client.return_value.models.generate_content.call_args.kwargs['contents'][0]
+    assert '--- Ingrediënten (tabel) ---\nUi | 1 st\nPrei | 2 st\nOlijfolie | 1 el' in prompt
+    assert job.warning is None
+
+
+def test_slecht_paar_wordt_gemeld_en_de_rest_gaat_door(app, tmp_path):
+    job, client = _draai(tmp_path, 'kaart', [VOOR, ACHTER, VOOR, VOOR], [{'p': i} for i in (1, 2, 3, 4)],
+                         lambda ann, personen=None: (RIJEN, None) if ann['p'] == 2 else (None, 'geen tabel'))
+    assert RecipeDraft.query.filter_by(job_id=job.id).count() == 1
+    assert "Pagina's 3 en 4 zijn niet als één kaart te lezen" in job.warning
+    assert '4 pagina' not in job.warning   # geen 'minder recepten dan pagina's'-melding: paren tellen
+
+
+def test_boekmodus_waarschuwt_bij_kaarten(app, tmp_path):
+    job, _ = _draai(tmp_path, 'boek', [VOOR, ACHTER, VOOR, ACHTER], [{}] * 4, lambda ann, personen=None: (None, 'geen tabel'))
+    assert "lijken receptkaarten" in job.warning and "Pagina's 1, 3" in job.warning
+
+
+def test_serialize_draft_zet_kaart_voorraad_om_in_pantry(app, client):
+    from weekmenu.routes.dump import serialize_draft
+    db.session.add(DumpJob(id='s', status='done'))
+    d = RecipeDraft(job_id='s', name='K', ingredients_json=json.dumps(
+        [{'name': 'olijfolie', 'amount': 1, 'unit': 'el', 'kaart_voorraad': True}]))
+    db.session.add(d)
+    db.session.commit()
+    assert serialize_draft(d)['ingredients'][0]['in_pantry'] is True
+
 
 def _upload(client, mode=None):
     data = {'files': (io.BytesIO(b'\xff\xd8\xff'), 'a.jpg', 'image/jpeg')}

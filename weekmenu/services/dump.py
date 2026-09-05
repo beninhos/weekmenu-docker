@@ -13,7 +13,11 @@ from weekmenu.services.gemini import (
     _get_gemini_api_key, _sanitize_json, _build_gemini_ingredients, _UNITS_STR,
 )
 from weekmenu.services.ankers import knip_stappen
-from weekmenu.services.ocr import _clean_ocr_text, lees_paginas, pages_as_labelled_text
+from weekmenu.services.kaart import (benodigdheden, controleer_tegen_tabel, kaart_invoer,
+                                     paren, zonder_tabelregels)
+from weekmenu.services.kaartsignaturen import bereidingstijd, is_voorkant
+from weekmenu.services.ocr import (_clean_ocr_text, lees_paginas, lees_paginas_met_annotaties,
+                                   pages_as_labelled_text)
 
 _ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/avif'}
 
@@ -376,7 +380,11 @@ def _process(job):
             page_no += 1
             page_map[page_no] = (path, None)
 
-    texts, twijfels = lees_paginas(images)
+    if job.mode == 'kaart':
+        texts, twijfels, annotaties = lees_paginas_met_annotaties(images)
+    else:
+        texts, twijfels = lees_paginas(images)
+        annotaties = None
     if not any(t.strip() for t in texts):
         raise ValueError('Geen tekst gevonden op de aangeleverde pagina\'s. '
                          'Is de scan scherp genoeg?')
@@ -397,19 +405,31 @@ def _process(job):
     # bij 'kipfilets van 200 g elk' vielen willekeurig weg. Met temperatuur 0
     # bleef de breukafhandeling over drie aanroepen gelijk.
     client = _genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=[_BATCH_PROMPT + '\n\n' + pages_as_labelled_text(texts)],
-        config=_gtypes.GenerateContentConfig(temperature=0))
-    if _warn_if_truncated(response):
-        meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
-                         'ontbreken. Probeer het opnieuw of splits de batch.')
-    recipes = parse_batch_response(response.text, [_clean_ocr_text(t) for t in texts])
+    config = _gtypes.GenerateContentConfig(temperature=0)
+    if job.mode == 'kaart':
+        recipes, kaartmeldingen, verwacht = _verwerk_kaarten(texts, annotaties, client, config)
+        meldingen += kaartmeldingen
+    else:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[_BATCH_PROMPT + '\n\n' + pages_as_labelled_text(texts)],
+            config=config)
+        if _warn_if_truncated(response):
+            meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
+                             'ontbreken. Probeer het opnieuw of splits de batch.')
+        recipes = parse_batch_response(response.text, [_clean_ocr_text(t) for t in texts])
+        verwacht = len(images) - len(zonder_tekst)
+        # Vangnet: kaarten in boekmodus leveren twee halve recepten per kaart op.
+        kaarten = [n for n, t in enumerate(texts, 1) if is_voorkant(t)]
+        if len(kaarten) >= 2:
+            meldingen.append("Pagina's {} lijken receptkaarten. Kies 'receptkaarten' als soort "
+                             "scan en probeer opnieuw.".format(', '.join(map(str, kaarten))))
     _markeer_twijfels(recipes, twijfels)
     for r in recipes:
         for m in r.get('meldingen') or []:
-            meldingen.append(f"Pagina {r['photo_page']} ({r['name']}): {m}. "
-                             "Controleer de bereiding tegen de foto.")
+            waar = f"Pagina {r['photo_page']}" if not r.get('back_page') \
+                else f"Pagina's {r['photo_page']}+{r['back_page']}"
+            meldingen.append(f"{waar} ({r['name']}): {m}. Controleer de bereiding tegen de foto.")
 
     al_afgehandeld = _accepted_pages(job.id)
     overgeslagen = 0
@@ -423,19 +443,62 @@ def _process(job):
         db.session.add(RecipeDraft(
             job_id=job.id, name=r['name'],
             serves=r['serves'],
+            prep_time=r.get('prep_time'),
             instructions=r['instructions'],
             ingredients_json=json.dumps(r['ingredients']),
-            image_path=image_path, source_page=r['photo_page'], status='pending',
+            image_path=image_path,
+            back_image_path=(_resolve_image(job.id, r['back_page'], page_map)
+                             if r.get('back_page') else None),
+            source_page=r['photo_page'], status='pending',
         ))
 
     # Twee pagina's kunnen samen één recept zijn, dus minder recepten dan
     # pagina's is niet per se fout — maar het is wel het patroon waarmee een
     # halve batch er compleet uitziet, dus de gebruiker krijgt het te zien.
     gemaakt = len(recipes) - overgeslagen
-    if gemaakt < len(images) - len(zonder_tekst):
+    if gemaakt < verwacht:
         meldingen.append(f'{len(images)} pagina\'s aangeleverd, {gemaakt} recept(en) '
                          f'herkend. Controleer of er niets ontbreekt.')
     job.warning = ' '.join(meldingen) or None
+
+
+def _verwerk_kaarten(texts, annotaties, client, config):
+    """Kaartmodus: per paar één modelaanroep. Geeft (recipes, meldingen, aantal paren).
+
+    Elk recept krijgt 'photo_page' (voorkant), 'back_page' (achterkant),
+    'prep_time' uit de merksignatuur, benodigdheden vooraan in de bereiding,
+    en de tabelcontrole (check/kaart_voorraad op de ingrediënten).
+    """
+    paren_lijst, meldingen = paren(texts, annotaties)
+    recipes = []
+    for paar in paren_lijst:
+        voor, achter, rijen = paar['voor'], paar['achter'], paar['rijen']
+        voortekst = _clean_ocr_text(texts[voor - 1])
+        achtertekst = _clean_ocr_text(texts[achter - 1])
+        gecombineerd = voortekst.strip() + '\n' + zonder_tabelregels(achtertekst, rijen).strip()
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[_KAART_PROMPT + '\n\n' + kaart_invoer(voortekst, achtertekst, rijen, voor, achter)],
+            config=config)
+        waar = f"Pagina's {voor}+{achter}"
+        if _warn_if_truncated(response):
+            meldingen.append(f'{waar}: het antwoord van Gemini was afgekapt. Probeer het opnieuw.')
+        gevonden = parse_batch_response(response.text, [gecombineerd], standaard_pagina=1)
+        if not gevonden:
+            meldingen.append(f'{waar}: het model gaf geen recept terug.')
+            continue
+        if len(gevonden) > 1:
+            meldingen.append(f'{waar}: het model gaf {len(gevonden)} recepten voor één kaart; '
+                             f'alleen het eerste is bewaard.')
+        r = gevonden[0]
+        r['photo_page'], r['back_page'] = voor, achter
+        r['prep_time'] = bereidingstijd(voortekst) or bereidingstijd(achtertekst)
+        nodig = benodigdheden(achtertekst)
+        if nodig:
+            r['instructions'] = f'Benodigdheden: {nodig}\n' + (r['instructions'] or '')
+        meldingen += controleer_tegen_tabel(r, rijen, f'{voor}+{achter}')
+        recipes.append(r)
+    return recipes, meldingen, len(paren_lijst)
 
 
 def _markeer_twijfels(recipes, twijfels):

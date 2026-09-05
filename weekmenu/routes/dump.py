@@ -14,6 +14,12 @@ bp = Blueprint('dump', __name__)
 
 
 def serialize_draft(d):
+    ingredienten = annotate_pantry_status(json.loads(d.ingredients_json or '[]'))
+    for i in ingredienten:
+        # De kaart zegt 'zelf toevoegen': vinkje alvast aan, tenzij de
+        # voorraad het al wist.
+        if i.get('kaart_voorraad') and not i.get('in_pantry'):
+            i['in_pantry'] = True
     return {
         'id': d.id,
         'job_id': d.job_id,
@@ -21,7 +27,7 @@ def serialize_draft(d):
         'serves': d.serves,
         'prep_time': d.prep_time,
         'instructions': d.instructions,
-        'ingredients': annotate_pantry_status(json.loads(d.ingredients_json or '[]')),
+        'ingredients': ingredienten,
         'image_path': d.image_path,
         'original_image_path': d.original_image_path,
         'back_image_path': d.back_image_path,
