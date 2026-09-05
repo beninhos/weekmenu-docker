@@ -3,6 +3,8 @@
 Gemeten op 22 kookboekpagina's: het breukteken scoort 0,19–0,39, een echt cijfer
 minstens 0,81, en de twee missers ('2 theelepel', '12 komkommer') 0,49 en 0,31.
 """
+from unittest.mock import patch
+
 from weekmenu.services.dump import _markeer_twijfels
 from weekmenu.services.ocr import onzekere_hoeveelheden
 
@@ -139,3 +141,17 @@ def test_bovenrand_van_de_drempel():
         [('2', [0.60]), ('limoenen', [0.95] * 8)],
     ])
     assert onzekere_hoeveelheden(ann) == []
+
+
+def test_lees_paginas_met_annotaties_houdt_de_annotatie_vast(app):
+    from weekmenu.services.ocr import lees_paginas, lees_paginas_met_annotaties
+    ann = _annotatie([[('2', [0.49]), ('theelepel', [0.98] * 9)]])
+    ann['text'] = '2 theelepel'
+    responses = [{'fullTextAnnotation': ann}, {'error': {'message': 'kapot'}}]
+    with patch('weekmenu.services.ocr._get_vision_api_key', return_value='x'), \
+         patch('weekmenu.services.ocr._annotate', return_value=responses):
+        texts, twijfels, annotaties = lees_paginas_met_annotaties([b'a', b'b'])
+        assert texts == ['2 theelepel', '']
+        assert twijfels[0][0]['cijfer'] == '2' and twijfels[1] == []
+        assert annotaties[0] is ann and annotaties[1] == {}
+        assert lees_paginas([b'a', b'b']) == (texts, twijfels)

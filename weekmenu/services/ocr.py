@@ -139,7 +139,16 @@ def ocr_pages(images, language='nl'):
 
 
 def lees_paginas(images, language='nl'):
-    """Lees JPEG-pagina's uit; geeft (teksten, twijfels) terug, beide per pagina.
+    """Lees JPEG-pagina's uit; geeft (teksten, twijfels) terug, beide per pagina."""
+    texts, twijfels, _ = lees_paginas_met_annotaties(images, language)
+    return texts, twijfels
+
+
+def lees_paginas_met_annotaties(images, language='nl'):
+    """Als lees_paginas, plus de fullTextAnnotation per pagina ({} bij een fout).
+
+    De kaartmodus leest de ingrediëntentabel uit de woordcoördinaten, en die
+    zitten alleen in de annotatie. Boekmodus gooit hem weg zoals altijd.
 
     Een pagina die niets oplevert wordt een lege string in plaats van dat hij
     wegvalt: de paginanummering moet blijven kloppen met de aanroeper, want die
@@ -152,7 +161,7 @@ def lees_paginas(images, language='nl'):
     if not api_key:
         raise ValueError('Cloud Vision API key niet geconfigureerd')
 
-    texts, twijfels = [], []
+    texts, twijfels, annotaties = [], [], []
     for start in range(0, len(images), _MAX_PER_REQUEST):
         responses = _annotate(api_key, images[start:start + _MAX_PER_REQUEST], language)
         for offset in range(len(images[start:start + _MAX_PER_REQUEST])):
@@ -163,16 +172,18 @@ def lees_paginas(images, language='nl'):
                     start + offset + 1, item['error'].get('message', '')[:120])
                 texts.append('')
                 twijfels.append([])
+                annotaties.append({})
                 continue
             annotation = item.get('fullTextAnnotation') or {}
             texts.append(annotation.get('text', ''))
             twijfels.append(onzekere_hoeveelheden(annotation))
+            annotaties.append(annotation)
 
     leeg = sum(1 for t in texts if not t.strip())
     if leeg:
         current_app.logger.warning('Vision: %d van %d pagina\'s leverden geen tekst op',
                                    leeg, len(texts))
-    return texts, twijfels
+    return texts, twijfels, annotaties
 
 
 # Onder deze zekerheid is een cijfer aan het begin van een ingrediëntregel
