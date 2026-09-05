@@ -113,9 +113,25 @@ def test_kaart_invoer_strijkt_de_achterkant_niet_zelf_glad():
     assert '\n1 st\n' in uit
 
 
-def test_benodigdheden_onder_de_kop_tot_de_regel_zonder_komma_aan_het_eind():
+def test_benodigdheden_tot_de_tabelkop_een_voorraadkop_of_een_lege_regel():
     assert benodigdheden(ACHTER) == 'Pan met deksel, koekenpan, steelpan, saladekom'
+    assert benodigdheden('Benodigdheden\nKoekenpan, hapjespan\n\nSnijd de ui\n') == 'Koekenpan, hapjespan'
+    assert benodigdheden('Benodigdheden\nKoekenpan\nZelf toevoegen\nOlijfolie\n') == 'Koekenpan'
     assert benodigdheden('Snijd de ui\n') is None
+
+
+def test_benodigdheden_loopt_over_een_regel_zonder_komma_door():
+    # Kaart 4 uit de meting: de opsomming breekt midden in 'hapjespan met
+    # deksel' af. De oude komma-regel stopte daar en liet het laatste stuk
+    # gereedschap vallen.
+    tekst = ('Benodigdheden\nKoekenpan, grote pan met deksel, hapjespan met\ndeksel\n'
+             'Ingrediënten voor 2 personen\n')
+    assert benodigdheden(tekst) == 'Koekenpan, grote pan met deksel, hapjespan met deksel'
+
+
+def test_benodigdheden_neemt_hooguit_vier_regels_mee():
+    tekst = 'Benodigdheden\n' + ''.join(f'regel {i}\n' for i in range(1, 7))
+    assert benodigdheden(tekst) == 'regel 1 regel 2 regel 3 regel 4'
 
 
 def _recept(*ingredienten):

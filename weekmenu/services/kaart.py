@@ -7,7 +7,7 @@ wél een melding met paginanummers: een half recept is erger dan geen.
 """
 import re
 
-from weekmenu.services.kaartsignaturen import is_benodigdheden_kop
+from weekmenu.services.kaartsignaturen import is_benodigdheden_kop, is_voorraadkop
 from weekmenu.services.tabel import tabelrijen
 from weekmenu.services.units import _norm_unit, _parse_amount
 
@@ -83,20 +83,29 @@ def kaart_invoer(voortekst, achtertekst_zonder_tabel, rijen, voor, achter):
             f'--- Achterkant (pagina {achter}) ---\n{achtertekst_zonder_tabel.strip()}')
 
 
+# Zoveel regels staan er hooguit onder de kop 'Benodigdheden'; wat daarna komt
+# is geen gereedschap meer.
+_BENODIGDHEDEN_REGELS = 4
+
+
 def benodigdheden(tekst):
-    """De regels onder de kop 'Benodigdheden', letterlijk, tot een regel die
-    niet op een komma eindigt (hooguit vier regels). None zonder kop."""
+    """De regels onder de kop 'Benodigdheden', letterlijk, tot de tabelkop
+    ('Ingrediënten voor 2 personen'), een voorraadkop of een lege regel, en
+    hooguit vier regels. None zonder kop.
+
+    Er wordt niet meer gestopt op een regel die niet op een komma eindigt:
+    op kaart 4 breekt de opsomming midden in een stuk gereedschap af
+    ('... hapjespan met' / 'deksel'), en dan viel dat laatste woord weg.
+    """
     regels = (tekst or '').split('\n')
     for i, regel in enumerate(regels):
         if is_benodigdheden_kop(regel):
             uit = []
-            for volgende in regels[i + 1:i + 5]:
+            for volgende in regels[i + 1:i + 1 + _BENODIGDHEDEN_REGELS]:
                 volgende = volgende.strip()
-                if not volgende:
+                if not volgende or 'personen' in volgende.lower() or is_voorraadkop(volgende):
                     break
                 uit.append(volgende)
-                if not volgende.endswith(','):
-                    break
             return ' '.join(uit) or None
     return None
 
