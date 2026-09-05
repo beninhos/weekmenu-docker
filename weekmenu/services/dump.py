@@ -503,8 +503,12 @@ def _verwerk_kaarten(texts, annotaties, client, config):
         r['photo_page'], r['back_page'] = voor, achter
         r['prep_time'] = bereidingstijd(voortekst) or bereidingstijd(achtertekst)
         nodig = benodigdheden(achtertekst)
-        if nodig:
-            r['instructions'] = f'Benodigdheden: {nodig}\n' + (r['instructions'] or '')
+        # Alleen vooraan een bestaande bereiding: zonder deze voorwaarde maakt
+        # de kop van een leeg concept een niet-leeg concept, en dan toont de
+        # nakijkkaart geen 'bereiding ontbreekt' meer en laat accepteren het
+        # er stil doorheen (_bereiding_ontbreekt in routes/dump.py).
+        if nodig and (r['instructions'] or '').strip():
+            r['instructions'] = f'Benodigdheden: {nodig}\n' + r['instructions']
         meldingen += controleer_tegen_tabel(r, rijen, f'{voor}+{achter}')
         recipes.append(r)
     return recipes, meldingen, len(paren_lijst)

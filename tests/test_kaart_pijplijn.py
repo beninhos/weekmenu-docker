@@ -19,8 +19,21 @@ ANTWOORD = json.dumps([{'title': 'Patatje oorlog', 'yields': 2,
                         'steps': [{'start': 'Snijd de ui', 'end': '5 minuten.'}]}])
 
 
+ANTWOORD_ZONDER_ANKER = json.dumps([{'title': 'Patatje oorlog', 'yields': 2,
+                                     'ingredients': [{'name': 'ui', 'amount': '1', 'unit': 'stuks'},
+                                                     {'name': 'prei', 'amount': '2', 'unit': 'stuks'},
+                                                     {'name': 'olijfolie', 'amount': '1', 'unit': 'el'}],
+                                     'steps': [{'start': 'Verhit de olie in', 'end': 'gaar is.'}]}])
+
+
 class _Antwoord:
     text = ANTWOORD
+    candidates = []
+
+
+class _ZonderAnker:
+    """Ankers die nergens in de kaarttekst staan: er valt niets te knippen."""
+    text = ANTWOORD_ZONDER_ANKER
     candidates = []
 
 
@@ -74,6 +87,18 @@ def test_kaartmodus_maakt_een_concept_van_twee_paginas(app, tmp_path):
     prompt = client.return_value.models.generate_content.call_args.kwargs['contents'][0]
     assert '--- Ingrediënten (tabel) ---\nUi | 1 st\nPrei | 2 st\nOlijfolie | 1 el' in prompt
     assert job.warning is None
+
+
+def test_zonder_geknipte_bereiding_blijft_de_bereiding_leeg(app, tmp_path):
+    # Vindt de ankerknip niets, dan is er geen bereiding. De benodigdheden
+    # mogen er dan niet alsnog een niet-lege tekst van maken: de nakijkkaart
+    # toont geen rode 'bereiding ontbreekt' meer en accepteren glipt erdoor.
+    job, _ = _draai(tmp_path, 'kaart', [VOOR, ACHTER], [{'p': 1}, {'p': 2}],
+                    lambda ann, personen=None: (RIJEN, None) if ann['p'] == 2 else (None, 'geen tabel'),
+                    antwoorden=[_ZonderAnker()])
+    d = RecipeDraft.query.filter_by(job_id=job.id).first()
+    assert not (d.instructions or '').strip()
+    assert 'geen enkel anker gevonden' in job.warning
 
 
 def test_tabelcheck_en_twijfel_worden_beide_bewaard(app, tmp_path):
