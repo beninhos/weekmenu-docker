@@ -210,8 +210,13 @@ def _job_dir(job_id):
     return os.path.join(current_app.static_folder, 'uploads', 'dump', job_id)
 
 
-def start_dump_job(files):
-    """Sla uploads op, maak een DumpJob en start de verwerkingsthread. Returns job_id."""
+def start_dump_job(files, mode='boek'):
+    """Sla uploads op, maak een DumpJob en start de verwerkingsthread. Returns job_id.
+
+    `mode` is 'boek' (één pagina = één recept) of 'kaart' (twee pagina's =
+    één recept). Alles anders wordt 'boek': liever een batch te veel als
+    kookboek dan een stil verkeerde koppeling.
+    """
     saved = []
     job_id = str(uuid.uuid4())
     job_dir = _job_dir(job_id)
@@ -235,7 +240,7 @@ def start_dump_job(files):
     if not saved:
         raise ValueError("Geen bruikbare bestanden (foto's of PDF) ontvangen")
 
-    job = DumpJob(id=job_id, status='processing')
+    job = DumpJob(id=job_id, status='processing', mode='kaart' if mode == 'kaart' else 'boek')
     db.session.add(job)
     db.session.commit()
     _start_thread(job_id)

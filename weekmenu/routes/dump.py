@@ -52,7 +52,7 @@ def dump_page():
 def dump_upload():
     files = request.files.getlist('files')
     try:
-        job_id = start_dump_job(files)
+        job_id = start_dump_job(files, mode=request.form.get('mode', 'boek'))
     except ValueError as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
     return jsonify({'status': 'success', 'job_id': job_id})
@@ -63,7 +63,7 @@ def dump_share():
     """PWA share-target: bestanden delen vanaf de telefoon."""
     files = request.files.getlist('files')
     try:
-        start_dump_job(files)
+        start_dump_job(files, mode=request.form.get('mode', 'boek'))
     except ValueError:
         pass  # lege share: gewoon naar de pagina
     return redirect(url_for('dump.dump_page'), code=303)

@@ -31,6 +31,11 @@
             <option value="{{ cb.id }}">{{ cb.name }}</option>
             {% endfor %}
         </select>
+        <label class="text-sm ml-4">Soort scan:</label>
+        <select id="scanMode" class="border border-[#E8E4DC] rounded px-2 py-1 text-sm">
+            <option value="boek">kookboekpagina's</option>
+            <option value="kaart">receptkaarten — 2 pagina's per recept</option>
+        </select>
     </div>
 
     <!-- Draft-kaarten -->
@@ -68,6 +73,7 @@ async function startUpload(files) {
     if (!files || files.length === 0) return;
     const fd = new FormData();
     Array.from(files).forEach(f => fd.append('files', f));
+    fd.append('mode', document.getElementById('scanMode').value);
     setJobStatus('Uploaden...', true);
     try {
         const resp = await fetch('/dump/upload', { method: 'POST', body: fd });
