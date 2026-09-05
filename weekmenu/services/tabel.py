@@ -4,23 +4,28 @@ In de platte OCR-tekst valt zo'n tabel uit elkaar: eerst een blok namen, dan
 een blok hoeveelheden, met stapnummers ertussen en de laatste hoeveelheden
 pas na de kop 'Voedingswaarden'. Het model maakte daar op de ene kaart die
 we hadden 14 van de 15 rijen goed van — maar een hoeveelheid aan de
-verkeerde naam is in de tekst niet te zien. Geometrisch is de tabel wél
-intact: naam en hoeveelheid staan op dezelfde hoogte. Deze module leest de
-rijen dus uit de boxen die Vision toch al meegeeft, en geeft het model
-schone regels 'naam | hoeveelheid'.
+verkeerde naam is in de tekst niet te zien. Deze module leest de tabel uit
+de boxen die Vision toch al meegeeft, en geeft het model schone regels
+'naam | hoeveelheid'.
 
-Alles hier is merkloos. Wat de HelloFresh-achterkant leerde en waar de
-stappen hieronder op zijn gebouwd:
+Alles hier is merkloos. Wat twaalf gescande kaarten leerden, en waarom het
+níét 'naam en hoeveelheid op dezelfde hoogte' is:
 
-* De stappen staan in kolommen náást de tabel, op dezelfde hoogte. Een
-  regel is dus geen rij; een regel valt in segmenten (woorden met gewone
-  spatiëring ertussen), en een tabelrij is een segment met letters met
-  direct rechts ervan een segment dat op een hoeveelheid lijkt.
-* Losse stapnummers ('4', '5') staan ook rechts van tekst ('Voedingswaarden').
-  De echte hoeveelheden staan allemaal in één smalle kolom; de kolom met
-  de meeste kandidaten is de hoeveelheidkolom, de rest valt af.
-* Een band mag niet meegroeien met elk woord dat erbij komt: regels op
-  30 px afstand smelten dan samen tot één band over de halve pagina.
+* Een telefoonscan staat een paar graden gedraaid, en sommige kaarten
+  drukken de hoeveelheid al een halve rij lager dan de naam. Samen is dat
+  anderhalve rij: op y uitlijnen koppelt dan álles één rij verkeerd, en
+  niets verraadt dat. De volgorde binnen de tabel klopt wél altijd — de
+  i-de naam hoort bij de i-de hoeveelheid. Dus: kolommen op x, rijen op
+  volgorde, en y alleen als controle (de verschuiving moet per rij
+  ongeveer gelijk zijn).
+* De stappen staan in kolommen náást de tabel, met een eigen regelhoogte.
+  Banden over de hele breedte kruipen daardoor; alles gebeurt binnen de
+  strook van de tabel.
+* Kaarten voor 1–6 personen hebben zes getalkolommen met een kop '1P 2P
+  … 6P', de eenheid in de naam ('Zoete aardappel (g)') en cellen die door
+  de kleine tussenruimte tot één segment plakken. De kolom wordt gekozen
+  op het aantal personen; zonder dat gegeven wordt zo'n tabel geweigerd.
+* Een hoeveelheid is niet altijd een getal: 'naar smaak', 'scheutje'.
 """
 import re
 from statistics import median
@@ -31,22 +36,29 @@ from weekmenu.services.kaartsignaturen import is_voorraadkop
 # is gewone spatiëring tussen woorden.
 _GAT_FACTOR = 1.5
 # Een woord hoort bij een band als het minstens zoveel van zijn eigen hoogte
-# overlapt met de kern van de band. Ruim genomen: op de kaart staat de
-# hoeveelheid ~10 px hoger dan de naam en overlapt maar 5 van 17 px.
+# overlapt met de kern van de band (gemiddeld midden ± halve mediaanhoogte).
 _BAND_FACTOR = 0.2
-# Hoeveelheden die zoveel maal de woordhoogte van de hoeveelheidkolom af
-# staan horen er niet bij (stapnummers, een tweede tabel). Op de kaart staan
-# de echte hoeveelheden binnen 2 woordhoogtes van elkaar, de voedings-
-# waardenkolom staat er 4 vanaf.
+# Hoeveelheden die zoveel maal de woordhoogte van de kolom af staan horen er
+# niet bij (stapnummers, een tweede tabel). Op de kaarten staan de echte
+# binnen 2 woordhoogtes van elkaar, de voedingswaardenkolom er 4 vanaf.
 _KOLOM_FACTOR = 2.5
 # Een hoeveelheidcel is kort ('200 g', 'naar smaak'); een stapregel die
 # toevallig met een getal begint ('180 graden. Schud...') is dat niet.
 _MAX_CELWOORDEN = 3
 _MIN_RIJEN = 3
+# Namen staan hooguit zoveel rijen boven hun hoeveelheid (scheve scan +
+# opmaak: anderhalf gemeten), en de verschuiving mag per rij hooguit zoveel
+# rijen uiteenlopen (een afgebroken naam telt vanaf zijn eerste regel).
+_NAAM_BOVEN = 1.8
+_MAX_SPREIDING = 1.2
+# Meer dan zoveel rijen zonder hoeveelheid ertussen: een andere tabel.
+_MAX_GAT = 3
 _FRACTIES = '½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞'
-# Een rechtercel is een hoeveelheid als hij met een cijfer of breuk begint,
-# of 'naar smaak' is. Meer hoeft niet: de linkercel doet de rest.
 _HOEVEELHEID = re.compile(rf'^(\d|[{_FRACTIES}]|naar smaak)', re.IGNORECASE)
+_GETAL = re.compile(rf'^[\d{_FRACTIES}]')
+_PERSONENKOP = re.compile(r'^(\d+)\s*[pP]\.?$')
+_TABELKOP = re.compile(r'\bpersonen\b|\bpers\.', re.IGNORECASE)
+_EENHEID_IN_NAAM = re.compile(r'\(\s*([^\W\d_]{1,6})\s*\)')
 
 
 def woordboxen(annotation):
@@ -73,6 +85,10 @@ def woordboxen(annotation):
 
 def _mid(w):
     return (w['y0'] + w['y1']) / 2
+
+
+def _xmid(w):
+    return (w['x0'] + w['x1']) / 2
 
 
 def _hoogte(w):
@@ -102,6 +118,27 @@ def _banden(boxen):
     return [sorted(band, key=lambda b: b['x0']) for band in banden]
 
 
+def _ontscheef(boxen):
+    """Draai een scheve scan recht: y wordt y - helling·x.
+
+    De helling komt uit de lange regels zelf (in een gedraaide regel loopt
+    y op met x). Een telefoonscan staat zo 2° gedraaid; over de breedte van
+    een tabel is dat een halve rij, genoeg om woorden van twee regels in één
+    band te krijgen.
+    """
+    hellingen = []
+    for band in _banden(boxen):
+        for seg in _segmenten(band):
+            breedte = seg[-1]['x1'] - seg[0]['x0']
+            if len(seg) >= 4 and breedte >= 12 * _hoogte(seg[0]):
+                hellingen.append((_mid(seg[-1]) - _mid(seg[0])) / breedte)
+    if len(hellingen) < 3:
+        return boxen
+    helling = median(hellingen)
+    return [dict(w, y0=w['y0'] - helling * w['x0'], y1=w['y1'] - helling * w['x0'])
+            for w in boxen]
+
+
 def _segmenten(band):
     """Een band opgedeeld bij elk gat dat groter is dan gewone spatiëring."""
     if not band:
@@ -126,139 +163,232 @@ def _heeft_letters(tekst):
 
 
 def _is_cel(tekst):
+    tekst = _schoon_hoeveelheid(tekst)
     return bool(_HOEVEELHEID.match(tekst)) and len(tekst.split()) <= _MAX_CELWOORDEN
 
 
 def _schoon_naam(naam):
-    """Allergeencodes ('5) 21) 22)') en sterretjes eraf."""
-    naam = re.sub(r'(\s*\d+\s*\))+\s*$', '', naam)
-    naam = naam.replace('*', '').strip()
-    return re.sub(r'\s+', ' ', naam)
+    """Allergeencodes ('5) 21) 22)'), sterretjes, aanhalingstekens en de
+    spaties die de OCR rond een koppelteken zet ('Semi - gedroogde')."""
+    naam = re.sub(r'(\s*\d+\s*\))+', ' ', naam)
+    naam = re.sub(r'[*"]', '', naam)
+    naam = re.sub(r'\s*-\s*', '-', naam)
+    return re.sub(r'\s+', ' ', naam).strip()
 
 
 def _schoon_hoeveelheid(cel):
-    """OCR-artefacten rond een breukteken: '½½⁄2 el' is '½ el'."""
+    """OCR-artefacten: '½½⁄2 el' en '½½ / 2 st' zijn '½ el' en '½ st', '1½2'
+    is '1½', '75g' is '75 g', en '1 stuk ( s )' is '1 stuk(s)'."""
+    cel = re.sub(r'\s*\(\s*([^\W\d_]+)\s*\)', r'(\1)', cel)
     cel = re.sub(rf'([{_FRACTIES}])\1+', r'\1', cel)
-    cel = re.sub(rf'([{_FRACTIES}])[⁄/]?\d(?!\d)', r'\1', cel)
+    cel = re.sub(rf'([{_FRACTIES}])\s*[⁄/]?\s*\d(?!\d)', r'\1', cel)
+    cel = re.sub(r'(\d)([^\W\d_])', r'\1 \2', cel)
     return re.sub(r'\s+', ' ', cel).strip()
 
 
-def _kandidaten(banden):
-    """Per band wat hij voor de tabel kan zijn.
+def _cluster(xs, tolerantie):
+    """Groepen x-posities die hooguit `tolerantie` uit elkaar liggen: [(midden, n)]."""
+    groepen = []
+    for x in sorted(xs):
+        if groepen and x - groepen[-1][-1] <= tolerantie:
+            groepen[-1].append(x)
+        else:
+            groepen.append([x])
+    return [(sum(g) / len(g), len(g)) for g in groepen]
 
-    ('rij', naam, hoeveelheid, x_hoev, rechts, x1_hoev): letters met direct
-    rechts een hoeveelheid; `rechts` zijn de segmenten daar weer rechts van.
-    ('kop', tekst) voor een voorraadkop, ('los', tekst) voor alleen letters,
-    None voor al het andere (een leeg blok, alleen cijfers).
+
+def _kolommen(banden, hoogte, personen):
+    """De x-posities van de hoeveelheidkolommen, en welke gekozen is.
+
+    Geeft (kolom_x, alle_kolommen, reden). Eén kolom: de x waar de meeste
+    getallen staan die rechts van tekst beginnen. Meer kolommen: een kop
+    '1P 2P …' wijst ze aan, en `personen` kiest; zonder kop of zonder
+    passend aantal personen is de reden 'meerdere kolommen'.
     """
-    uit = []
+    getallen = []
     for band in banden:
         segmenten = _segmenten(band)
-        kandidaat = None
-        for links, rechts in zip(segmenten, segmenten[1:]):
-            l_tekst, r_tekst = _tekst(links), _tekst(rechts)
-            if _heeft_letters(l_tekst) and _is_cel(r_tekst):
-                plek = segmenten.index(rechts)
-                kandidaat = ('rij', l_tekst, r_tekst, rechts[0]['x0'],
-                             [_tekst(s) for s in segmenten[plek + 1:]], rechts[-1]['x1'])
-                break
-        if kandidaat is None:
-            eerste = _tekst(segmenten[0])
-            if is_voorraadkop(eerste):
-                kandidaat = ('kop', eerste)
-            elif _heeft_letters(eerste):
-                kandidaat = ('los', eerste)
-        uit.append(kandidaat)
-    return uit
+        if not _heeft_letters(_tekst(segmenten[0])):
+            continue
+        links_x1 = segmenten[0][-1]['x1']
+        for seg in segmenten[1:]:
+            if all(_GETAL.match(w['tekst']) for w in seg) or _is_cel(_tekst(seg)):
+                getallen += [_xmid(w) for w in seg if _GETAL.match(w['tekst']) and w['x0'] > links_x1]
+    groepen = [g for g in _cluster(getallen, 1.5 * hoogte) if g[1] >= _MIN_RIJEN]
+    if not groepen:
+        return None, [], 'geen tabel'
+
+    koppen = {}
+    for band in banden:
+        treffers = [(int(_PERSONENKOP.match(w['tekst']).group(1)), _xmid(w))
+                    for w in band if _PERSONENKOP.match(w['tekst'])]
+        if len(treffers) >= 2:
+            koppen = dict(treffers)
+            break
+    if koppen:
+        if personen in koppen:
+            return koppen[personen], sorted(koppen.values()), None
+        return None, sorted(koppen.values()), 'meerdere kolommen'
+    # Geen kop: de drukste kolom. Of er náást die kolom nog een tweede staat
+    # (2p | 4p zonder kop) blijkt pas per rij van het gekozen blok; de
+    # voedingswaardentabel heeft ook een tweede kolom, maar in andere rijen.
+    beste = max(groepen, key=lambda g: g[1])[0]
+    return beste, [beste], None
 
 
-def _hoeveelheidkolom(kandidaten, hoogte):
-    """De x-positie waar de meeste hoeveelheden staan, of None."""
-    xs = sorted(k[3] for k in kandidaten if k and k[0] == 'rij')
-    if not xs:
-        return None
-    beste, beste_n = None, 0
-    for x in xs:
-        n = sum(1 for y in xs if abs(y - x) <= _KOLOM_FACTOR * hoogte)
-        if n > beste_n:
-            beste, beste_n = x, n
-    return beste
-
-
-def tabelrijen(annotation):
+def tabelrijen(annotation, personen=None):
     """De ingrediëntentabel van een kaart: ([{naam, hoeveelheid, blok, y}], None),
-    of (None, reden) met reden 'geen tabel' of 'meerdere kolommen'.
+    of (None, reden).
 
-    Twee passen. De eerste legt alle woorden in banden en zoekt de
-    hoeveelheidkolom: de x-positie waar de meeste 'letters | getal'-paren
-    staan. Die banden zijn onbetrouwbaar — de stappen staan in kolommen
-    ernaast met een eigen regelhoogte, en hun woorden trekken een band
-    scheef — maar voor een x-positie is dat goed genoeg. De tweede pas
-    legt alleen de strook tot en met de hoeveelheidkolom in banden; daar
-    staan enkel namen en hoeveelheden, dus daar kruipt niets.
-
-    De tabel is dan het langste blok opeenvolgende banden dat uit rijen (in
-    de hoeveelheidkolom), voorraadkoppen en losse tekstregels bestaat;
-    banden zonder letters (stapnummers) breken het niet. Een losse regel
-    wordt alleen bij de volgende naam geplakt als die met een kleine letter
-    begint; anders is het een kop en valt hij weg.
+    Redenen: 'geen tabel', 'meerdere kolommen' (zie _kolommen), 'telling
+    klopt niet: N namen, M hoeveelheden' en 'rijen niet uit te lijnen' (de
+    verschuiving tussen naam en hoeveelheid loopt per rij te veel uiteen —
+    dan is de volgorde niet te vertrouwen).
     """
     boxen = woordboxen(annotation)
     if not boxen:
         return None, 'geen tabel'
     hoogte = median(_hoogte(w) for w in boxen)
-    kandidaten = _kandidaten(_banden(boxen))
-    kolom = _hoeveelheidkolom(kandidaten, hoogte)
-    if kolom is None:
+    boxen = _ontscheef(boxen)
+    banden = _banden(boxen)
+    kolom, kolommen, reden = _kolommen(banden, hoogte, personen)
+    if reden:
+        return None, reden
+    meerkoloms = len(kolommen) > 1
+    afstand = min(b - a for a, b in zip(kolommen, kolommen[1:])) if meerkoloms else None
+    tolerantie = min(_KOLOM_FACTOR * hoogte, 0.45 * afstand) if meerkoloms else _KOLOM_FACTOR * hoogte
+    gebied = (kolommen[0] - 2 * hoogte, kolommen[-1] + 2 * hoogte)
+
+    # Tweede pas: alleen de strook tot en met de cellen. De stapkolommen
+    # ernaast hebben een eigen regelhoogte en trekken anders elke band scheef.
+    rand = kolommen[-1] + 2 * hoogte
+    for band in banden:
+        for seg in _segmenten(band):
+            if abs(seg[0]['x0'] - kolom) <= tolerantie and _is_cel(_tekst(seg)):
+                rand = max(rand, seg[-1]['x1'] + hoogte)
+    banden = _banden([w for w in boxen if w['x1'] <= rand])
+
+    # Rijen: banden met een cel in de gekozen kolom (of een korte cel zonder
+    # getal ergens in het kolomgebied: 'scheutje', 'naar smaak').
+    rijen = []
+    for band in banden:
+        if _is_kopregel(band):
+            continue
+        cel = _cel_in_kolom(band, kolom, tolerantie, gebied, meerkoloms)
+        if cel is not None:
+            rijen.append({'y': band[0]['y0'], 'cel': cel, 'band': band})
+    if len(rijen) < _MIN_RIJEN:
         return None, 'geen tabel'
-    in_kolom = [k for k in kandidaten
-                if k and k[0] == 'rij' and abs(k[3] - kolom) <= _KOLOM_FACTOR * hoogte]
-    # Rechts van de hoeveelheid nóg een hoeveelheid (2p | 4p): niet raden.
-    if sum(1 for k in in_kolom if k[4] and _is_cel(k[4][0])) >= _MIN_RIJEN:
+
+    # Het aaneengesloten blok: een gat van meer dan _MAX_GAT rijen is een
+    # andere tabel (voedingswaarden). Het langste blok wint.
+    pitch = median(b['y'] - a['y'] for a, b in zip(rijen, rijen[1:]))
+    blokken, huidig = [], [rijen[0]]
+    for vorige, rij in zip(rijen, rijen[1:]):
+        if rij['y'] - vorige['y'] > _MAX_GAT * pitch:
+            blokken.append(huidig)
+            huidig = []
+        huidig.append(rij)
+    blokken.append(huidig)
+    rijen = max(blokken, key=len)
+    if len(rijen) < _MIN_RIJEN:
+        return None, 'geen tabel'
+    if not meerkoloms and sum(1 for r in rijen if _tweede_cel(r['band'], kolom, hoogte)) >= _MIN_RIJEN:
         return None, 'meerdere kolommen'
 
-    # Tweede pas: alleen de strook van de tabel.
-    rand = max(k[5] for k in in_kolom) + hoogte
-    banden = _banden([w for w in boxen if w['x1'] <= rand])
-    kandidaten = _kandidaten(banden)
-    genormeerd = []
-    for k, band in zip(kandidaten, banden):
-        if k is None:
+    # Namen: tekst links van de kolommen, van iets boven de eerste rij tot
+    # de laatste rij. Koppen wisselen het blok, voetnoten en de tabelkop
+    # tellen niet mee, een regel met een kleine letter vooraan hoort bij de
+    # naam erboven.
+    y_van = rijen[0]['y'] - _NAAM_BOVEN * pitch
+    y_tot = rijen[-1]['y'] + 0.5 * pitch
+    namen, kop_y = [], None
+    for band in banden:
+        y = band[0]['y0']
+        if not y_van <= y <= y_tot:
             continue
-        if k[0] == 'rij' and abs(k[3] - kolom) > _KOLOM_FACTOR * hoogte:
-            k = ('los', k[1])
-        genormeerd.append((k, band[0]['y0']))
+        if _is_kopregel(band):
+            continue
+        heel = _tekst(_segmenten(band)[0])
+        if is_voorraadkop(heel):
+            kop_y = y
+            continue
+        tekst = _tekst([w for w in band if w['x1'] <= kolommen[0] - tolerantie])
+        if not _heeft_letters(tekst) or heel.lstrip().startswith('*'):
+            continue
+        # Een vervolgregel ('aardappelen') of een losse eenheid ('( g )')
+        # hoort bij de naam erboven.
+        if namen and (tekst[:1].islower() or _EENHEID_IN_NAAM.fullmatch(tekst.strip())):
+            namen[-1]['tekst'] += ' ' + tekst
+            continue
+        namen.append({'y': y, 'tekst': tekst})
+    if len(namen) != len(rijen):
+        return None, f'telling klopt niet: {len(namen)} namen, {len(rijen)} hoeveelheden'
 
-    # Het langste blok: drie losse regels achter elkaar ná rijen betekent dat
-    # de tabel voorbij is (kop van een volgende tabel, lopende tekst).
-    beste, huidig = [], []
-    for k, y in genormeerd:
-        huidig.append((k, y))
-        staart = [x for x in huidig[-3:] if x[0][0] == 'los']
-        if len(staart) == 3 and _telt(huidig):
-            if _telt(huidig[:-3]) > _telt(beste):
-                beste = huidig[:-3]
-            huidig = huidig[-3:]
-    if _telt(huidig) > _telt(beste):
-        beste = huidig
-    if _telt(beste) < _MIN_RIJEN:
-        return None, 'geen tabel'
+    verschuivingen = [r['y'] - n['y'] for n, r in zip(namen, rijen)]
+    if max(verschuivingen) - min(verschuivingen) > _MAX_SPREIDING * pitch:
+        return None, 'rijen niet uit te lijnen'
 
-    uit, blok, prefix = [], 'kaart', ''
-    for k, y in beste:
-        if k[0] == 'kop':
-            blok, prefix = 'voorraad', ''
-        elif k[0] == 'los':
-            prefix = k[1]
-        else:
-            naam, hoev = k[1], k[2]
-            if prefix and naam[:1].islower():
-                naam = prefix + ' ' + naam
-            prefix = ''
-            uit.append({'naam': _schoon_naam(naam), 'hoeveelheid': _schoon_hoeveelheid(hoev),
-                        'blok': blok, 'y': y})
+    uit = []
+    for naam, rij in zip(namen, rijen):
+        eenheid = _EENHEID_IN_NAAM.search(naam['tekst'])
+        tekst = _EENHEID_IN_NAAM.sub(' ', naam['tekst'])
+        cel = _schoon_hoeveelheid(rij['cel'])
+        if eenheid and not _heeft_letters(cel):
+            cel = f'{cel} {eenheid.group(1)}'
+        uit.append({'naam': _schoon_naam(tekst), 'hoeveelheid': cel,
+                    'blok': 'voorraad' if kop_y is not None and naam['y'] > kop_y else 'kaart',
+                    'y': rij['y']})
     return uit, None
 
 
-def _telt(kandidaten):
-    return sum(1 for k, _y in kandidaten if k[0] == 'rij')
+def _is_kopregel(band):
+    """De tabelkop ('Ingrediënten voor 2 personen') of de kolomkop ('1P 2P …')."""
+    return (any(_PERSONENKOP.match(w['tekst']) for w in band)
+            or bool(_TABELKOP.search(_tekst(_segmenten(band)[0]))))
+
+
+def _tweede_cel(band, kolom, hoogte):
+    """Staat er rechts van de cel in `kolom` nóg een korte cel met een getal?"""
+    segmenten = _segmenten(band)
+    for seg, volgende in zip(segmenten[1:], segmenten[2:]):
+        if abs(seg[0]['x0'] - kolom) <= _KOLOM_FACTOR * hoogte and _is_cel(_tekst(seg)):
+            return _is_cel(_tekst(volgende)) and _GETAL.match(_tekst(volgende))
+    return False
+
+
+def _cel_in_kolom(band, kolom, tolerantie, gebied, meerkoloms):
+    """De celtekst van deze band in de gekozen kolom, of None als het geen rij is.
+
+    Eén kolom: het korte segment dat bij de kolom begint. Meer kolommen: het
+    getal dat het dichtst bij de kolom staat. In beide gevallen telt ook een
+    kort segment zonder getal in het kolomgebied ('scheutje') — mits er
+    links ervan tekst staat, anders is het een stapkop in de marge.
+    """
+    segmenten = _segmenten(band)
+    if not segmenten:
+        return None
+    if meerkoloms:
+        getallen = [w for w in band if _GETAL.match(w['tekst']) and gebied[0] <= _xmid(w) <= gebied[1]]
+        dichtbij = [w for w in getallen if abs(_xmid(w) - kolom) <= tolerantie]
+        if dichtbij:
+            return min(dichtbij, key=lambda w: abs(_xmid(w) - kolom))['tekst']
+        if getallen:
+            return None
+    else:
+        # Ook het eerste segment: op een scheve scan staat de naam anderhalve
+        # rij hoger en is de cel het enige op deze band.
+        for seg in segmenten:
+            if _is_cel(_tekst(seg)) and abs(seg[0]['x0'] - kolom) <= tolerantie:
+                return _tekst(seg)
+    # Geen getal: een korte cel in het kolomgebied, met tekst links ervan
+    # ('scheutje', 'naar smaak', of een breuk die Vision als '%' las — die
+    # gaat letterlijk door, de controle achteraf markeert hem).
+    for seg in segmenten[1:]:
+        tekst = _tekst(seg)
+        if (len(_schoon_hoeveelheid(tekst).split()) <= _MAX_CELWOORDEN and _heeft_letters(tekst)
+                and not _GETAL.match(tekst)
+                and seg[0]['x0'] < gebied[1] and seg[-1]['x1'] > gebied[0]
+                and segmenten[0][-1]['x1'] < gebied[0]):
+            return tekst
+    return None
