@@ -109,28 +109,63 @@ def _woorden(tekst):
     return set(re.findall(r'[^\W\d_]{2,}', (tekst or '').lower())) - _STOPWOORDEN
 
 
+_WOORD = re.compile(r'^[^\W\d_]+$')
+_EENHEID_UITGANGEN = ('jes', 'je', 'ken', 's')
+
+
+def _stam_eenheid(eenheid):
+    """Knip één meervouds-/verkleinuitgang (jes, je, ken, s — in die volgorde,
+    hooguit één keer) van een genormaliseerde eenheid af, zodat een parafrase
+    van het model ('pakje') gelijk telt aan de kaart ('pak(ken)' → 'pak') en
+    'krop'/'kroppen' gelijk kunnen tellen."""
+    for uitgang in _EENHEID_UITGANGEN:
+        if eenheid.endswith(uitgang):
+            return eenheid[:-len(uitgang)]
+    return eenheid
+
+
 def _zelfde_hoeveelheid(ingredient, cel):
     """Komt amount+unit van het model overeen met de celtekst?
 
-    'naar smaak' en een lege cel horen bij amount None. Verder: het getal
-    via _parse_amount (breuken, komma's) en de eenheid via _norm_unit, zodat
-    '300 gram' en 300 g hetzelfde zijn. Een meervoudssuffix tussen haakjes op
-    de kaart ('stuk(s)', 'bol(len)', 'pak(ken)') wordt eerst afgeknipt, zodat
-    dat niet als afwijkende eenheid telt. Alleen als de cel een eenheid heeft
-    wordt die vergeleken; '2' tegen 2 stuks is goed.
+    Een lege cel hoort bij amount None. Begint de cel met een echt woord in
+    plaats van een getal/breuk (bv. 'naar smaak', 'scheutje', 'snufje'), dan
+    is dat een woordhoeveelheid: gelijk als het model geen hoeveelheid heeft,
+    of als het model amount 1 heeft met een eenheid die (genormaliseerd) het
+    eerste woord van de cel is ('scheutje' == 'scheutje'). Dat 'echt woord' is
+    bewust smaller dan 'geen getal': een OCR-glitch als '%' (voor een gemiste
+    '½') is geen woordhoeveelheid en moet een afwijking blijven — anders wordt
+    een leesfout stilletjes weggepoetst in plaats van zichtbaar gemaakt.
+    Begint de cel wél met een getal: het getal via
+    _parse_amount (breuken, komma's) en de eenheid via _norm_unit + _stam_eenheid,
+    zodat '300 gram' en 300 g hetzelfde zijn en een parafrase als 'pakje' voor
+    '1 pak(ken)' niet meer als afwijking telt. Een meervoudssuffix tussen haakjes
+    op de kaart ('stuk(s)', 'bol(len)', 'pak(ken)') wordt eerst afgeknipt. Alleen
+    als de cel een eenheid heeft wordt die vergeleken; '2' tegen 2 stuks is goed.
+    Heeft de cel wél een eenheid en het model niet, dan blijft dat een afwijking:
+    er is dan informatie verloren gegaan.
     """
     cel = (cel or '').strip()
-    if not cel or cel.lower() == 'naar smaak':
+    if not cel:
         return ingredient.get('amount') in (None, '')
     delen = cel.split(' ', 1)
     getal = _parse_amount(delen[0])
+    if getal is None and _WOORD.match(delen[0]):
+        amount = ingredient.get('amount')
+        if amount in (None, ''):
+            return True
+        try:
+            een = abs(float(amount) - 1) < 0.01
+        except (TypeError, ValueError):
+            een = False
+        return een and _norm_unit(delen[0]) == _norm_unit(ingredient.get('unit'))
     if getal is None or ingredient.get('amount') in (None, ''):
         return False
     if abs(float(ingredient['amount']) - getal) > 0.01:
         return False
     if len(delen) == 2:
         eenheid = _MEERVOUD_SUFFIX.sub('', delen[1])
-        return _norm_unit(eenheid) == _norm_unit(ingredient.get('unit'))
+        return (_stam_eenheid(_norm_unit(eenheid))
+                == _stam_eenheid(_norm_unit(ingredient.get('unit'))))
     return True
 
 

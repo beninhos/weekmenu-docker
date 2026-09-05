@@ -183,6 +183,67 @@ def test_lege_hoeveelheid_tegen_echte_cel_geeft_check_zonder_crash():
     assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
 
 
+def test_scheutje_met_amount_1_krijgt_geen_check():
+    # D2: 'scheutje' heeft geen getal, maar het model las precies hetzelfde
+    # (amount 1, unit 'scheutje') — dat is niets om na te kijken.
+    rijen = [{'naam': 'Melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'melk', 'amount': 1.0, 'unit': 'scheutje'})
+    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert 'check' not in r['ingredients'][0]
+
+
+def test_scheutje_zonder_modelhoeveelheid_krijgt_geen_check():
+    rijen = [{'naam': 'Melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'melk', 'amount': None, 'unit': ''})
+    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert 'check' not in r['ingredients'][0]
+
+
+def test_scheutje_met_afwijkende_modelhoeveelheid_krijgt_wel_check():
+    rijen = [{'naam': 'Melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'melk', 'amount': 2.0, 'unit': 'el'})
+    controleer_tegen_tabel(r, rijen, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt 'scheutje'"
+
+
+def test_pakje_vs_pak_ken_wordt_als_dezelfde_eenheid_gezien():
+    # D3: het model parafraseert de eenheid ('pakje' voor '1 pak(ken)'), het
+    # getal klopt — geen echte afwijking.
+    rijen = [{'naam': 'Passata', 'hoeveelheid': '1 pak(ken)', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'passata', 'amount': 1.0, 'unit': 'pakje'})
+    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert 'check' not in r['ingredients'][0]
+
+
+def test_ontbrekende_eenheid_bij_het_model_blijft_een_afwijking():
+    # D3: de cel heeft een eenheid ('krop'), het model niet — informatie is
+    # verloren gegaan, dus dat blijft zichtbaar.
+    rijen = [{'naam': 'Little gem', 'hoeveelheid': '2 krop', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'little gem', 'amount': 2.0, 'unit': ''})
+    controleer_tegen_tabel(r, rijen, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt '2 krop'"
+
+
+def test_echt_andere_eenheid_blijft_een_afwijking():
+    # D3: 'st' en 'teen' zijn geen parafrase van elkaar (normaliseren allebei
+    # naar iets anders), dus dat blijft een echte check.
+    rijen = [{'naam': 'Knoflookteen', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'knoflookteen', 'amount': 1.0, 'unit': 'teen'})
+    controleer_tegen_tabel(r, rijen, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
+
+
+def test_ocr_glitch_zonder_modelhoeveelheid_blijft_toch_een_afwijking():
+    # D4-vangnet: '%' is geen woordhoeveelheid maar een OCR-leesfout van '½'.
+    # Kan het model daardoor zelf ook geen amount bepalen (amount None), dan
+    # mag dat niet stilletjes als 'gelijk' tellen zoals bij 'scheutje' —
+    # anders verdwijnt precies de leesfout die zichtbaar moet blijven.
+    rijen = [{'naam': 'Gemalen komijnzaad', 'hoeveelheid': '% zakje(s)', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'gemalen komijnzaad', 'amount': None, 'unit': 'zakje'})
+    controleer_tegen_tabel(r, rijen, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt '% zakje(s)'"
+
+
 def test_stopwoord_koppelt_niet_los_van_de_echte_gedeelde_naam():
     # 'en' staat in beide rijnamen en weegt dus in beide even zwaar mee; alleen
     # het echte woord 'ui' hoort bij de juiste rij. Zonder stopwoordfilter is

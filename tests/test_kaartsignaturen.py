@@ -24,3 +24,24 @@ def test_bereidingstijd():
     assert bereidingstijd('Bereidingstijd: 25 minuten') == 25
     assert bereidingstijd('Kooktijd onbekend') is None
     assert bereidingstijd(None) is None
+
+
+def test_bereidingstijd_kaartvarianten():
+    # D1: drie extra kaartlay-outs uit de meting (Totale tijd, een bereik
+    # daarin, en een kale 'N min.' achter een categorielabel).
+    assert bereidingstijd('Lekker snel\nTotale tijd: 20 min.') == 20
+    assert bereidingstijd('Lekker snel\nTotale tijd: 20-30 min.') == 20  # bereik -> ondergrens
+    assert bereidingstijd(
+        "25 min. (totaal voor 2 personen)") == 25
+    assert bereidingstijd(
+        'QUICK & EASY FAMILY BALANS 25 min. (totaal voor 2 personen)') == 25
+    assert bereidingstijd(
+        'Scandinavische salade BALANS 40 min. (totaal voor 2 personen)') == 40
+    assert bereidingstijd('Kooktijd onbekend') is None
+
+
+def test_bereidingstijd_wint_niet_van_oventijd():
+    # D1: 'Bereidingstijd: 40 min.' moet blijven winnen als ook 'Oventijd'
+    # op dezelfde kaart staat (kaart 5 uit de meting).
+    assert bereidingstijd(
+        'VEGGIE FAMILIE Bereidingstijd: 40 min. Oventijd: 15 min.') == 40
