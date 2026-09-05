@@ -24,6 +24,12 @@
 
 ---
 
+## Voortgang
+
+- Taak 4 (signaturen) — **klaar**, f8ae7d3. Afwijking: `voorkant` is `\bHELLO[\s\S]{0,80}?FRESH\b`, hoofdlettergevoelig, omdat de OCR de titel tussen HELLO en FRESH zet.
+- Taak 5 + 6 (tabel) — **klaar, go/no-go gehaald**, 015b993: 15/15 rijen op de echte kaart. Het algoritme wijkt af van de plantekst hieronder (die is niet bijgewerkt; `weekmenu/services/tabel.py` en `tests/test_tabel.py` zijn de waarheid): banden op overlap met de bandkern (gemiddeld midden ± halve mediaanhoogte, `_BAND_FACTOR = 0.2`); een band valt in *segmenten* bij elk groot gat, een rij is 'letters | korte cel met getal'; **twee passen** — eerst grof de hoeveelheidkolom (x met de meeste rijen, `_KOLOM_FACTOR = 2.5`), dan alleen de strook tot die kolom opnieuw in banden, want de stapkolommen ernaast hebben een eigen regelhoogte; meerdere kolommen = ≥ 3 rijen met rechts van de cel nóg een korte cel met getal. Interface ongewijzigd: `tabelrijen(annotation) -> (rijen, reden)`.
+- Taak 1–3, 7–14 — nog te doen, in die volgorde (1–3 hebben geen afhankelijkheid op 4–6).
+
 ## Bestandsoverzicht
 
 | Bestand | Verantwoordelijkheid |
