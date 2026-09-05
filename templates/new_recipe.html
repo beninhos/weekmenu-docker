@@ -88,6 +88,12 @@
         </div>
 
         <div>
+            <label class="block text-sm font-semibold text-[#2C2C2C]">Bereidingstijd (min.)</label>
+            <input type="number" name="prep_time" id="fieldPrepTime" min="1" max="600"
+                   class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">
+        </div>
+
+        <div>
             <label class="block text-sm font-semibold text-[#2C2C2C]">Kookboek</label>
             <select name="cookbook" id="fieldCookbook"
                     onchange="toggleNewCookbook(this)"
@@ -373,6 +379,7 @@ async function importFromPhoto() {
         // Pre-fill formulier (zelfde als URL import)
         if (data.name) document.getElementById('fieldName').value = data.name;
         if (data.serves) document.getElementById('fieldServes').value = data.serves;
+        if (data.prep_time) document.getElementById('fieldPrepTime').value = data.prep_time;
         if (data.instructions) quill.root.innerHTML = data.instructions;
 
         const preview = document.getElementById('importedImagePreview');
@@ -448,6 +455,7 @@ async function importFromUrl() {
 
         if (data.name)         document.getElementById('fieldName').value = data.name;
         if (data.serves)       document.getElementById('fieldServes').value = data.serves;
+        if (data.prep_time) document.getElementById('fieldPrepTime').value = data.prep_time;
         if (data.url)          document.getElementById('fieldUrl').value = data.url;
         if (data.instructions) quill.root.innerHTML = data.instructions;
 
@@ -503,6 +511,7 @@ async function importFromUrl() {
         document.getElementById('fieldDraftId').value = draftId;
         if (data.name) document.getElementById('fieldName').value = data.name;
         if (data.serves) document.getElementById('fieldServes').value = data.serves;
+        if (data.prep_time) document.getElementById('fieldPrepTime').value = data.prep_time;
         // Pagina en kookboek gingen hier verloren: wie een concept eerst
         // aanpaste, kreeg een recept zonder boek en zonder paginanummer,
         // terwijl 'Opslaan' die twee wel meenam.

@@ -30,12 +30,19 @@ from weekmenu.services.pantry import (
 bp = Blueprint('recipes', __name__)
 
 
+def _minuten(waarde):
+    """Bereidingstijd uit het formulier: heel getal, anders None."""
+    waarde = (waarde or '').strip()
+    return int(waarde) if waarde.isdigit() else None
+
+
 def serialize_recipe(r, default_serves=4):
     """Volledige recept-payload voor detail-modal en receptenplanner-cache."""
     return {
         'id': r.id,
         'name': r.name,
         'serves': r.serves or default_serves,
+        'prep_time': r.prep_time,
         'image_path': r.image_path or '',
         'cookbook': r.cookbook.name if r.cookbook else None,
         'cookbook_abbr': r.cookbook.abbreviation if r.cookbook else None,
@@ -331,7 +338,8 @@ def new_recipe():
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path,
             url=request.form.get('url') or None,
-            instructions=request.form.get('instructions') or None
+            instructions=request.form.get('instructions') or None,
+            prep_time=_minuten(request.form.get('prep_time')),
         )
         db.session.add(recipe)
         db.session.commit()
@@ -404,6 +412,7 @@ def edit_recipe(id):
         recipe.name = request.form['name']
         serves_val = request.form.get('serves', '').strip()
         recipe.serves = int(serves_val) if serves_val else None
+        recipe.prep_time = _minuten(request.form.get('prep_time'))
 
         cookbook_id = request.form.get('cookbook') or None
         if cookbook_id == '__new__':

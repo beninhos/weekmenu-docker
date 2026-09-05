@@ -48,6 +48,10 @@
     document.getElementById('dp-page').textContent     = r.page ? 'p. ' + r.page : '';
     document.getElementById('dp-serves').textContent   = r.serves + ' personen';
 
+    const pt = document.getElementById('dp-prep-time');
+    pt.textContent = r.prep_time ? `⏱ ${r.prep_time} min` : '';
+    pt.classList.toggle('hidden', !r.prep_time);
+
     const urlEl = document.getElementById('dp-url');
     if (r.url) {
       urlEl.href          = r.url;

@@ -19,10 +19,12 @@ def serialize_draft(d):
         'job_id': d.job_id,
         'name': d.name,
         'serves': d.serves,
+        'prep_time': d.prep_time,
         'instructions': d.instructions,
         'ingredients': annotate_pantry_status(json.loads(d.ingredients_json or '[]')),
         'image_path': d.image_path,
         'original_image_path': d.original_image_path,
+        'back_image_path': d.back_image_path,
         'source_page': d.source_page,
         'status': d.status,
     }
@@ -147,7 +149,8 @@ def dump_draft_accept(id):
 
     recipe = Recipe(name=d.name, serves=d.serves, cookbook_id=cookbook_id,
                     page=d.source_page, image_path=d.image_path,
-                    instructions=d.instructions or None)
+                    instructions=d.instructions or None,
+                    prep_time=d.prep_time)
     db.session.add(recipe)
     db.session.flush()
 
