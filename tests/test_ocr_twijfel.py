@@ -143,6 +143,19 @@ def test_bovenrand_van_de_drempel():
     assert onzekere_hoeveelheden(ann) == []
 
 
+def test_twijfel_overschrijft_de_tabelcheck_niet():
+    # controleer_tegen_tabel zet 'check' al vóór _markeer_twijfels draait; de
+    # tabel is leidend, dus die tekst moet blijven staan (en voorop), niet
+    # verdwijnen onder Vision's eigen twijfel.
+    recipes = [{'photo_page': 1, 'ingredients': [
+        {'name': 'prei', 'amount': 3, 'unit': 'stuks', 'check': "tabel zegt '2 st'"},
+    ]}]
+    twijfels = [[{'regel': '3 st Prei', 'cijfer': '3', 'zekerheid': 0.4}]]
+    _markeer_twijfels(recipes, twijfels)
+    assert recipes[0]['ingredients'][0]['check'] == (
+        "tabel zegt '2 st'; Vision las '3' met 40% zekerheid; mogelijk een breukteken (½)")
+
+
 def test_twijfel_op_de_achterkant_komt_op_het_kaartrecept():
     recipes = [{'photo_page': 1, 'back_page': 2, 'ingredients': [{'name': 'komkommer', 'amount': 1, 'unit': 'stuks'}]}]
     twijfels = [[], [{'regel': '12 komkommer', 'cijfer': '12', 'zekerheid': 0.31}]]

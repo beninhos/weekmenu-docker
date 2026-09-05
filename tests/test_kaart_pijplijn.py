@@ -24,13 +24,20 @@ class _Antwoord:
     candidates = []
 
 
-def _draai(tmp_path, mode, texts, annotaties, tabel):
+class _Garbage:
+    """Een antwoord dat parse_batch_response niet kan redden: geen JSON, geen candidates."""
+    text = 'dit is geen json'
+    candidates = []
+
+
+def _draai(tmp_path, mode, texts, annotaties, tabel, antwoorden=None, twijfels=None):
     job = DumpJob(id=f'job-{mode}', status='processing', mode=mode)
     db.session.add(job)
     db.session.commit()
     jobmap = tmp_path / 'job'
     jobmap.mkdir()
-    twijfels = [[] for _ in texts]
+    if twijfels is None:
+        twijfels = [[] for _ in texts]
     with patch('weekmenu.services.dump._get_gemini_api_key', return_value='x'), \
          patch('weekmenu.services.dump.lees_paginas_met_annotaties', return_value=(texts, twijfels, annotaties)), \
          patch('weekmenu.services.dump.lees_paginas', return_value=(texts, twijfels)), \
@@ -40,7 +47,10 @@ def _draai(tmp_path, mode, texts, annotaties, tabel):
          patch('weekmenu.services.dump._resolve_image', side_effect=lambda j, p, m: f'static/uploads/p{p}.jpg'), \
          patch('google.genai.Client') as client:
         (jobmap / '000.pdf').write_bytes(b'%PDF-')
-        client.return_value.models.generate_content.return_value = _Antwoord()
+        if antwoorden is not None:
+            client.return_value.models.generate_content.side_effect = antwoorden
+        else:
+            client.return_value.models.generate_content.return_value = _Antwoord()
         from weekmenu.services.dump import _process
         _process(job)
         db.session.commit()
@@ -66,12 +76,39 @@ def test_kaartmodus_maakt_een_concept_van_twee_paginas(app, tmp_path):
     assert job.warning is None
 
 
+def test_tabelcheck_en_twijfel_worden_beide_bewaard(app, tmp_path):
+    # De tabel zet 'check' eerst (controleer_tegen_tabel); Vision's eigen
+    # twijfel over hetzelfde ingrediënt mag die niet overschrijven, maar moet
+    # erachter komen te staan — de tabel blijft leidend en dus voorop.
+    twijfels = [[], [{'regel': '3 st Prei', 'cijfer': '3', 'zekerheid': 0.4}]]
+    job, client = _draai(tmp_path, 'kaart', [VOOR, ACHTER], [{'p': 1}, {'p': 2}],
+                         lambda ann, personen=None: (RIJEN, None) if ann['p'] == 2 else (None, 'geen tabel'),
+                         twijfels=twijfels)
+    d = RecipeDraft.query.filter_by(job_id=job.id).first()
+    ing = json.loads(d.ingredients_json)
+    assert ing[1]['check'].startswith("tabel zegt '2 st'; Vision las '3'")
+
+
 def test_slecht_paar_wordt_gemeld_en_de_rest_gaat_door(app, tmp_path):
     job, client = _draai(tmp_path, 'kaart', [VOOR, ACHTER, VOOR, VOOR], [{'p': i} for i in (1, 2, 3, 4)],
                          lambda ann, personen=None: (RIJEN, None) if ann['p'] == 2 else (None, 'geen tabel'))
     assert RecipeDraft.query.filter_by(job_id=job.id).count() == 1
     assert "Pagina's 3 en 4 zijn niet als één kaart te lezen" in job.warning
     assert '4 pagina' not in job.warning   # geen 'minder recepten dan pagina's'-melding: paren tellen
+
+
+def test_onleesbaar_antwoord_stopt_alleen_dat_paar(app, tmp_path):
+    # Kaart 1+2 komt terug als brabbeltaal (bv. een kapotte JSON-respons); dat
+    # mag de batch niet laten omvallen. Kaart 3+4 is verder identiek en goed.
+    job, client = _draai(
+        tmp_path, 'kaart', [VOOR, ACHTER, VOOR, ACHTER], [{'p': i} for i in (1, 2, 3, 4)],
+        lambda ann, personen=None: (RIJEN, None) if ann['p'] in (2, 4) else (None, 'geen tabel'),
+        antwoorden=[_Garbage(), _Antwoord()])
+    drafts = RecipeDraft.query.filter_by(job_id=job.id).all()
+    assert len(drafts) == 1
+    assert drafts[0].source_page == 3
+    assert "Pagina's 1+2:" in job.warning
+    assert client.return_value.models.generate_content.call_count == 2
 
 
 def test_boekmodus_waarschuwt_bij_kaarten(app, tmp_path):

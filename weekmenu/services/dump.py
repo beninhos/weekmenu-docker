@@ -483,7 +483,16 @@ def _verwerk_kaarten(texts, annotaties, client, config):
         waar = f"Pagina's {voor}+{achter}"
         if _warn_if_truncated(response):
             meldingen.append(f'{waar}: het antwoord van Gemini was afgekapt. Probeer het opnieuw.')
-        gevonden = parse_batch_response(response.text, [gecombineerd], standaard_pagina=1)
+        # Alleen een onleesbaar antwoord (ValueError) wordt hier opgevangen: dat
+        # is één slechte kaart, de rest van de batch mag door. Een fout uit
+        # generate_content zelf (bv. een 429) moet wél doorschieten naar het
+        # vangnet in _process, want dat is een quotaprobleem — één duidelijke
+        # foutmelding met retry, niet twaalf keer 'geen recept teruggekregen'.
+        try:
+            gevonden = parse_batch_response(response.text, [gecombineerd], standaard_pagina=1)
+        except ValueError as e:
+            meldingen.append(f'{waar}: {e}')
+            continue
         if not gevonden:
             meldingen.append(f'{waar}: het model gaf geen recept terug.')
             continue
@@ -532,9 +541,14 @@ def _markeer_twijfels(recipes, twijfels):
         for twijfel in lijst:
             treffer = _ingredient_bij_regel(twijfel['regel'], per_pagina.get(pagina, []))
             if treffer is not None:
-                treffer['check'] = (f"Vision las '{twijfel['cijfer']}' met "
-                                    f"{twijfel['zekerheid']:.0%} zekerheid; mogelijk "
-                                    f"een breukteken (½)")
+                nieuwe = (f"Vision las '{twijfel['cijfer']}' met "
+                         f"{twijfel['zekerheid']:.0%} zekerheid; mogelijk "
+                         f"een breukteken (½)")
+                bestaande = treffer.get('check')
+                # Nooit overschrijven: de tabel (controleer_tegen_tabel) heeft
+                # 'check' al gezet vóórdat deze functie draait en is leidend,
+                # dus die tekst blijft voorop staan.
+                treffer['check'] = f'{bestaande}; {nieuwe}' if bestaande else nieuwe
 
 
 def _ingredient_bij_regel(regel, recipes):
