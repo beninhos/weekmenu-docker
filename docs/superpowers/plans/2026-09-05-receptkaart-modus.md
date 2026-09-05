@@ -27,8 +27,12 @@
 ## Voortgang
 
 - Taak 4 (signaturen) — **klaar**, f8ae7d3. Afwijking: `voorkant` is `\bHELLO[\s\S]{0,80}?FRESH\b`, hoofdlettergevoelig, omdat de OCR de titel tussen HELLO en FRESH zet.
-- Taak 5 + 6 (tabel) — **klaar, go/no-go gehaald**, 015b993: 15/15 rijen op de echte kaart. Het algoritme wijkt af van de plantekst hieronder (die is niet bijgewerkt; `weekmenu/services/tabel.py` en `tests/test_tabel.py` zijn de waarheid): banden op overlap met de bandkern (gemiddeld midden ± halve mediaanhoogte, `_BAND_FACTOR = 0.2`); een band valt in *segmenten* bij elk groot gat, een rij is 'letters | korte cel met getal'; **twee passen** — eerst grof de hoeveelheidkolom (x met de meeste rijen, `_KOLOM_FACTOR = 2.5`), dan alleen de strook tot die kolom opnieuw in banden, want de stapkolommen ernaast hebben een eigen regelhoogte; meerdere kolommen = ≥ 3 rijen met rechts van de cel nóg een korte cel met getal. Interface ongewijzigd: `tabelrijen(annotation) -> (rijen, reden)`.
-- Taak 1–3, 7–14 — nog te doen, in die volgorde (1–3 hebben geen afhankelijkheid op 4–6).
+- Taak 5 + 6 (tabel) — **klaar, go/no-go gehaald op 12 kaarten**, 015b993 → e0a9e4f. De plantekst hieronder is achterhaald; `weekmenu/services/tabel.py` en `tests/test_tabel.py` zijn de waarheid. Wat de 12 gescande kaarten leerden en het ontwerp veranderde:
+  - **Op y uitlijnen houdt niet.** Een telefoonscan staat een paar graden gedraaid én sommige kaarten drukken de hoeveelheid ~0,6 rij lager dan de naam; samen 1,5 rij, en dan koppelt y-uitlijning stil alles één rij verkeerd (kaart 2 gaf zo 13 "geslaagde" maar foute rijen). Nu: scheefstand meten aan de lange regels en wegdraaien; kolommen op x; namen en hoeveelheden elk op volgorde; telling en verschuiving als controle (`'telling klopt niet: …'`, `'rijen niet uit te lijnen'`).
+  - **Meerkoloms bestaat wél** (3 van 9 zichtbare kaarten: "Ingrediënten voor 1–6 personen", kop `1P … 6P`, eenheid in de naam). Interface is daarom `tabelrijen(annotation, personen=None)`: de kolom wordt gekozen op personen; zonder passende kop → `'meerdere kolommen'`. **Taak 8/12 moeten `personen` uit de voorkant halen** (`voor (\d+) personen`) en doorgeven — dat staat nog niet in de plantekst.
+  - Celvormen: `1 stuk(s)`, `1 bol(len)`, `scheutje`, `naar smaak`, `1/2 st`; een breuk die Vision als `%` las gaat letterlijk door (controle achteraf markeert hem).
+  - Waarheid van kaart 1–9 (met de hand tegen de scans gecontroleerd) staat in `benchmark-import/proef2/kaart-waarheid.json`; script `proef2/kaarten_vision.py` cachet Vision (`ocrtekst/kaart-NN.full.json`) en toont de rijen; kaart 10–12 zijn blind en nog niet bekeken. Stand: 9/9 tabellen gelijk aan de kaart, op de bekende `%`-cel van kaart 3 na.
+- Taak 1–3, 7–14 — nog te doen, in die volgorde (1–3 hebben geen afhankelijkheid op 4–6). Taak 14 kan de bestaande cache en waarheid gebruiken; alleen de Gemini-stap is nieuw.
 
 ## Bestandsoverzicht
 
