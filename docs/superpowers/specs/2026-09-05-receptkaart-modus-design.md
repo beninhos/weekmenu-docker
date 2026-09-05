@@ -257,3 +257,9 @@ gemeld als ontwerpwijziging, niet stil doorgevoerd.
   geen titel; bewust buiten scope — de melding "geen tegenhanger" dekt het.
 - `back_image_path` is het eerste dat sneuvelt als de stap kleiner moet;
   niets anders hangt eraan.
+- Paren gaat puur op volgorde: pagina 1+2, 3+4, enzovoort. Wordt er gescand in
+  de volgorde voorkant 1, achterkant 2, voorkant 2, achterkant 1, dan is elk
+  paar structureel geldig (één tabel, één voorkant) en komt er een verkeerd
+  gekoppeld recept uit zónder melding. Bewuste keuze: alles wat dit zou moeten
+  vangen (titel tegen tabel matchen) is raden, en raden is hier erger dan de
+  scanvolgorde aanhouden.

@@ -32,6 +32,8 @@
   - **Meerkoloms bestaat wél** (3 van 9 zichtbare kaarten: "Ingrediënten voor 1–6 personen", kop `1P … 6P`, eenheid in de naam). Interface is daarom `tabelrijen(annotation, personen=None)`: de kolom wordt gekozen op personen; zonder passende kop → `'meerdere kolommen'`. **Taak 8/12 moeten `personen` uit de voorkant halen** (`voor (\d+) personen`) en doorgeven — dat staat nog niet in de plantekst.
   - Celvormen: `1 stuk(s)`, `1 bol(len)`, `scheutje`, `naar smaak`, `1/2 st`; een breuk die Vision als `%` las gaat letterlijk door (controle achteraf markeert hem).
   - Waarheid van kaart 1–9 (met de hand tegen de scans gecontroleerd) staat in `benchmark-import/proef2/kaart-waarheid.json`; script `proef2/kaarten_vision.py` cachet Vision (`ocrtekst/kaart-NN.full.json`) en toont de rijen; kaart 10–12 zijn blind en nog niet bekeken. Stand: 9/9 tabellen gelijk aan de kaart, op de bekende `%`-cel van kaart 3 na.
+- Afwijking van de spec: **`tabel_p<N>.json` per jobmap is er niet gekomen.** De app draait Vision bij een retry gewoon opnieuw; het cachen zat alleen in de meting zelf (buiten de repo, `proef2/kaarten_vision.py` met `ocrtekst/kaart-NN.full.json`). Wie de Vision-aanroepen van een retry wil besparen, moet dat alsnog bouwen.
+- Afwijking van de spec: **`knip_stappen` heeft geen offset voor de achterkant gekregen.** Voor- en achterkant gaan als één tekst naar de knip, dus paginanummers in meldingen zouden misleiden; de aanroeper (`_verwerk_kaarten`) zet er daarom `"Pagina's V+A"` voor in plaats van de melding naar pagina 1 of 2 te vertalen.
 - Taak 1–3, 7–14 — nog te doen, in die volgorde (1–3 hebben geen afhankelijkheid op 4–6). Taak 14 kan de bestaande cache en waarheid gebruiken; alleen de Gemini-stap is nieuw.
 
 ## Bestandsoverzicht
