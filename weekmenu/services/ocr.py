@@ -183,6 +183,12 @@ def lees_paginas(images, language='nl'):
 # grens dus ruim; 0,6 is het midden.
 TWIJFEL_DREMPEL = 0.6
 
+# Cijferachtig: een cijfer, gevolgd door verdere cijfers/breukscheiders. Vangt
+# ook '12-1' (HelloFresh '½ - 1 cm' als één woord) en '1,8' (voedingswaarden),
+# niet alleen een kaal getal. Een losse hoofdletter 'I' komt erbij: Vision leest
+# een 1 soms als I ('Rooster de kip I uur').
+_CIJFERACHTIG = re.compile(r'[\d][\d/.,-]*')
+
 
 def onzekere_hoeveelheden(annotation, drempel=TWIJFEL_DREMPEL):
     """Regels waarvan het begingetal door Vision met weinig zekerheid is gelezen.
@@ -193,18 +199,29 @@ def onzekere_hoeveelheden(annotation, drempel=TWIJFEL_DREMPEL):
     laag, bij een echt cijfer hoog. Dit levert alleen een markering op, geen
     correctie: de gebruiker kijkt met de bronfoto ernaast en beslist zelf.
 
-    Alleen een cijferwoord aan het begin van een regel telt, en alleen als er
-    nog een woord op volgt: een los cijfer in de marge (paginanummer, een als
-    '0' gelezen vlekje) is geen hoeveelheid.
+    Alleen een cijferachtig woord (of een losse 'I') aan het begin van een
+    regel telt, en alleen als er nog een woord op volgt: een los cijfer in de
+    marge (paginanummer, een als '0' gelezen vlekje) is geen hoeveelheid. De
+    zekerheid is die van het EERSTE symbool, niet het laagste van het woord:
+    bij een misread breuk zit de twijfel in dat eerste teken, en een verderop
+    toevallig wat lager gelezen cijfer (bv. in '1,8') mag geen echt getal
+    verdacht maken.
+
+    Voor de valse alarmen die de bredere tokenfilter oplevert (vooral
+    voedingswaardentabellen) is dit alleen een markering, geen filter: zie
+    `weekmenu.services.dump._markeer_twijfels` voor de eis dat de regel een
+    woord deelt met een echt ingrediënt.
 
     Geeft per regel {'regel', 'cijfer', 'zekerheid'}.
     """
     twijfels = []
     for regel in _regels(annotation):
         eerste = regel[0]
-        if len(regel) < 2 or not re.fullmatch(r'\d+', eerste['text']):
+        if len(regel) < 2:
             continue
-        zekerheid = min(eerste['confidences'])
+        if eerste['text'] != 'I' and not _CIJFERACHTIG.fullmatch(eerste['text']):
+            continue
+        zekerheid = eerste['confidences'][0]
         if zekerheid < drempel:
             twijfels.append({
                 'regel': ' '.join(w['text'] for w in regel),
@@ -258,9 +275,15 @@ def _clean_ocr_text(text):
     een hoeveelheid schrijf je niet als breuk met een cijfer erachter geplakt.
     Beide opruimingen laten een losse breuk en een gemengd getal als '1½'
     ongemoeid, want daar staat het cijfer vóór de breuk.
+
+    Een losse hoofdletter 'I' gevolgd door een woord ('I uur', 'I ui') is
+    vrijwel altijd een 1 die Vision als letter las — gemeten 23 keer in één
+    kookboek, 0 in de andere drie. 'I.' (nummering) en een 'I' zonder
+    vervolgwoord blijven staan: daar is geen spatie+woord na de I.
     """
     schoon = re.sub(rf'([{_FRACTIONS}])\1+', r'\1', text or '')
-    return re.sub(rf'(?<![0-9])([{_FRACTIONS}])[0-9](?![0-9])', r'\1', schoon)
+    schoon = re.sub(rf'(?<![0-9])([{_FRACTIONS}])[0-9](?![0-9])', r'\1', schoon)
+    return re.sub(r'\bI\b(?=\s+\w)', '1', schoon)
 
 
 def pages_as_labelled_text(texts):

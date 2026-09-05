@@ -155,6 +155,19 @@ def test_breukartefacten_opruimen(ruw, schoon):
     assert _clean_ocr_text(ruw) == schoon
 
 
+# ── Losse hoofdletter I die een 1 hoort te zijn ─────────────────────────
+
+@pytest.mark.parametrize('ruw,schoon', [
+    ('Rooster de kip I uur', 'Rooster de kip 1 uur'),  # het echte gemeten geval
+    ('I ui, gesnipperd', '1 ui, gesnipperd'),
+    ('Groep I', 'Groep I'),               # geen vervolgwoord: ongemoeid
+    ('I. Snijd de ui', 'I. Snijd de ui'), # nummering, geen spatie na de I
+    ('bak I minuut per kant', 'bak 1 minuut per kant'),  # ook midden in de zin
+])
+def test_losse_hoofdletter_i_wordt_1(ruw, schoon):
+    assert _clean_ocr_text(ruw) == schoon
+
+
 # ── Een mislukte batch laat niets half achter ──────────────────────────
 
 def test_mislukte_batch_laat_geen_halve_oogst_achter(app, tmp_path):

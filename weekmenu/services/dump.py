@@ -357,7 +357,7 @@ def _process(job):
         meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
                          'ontbreken. Probeer het opnieuw of splits de batch.')
     recipes = parse_batch_response(response.text, [_clean_ocr_text(t) for t in texts])
-    meldingen += _markeer_twijfels(recipes, twijfels)
+    _markeer_twijfels(recipes, twijfels)
     for r in recipes:
         for m in r.get('meldingen') or []:
             meldingen.append(f"Pagina {r['photo_page']} ({r['name']}): {m}. "
@@ -396,29 +396,33 @@ def _markeer_twijfels(recipes, twijfels):
     Het model heeft de regel al omgezet naar naam, getal en eenheid, dus de
     twijfel moet van de OCR-regel naar die ingrediëntregel worden overgezet.
     Dat gaat op de naam: het ingrediënt van dezelfde pagina dat de meeste
-    woorden met de regel deelt. Vindt dat niets — het model heeft de regel
-    overgeslagen of samengevoegd — dan blijft de twijfel niet stil liggen maar
-    komt hij als melding bij de batch.
+    woorden met de regel deelt.
 
-    Geeft de meldingen terug; de treffers krijgen een 'check'-tekst in de
-    ingrediëntregel, en de nakijkkaart laat die zien.
+    Sinds de bredere tokenfilter in `onzekere_hoeveelheden` (ook '1,8' en 'I')
+    is dit ook de enige rem op voedingswaardentabellen: zo'n regel deelt geen
+    woord met een ingrediënt en wordt stil genegeerd, niet gemeld — anders
+    spamt elk laag-zeker cijfer uit de tabel de batch vol met meldingen.
+    Bewuste keerzijde: een echt gemiste ingrediëntregel (het model sloeg hem
+    over) verdwijnt daarmee ook zonder melding als zijn naam nergens anders op
+    de pagina terugkomt. Hetzelfde geldt voor een twijfel die eigenlijk in de
+    bereidingstekst staat (bv. '½ - 1 cm' bij een bak-instructie): die deelt
+    ook geen woord met een ingrediënt en krijgt dus nooit een 'check', ook al
+    is de twijfel zelf terecht.
+
+    De treffers krijgen een 'check'-tekst in de ingrediëntregel, en de
+    nakijkkaart laat die zien.
     """
-    meldingen = []
     per_pagina = {}
     for r in recipes:
         if r.get('photo_page'):
             per_pagina.setdefault(r['photo_page'], []).append(r)
     for pagina, lijst in enumerate(twijfels or [], 1):
         for twijfel in lijst:
-            tekst = (f"Vision las '{twijfel['cijfer']}' met {twijfel['zekerheid']:.0%} "
-                     f"zekerheid; mogelijk een breukteken (½)")
             treffer = _ingredient_bij_regel(twijfel['regel'], per_pagina.get(pagina, []))
             if treffer is not None:
-                treffer['check'] = tekst
-            else:
-                meldingen.append(f"Pagina {pagina}: {tekst} in '{twijfel['regel']}', "
-                                 f"maar die regel is niet als ingrediënt terug te vinden.")
-    return meldingen
+                treffer['check'] = (f"Vision las '{twijfel['cijfer']}' met "
+                                    f"{twijfel['zekerheid']:.0%} zekerheid; mogelijk "
+                                    f"een breukteken (½)")
 
 
 def _ingredient_bij_regel(regel, recipes):
