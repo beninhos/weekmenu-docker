@@ -16,6 +16,7 @@ _REDEN = {
     'meerdere kolommen': 'de tabel heeft meerdere hoeveelheidkolommen, dat kan de app nog niet',
 }
 _PERSONEN = re.compile(r'voor (\d+) personen')
+_MEERVOUD_SUFFIX = re.compile(r'\([^)]*\)$')
 
 
 def _personen(*teksten):
@@ -94,3 +95,64 @@ def benodigdheden(tekst):
                     break
             return ' '.join(uit) or None
     return None
+
+
+def _woorden(tekst):
+    """Woorden van minstens twee letters, zodat korte namen als 'ui' meetellen."""
+    return set(re.findall(r'[^\W\d_]{2,}', (tekst or '').lower()))
+
+
+def _zelfde_hoeveelheid(ingredient, cel):
+    """Komt amount+unit van het model overeen met de celtekst?
+
+    'naar smaak' en een lege cel horen bij amount None. Verder: het getal
+    via _parse_amount (breuken, komma's) en de eenheid via _norm_unit, zodat
+    '300 gram' en 300 g hetzelfde zijn. Een meervoudssuffix tussen haakjes op
+    de kaart ('stuk(s)', 'bol(len)', 'pak(ken)') wordt eerst afgeknipt, zodat
+    dat niet als afwijkende eenheid telt. Alleen als de cel een eenheid heeft
+    wordt die vergeleken; '2' tegen 2 stuks is goed.
+    """
+    cel = (cel or '').strip()
+    if not cel or cel.lower() == 'naar smaak':
+        return ingredient.get('amount') in (None, '')
+    delen = cel.split(' ', 1)
+    getal = _parse_amount(delen[0])
+    if getal is None or ingredient.get('amount') is None:
+        return False
+    if abs(float(ingredient['amount']) - getal) > 0.01:
+        return False
+    if len(delen) == 2:
+        eenheid = _MEERVOUD_SUFFIX.sub('', delen[1])
+        return _norm_unit(eenheid) == _norm_unit(ingredient.get('unit'))
+    return True
+
+
+def controleer_tegen_tabel(recipe, rijen, paginas):
+    """De tabel is leidend: elke afwijking wordt zichtbaar, niets wordt omgeschreven.
+
+    Koppelt elk ingrediënt aan de tabelrij met de meeste gedeelde woorden
+    (elke rij hooguit één keer). Afwijkende hoeveelheid → 'check' met de
+    celtekst; geen rij → 'check' "staat niet in de tabel" (blijft staan);
+    rij zonder ingrediënt → melding. Een voorraadrij markeert het ingrediënt
+    als 'kaart_voorraad', zodat het formulier het vinkje al aanzet.
+    """
+    vrij = list(range(len(rijen)))
+    for ing in recipe['ingredients']:
+        naam = _woorden(ing.get('name'))
+        beste, score = None, 0
+        for i in vrij:
+            s = len(naam & _woorden(rijen[i]['naam']))
+            if s > score:
+                beste, score = i, s
+        if beste is None:
+            ing['check'] = 'staat niet in de tabel'
+            continue
+        vrij.remove(beste)
+        rij = rijen[beste]
+        if not _zelfde_hoeveelheid(ing, rij['hoeveelheid']):
+            ing['check'] = f"tabel zegt '{rij['hoeveelheid']}'"
+        if rij['blok'] == 'voorraad':
+            ing['kaart_voorraad'] = True
+    return [f"Pagina's {paginas} ({recipe['name']}): tabelrij "
+            f"'{rijen[i]['naam']} | {rijen[i]['hoeveelheid']}' ontbreekt in het concept."
+            for i in vrij]

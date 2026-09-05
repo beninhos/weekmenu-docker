@@ -1,7 +1,8 @@
 """Receptkaart: paren, modelinvoer, controle tegen de tabel."""
 from unittest.mock import patch
 
-from weekmenu.services.kaart import benodigdheden, kaart_invoer, paren, zonder_tabelregels
+from weekmenu.services.kaart import (benodigdheden, controleer_tegen_tabel, kaart_invoer, paren,
+                                      zonder_tabelregels)
 
 RIJEN = [{'naam': 'Ui', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 1},
          {'naam': 'Prei', 'hoeveelheid': '2 st', 'blok': 'kaart', 'y': 2},
@@ -107,3 +108,70 @@ def test_kaart_invoer_heeft_drie_blokken_in_deze_volgorde():
 def test_benodigdheden_onder_de_kop_tot_de_regel_zonder_komma_aan_het_eind():
     assert benodigdheden(ACHTER) == 'Pan met deksel, koekenpan, steelpan, saladekom'
     assert benodigdheden('Snijd de ui\n') is None
+
+
+def _recept(*ingredienten):
+    return {'name': 'X', 'ingredients': [dict(i) for i in ingredienten], 'meldingen': []}
+
+
+def test_kloppende_hoeveelheid_krijgt_geen_check():
+    r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'}, {'name': 'prei', 'amount': 2.0, 'unit': 'stuks'},
+                {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'})
+    meldingen = controleer_tegen_tabel(r, RIJEN, '1+2')
+    assert meldingen == []
+    assert all('check' not in i for i in r['ingredients'])
+    assert r['ingredients'][2]['kaart_voorraad'] is True
+    assert 'kaart_voorraad' not in r['ingredients'][0]
+
+
+def test_afwijkende_hoeveelheid_krijgt_check_met_de_celtekst():
+    r = _recept({'name': 'ui', 'amount': 10.0, 'unit': 'stuks'}, {'name': 'prei', 'amount': 2.0, 'unit': 'stuks'},
+                {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'})
+    controleer_tegen_tabel(r, RIJEN, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
+
+
+def test_breuk_en_eenheid_worden_genormaliseerd_voor_de_vergelijking():
+    rijen = [{'naam': 'Zonnebloemolie', 'hoeveelheid': '½ el', 'blok': 'voorraad', 'y': 1},
+             {'naam': 'Peper en zout', 'hoeveelheid': 'naar smaak', 'blok': 'voorraad', 'y': 2},
+             {'naam': 'Kip', 'hoeveelheid': '300 gram', 'blok': 'kaart', 'y': 3}]
+    r = _recept({'name': 'zonnebloemolie', 'amount': 0.5, 'unit': 'el'},
+                {'name': 'peper en zout', 'amount': None, 'unit': ''},
+                {'name': 'kip', 'amount': 300.0, 'unit': 'g'})
+    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert all('check' not in i for i in r['ingredients'])
+
+
+def test_ingredient_buiten_de_tabel_blijft_staan_met_check():
+    r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'}, {'name': 'prei', 'amount': 2.0, 'unit': 'stuks'},
+                {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'}, {'name': 'snuf peper', 'amount': None, 'unit': ''})
+    controleer_tegen_tabel(r, RIJEN, '1+2')
+    assert r['ingredients'][3]['check'] == 'staat niet in de tabel'
+    assert len(r['ingredients']) == 4
+
+
+def test_ontbrekende_tabelrij_wordt_gemeld():
+    r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'}, {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'})
+    meldingen = controleer_tegen_tabel(r, RIJEN, '3+4')
+    assert meldingen == ["Pagina's 3+4 (X): tabelrij 'Prei | 2 st' ontbreekt in het concept."]
+
+
+def test_stuk_s_uit_de_kaart_komt_overeen_met_stuks():
+    rijen = [{'naam': 'Ui', 'hoeveelheid': '1 stuk(s)', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'})
+    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert 'check' not in r['ingredients'][0]
+
+
+def test_bol_len_uit_de_kaart_komt_overeen_met_bol():
+    rijen = [{'naam': 'Mozzarella', 'hoeveelheid': '1 bol(len)', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'mozzarella', 'amount': 1.0, 'unit': 'bol'})
+    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert 'check' not in r['ingredients'][0]
+
+
+def test_ocr_misread_breuk_als_procent_geeft_check_met_de_celtekst():
+    rijen = [{'naam': 'Mexicaanse kruiden', 'hoeveelheid': '% zakje(s)', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'mexicaanse kruiden', 'amount': 0.5, 'unit': 'zakje'})
+    controleer_tegen_tabel(r, rijen, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt '% zakje(s)'"
