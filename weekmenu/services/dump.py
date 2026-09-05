@@ -80,6 +80,42 @@ Regels:
 - Als er helemaal geen recept te vinden is: []
 """
 
+# De kaartprompt deelt alle regels met de boekprompt (eenheden, breuken
+# letterlijk, "volle", niets verzinnen, ankers) en verschilt alleen in de kop:
+# één recept, de ingrediënten uitsluitend uit het tabelblok, geen photo_page.
+_KAART_PROMPT = f"""Hieronder staat de uitgelezen tekst van ÉÉN receptkaart, in drie blokken:
+de voorkant, de ingrediëntentabel als regels 'naam | hoeveelheid', en de achterkant.
+Het is precies één recept. Geef ALLEEN geldige JSON terug, geen markdown: een lijst
+met één object.
+
+[
+  {{
+    "title": "Recept naam",
+    "yields": 2,
+    "ingredients": [
+      {{"name": "halfkruimige aardappelen", "amount": "500", "unit": "g"}},
+      {{"name": "zonnebloemolie", "amount": "½", "unit": "el"}}
+    ],
+    "steps": [
+      {{"start": "Verwarm de oven voor", "end": "Schep halverwege om."}}
+    ]
+  }}
+]
+
+Regels voor de kaart:
+- "ingredients": uitsluitend de regels uit het blok '--- Ingrediënten (tabel) ---', in
+  die volgorde, één ingrediënt per regel. Vóór '|' staat de naam, erna de hoeveelheid
+  met eenheid. 'naar smaak' of een lege hoeveelheid wordt amount null
+- "yields": het getal uit 'voor N personen' als dat op de kaart staat, anders null
+- Een bereidingsstap kan op de voorkant beginnen; de stapkoppen ('Frietjes maken')
+  horen bij de stap die eronder staat
+- Tips en weetjes zijn bereidingstekst en horen bij de stap waar ze onder staan
+
+Regels:""" + '\n'.join(
+    regel for regel in _BATCH_PROMPT.split('Regels:', 1)[1].split('\n')
+    if '"photo_page"' not in regel
+)
+
 
 def _salvage_objects(text):
     """Haal de complete objecten uit een afgekapte JSON-array.
@@ -107,13 +143,16 @@ def _salvage_objects(text):
     return objects
 
 
-def parse_batch_response(text, page_texts=None):
+def parse_batch_response(text, page_texts=None, standaard_pagina=None):
     """Parse het Gemini-batchantwoord naar een lijst receptdicts. Raises ValueError.
 
     `page_texts` is de opgeschoonde OCR-tekst per pagina (index 0 = pagina 1).
     Daaruit wordt de bereidingstekst geknipt op de ankers die het model geeft;
     zie services/ankers.py. Geeft het model toch een 'instructions'-tekst
     (ouder antwoordformaat), dan wordt die gebruikt zoals vroeger.
+
+    `standaard_pagina`: als gezet, wordt `photo_page` van het model genegeerd
+    (kaartmodus: één samengevoegde tekst).
     """
     if not text:
         raise ValueError('Gemini gaf een leeg antwoord terug. Probeer het opnieuw.')
@@ -139,6 +178,10 @@ def parse_batch_response(text, page_texts=None):
             continue
         photo_page = item.get('photo_page')
         photo_page = int(photo_page) if isinstance(photo_page, (int, float)) else None
+        if standaard_pagina is not None:
+            # Kaartmodus: het model kent maar één (samengevoegde) tekst en
+            # mag geen paginanummer kiezen dat er niet is.
+            photo_page = standaard_pagina
         ingredients = _build_gemini_ingredients(item.get('ingredients') or [])
         instructions, meldingen = _bereiding(item, photo_page, page_texts,
                                              [i['name'] for i in ingredients])
@@ -419,8 +462,9 @@ def _markeer_twijfels(recipes, twijfels):
     """
     per_pagina = {}
     for r in recipes:
-        if r.get('photo_page'):
-            per_pagina.setdefault(r['photo_page'], []).append(r)
+        for p in (r.get('photo_page'), r.get('back_page')):
+            if p:
+                per_pagina.setdefault(p, []).append(r)
     for pagina, lijst in enumerate(twijfels or [], 1):
         for twijfel in lijst:
             treffer = _ingredient_bij_regel(twijfel['regel'], per_pagina.get(pagina, []))

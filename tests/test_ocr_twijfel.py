@@ -143,6 +143,13 @@ def test_bovenrand_van_de_drempel():
     assert onzekere_hoeveelheden(ann) == []
 
 
+def test_twijfel_op_de_achterkant_komt_op_het_kaartrecept():
+    recipes = [{'photo_page': 1, 'back_page': 2, 'ingredients': [{'name': 'komkommer', 'amount': 1, 'unit': 'stuks'}]}]
+    twijfels = [[], [{'regel': '12 komkommer', 'cijfer': '12', 'zekerheid': 0.31}]]
+    _markeer_twijfels(recipes, twijfels)
+    assert 'check' in recipes[0]['ingredients'][0]
+
+
 def test_lees_paginas_met_annotaties_houdt_de_annotatie_vast(app):
     from weekmenu.services.ocr import lees_paginas, lees_paginas_met_annotaties
     ann = _annotatie([[('2', [0.49]), ('theelepel', [0.98] * 9)]])
