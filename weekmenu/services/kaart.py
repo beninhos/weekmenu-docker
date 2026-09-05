@@ -109,7 +109,6 @@ def _woorden(tekst):
     return set(re.findall(r'[^\W\d_]{2,}', (tekst or '').lower())) - _STOPWOORDEN
 
 
-_WOORD = re.compile(r'^[^\W\d_]+$')
 _EENHEID_UITGANGEN = ('jes', 'je', 'ken', 's')
 
 
@@ -149,7 +148,7 @@ def _zelfde_hoeveelheid(ingredient, cel):
         return ingredient.get('amount') in (None, '')
     delen = cel.split(' ', 1)
     getal = _parse_amount(delen[0])
-    if getal is None and _WOORD.match(delen[0]):
+    if getal is None and delen[0].isalpha():
         amount = ingredient.get('amount')
         if amount in (None, ''):
             return True

@@ -254,3 +254,22 @@ def test_stopwoord_koppelt_niet_los_van_de_echte_gedeelde_naam():
     meldingen = controleer_tegen_tabel(r, rijen, '1+2')
     assert meldingen == ["Pagina's 1+2 (X): tabelrij 'Prei en wortel | naar smaak' ontbreekt in het concept."]
     assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
+
+
+def test_unicode_numeral_glyph_geeft_check_geen_silent_pass():
+    # D4-vangnet: '⅐' is een Unicode numeral glyph, geen echt woord. Kan het model
+    # daardoor geen amount bepalen (amount None), dan mag dat niet stilletjes als
+    # 'gelijk' tellen zoals bij 'scheutje' — anders verdwijnt de OCR-leesfout
+    # die zichtbaar moet blijven. (Ook '①', '②', 'Ⅷ', '²' moeten dit vangnet triggeren.)
+    rijen = [{'naam': 'komijn', 'hoeveelheid': '⅐ zakje(s)', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'komijn', 'amount': None, 'unit': ''})
+    controleer_tegen_tabel(r, rijen, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt '⅐ zakje(s)'"
+
+
+def test_echt_woord_scheutje_krijgt_nog_steeds_geen_check():
+    # Blijft werken: 'scheutje' is echt alfabetisch, dus woordhoeveelheid.
+    rijen = [{'naam': 'melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
+    r = _recept({'name': 'melk', 'amount': None, 'unit': ''})
+    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert 'check' not in r['ingredients'][0]
