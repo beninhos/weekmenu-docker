@@ -97,9 +97,16 @@ def benodigdheden(tekst):
     return None
 
 
+_STOPWOORDEN = {'en', 'de', 'of', 'in', 'op', 'af', 'om', 'te', 'je', 'er', 'al', 'na', 'nu', 'zo'}
+
+
 def _woorden(tekst):
-    """Woorden van minstens twee letters, zodat korte namen als 'ui' meetellen."""
-    return set(re.findall(r'[^\W\d_]{2,}', (tekst or '').lower()))
+    """Woorden van minstens twee letters, zodat korte namen als 'ui' meetellen.
+
+    Tweeletterige stopwoorden ('en', 'de', ...) worden eruit gefilterd: anders
+    scoort elke rij met zo'n woord mee, los van de echte gedeelde naam.
+    """
+    return set(re.findall(r'[^\W\d_]{2,}', (tekst or '').lower())) - _STOPWOORDEN
 
 
 def _zelfde_hoeveelheid(ingredient, cel):
@@ -117,7 +124,7 @@ def _zelfde_hoeveelheid(ingredient, cel):
         return ingredient.get('amount') in (None, '')
     delen = cel.split(' ', 1)
     getal = _parse_amount(delen[0])
-    if getal is None or ingredient.get('amount') is None:
+    if getal is None or ingredient.get('amount') in (None, ''):
         return False
     if abs(float(ingredient['amount']) - getal) > 0.01:
         return False

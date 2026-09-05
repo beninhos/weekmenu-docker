@@ -175,3 +175,21 @@ def test_ocr_misread_breuk_als_procent_geeft_check_met_de_celtekst():
     r = _recept({'name': 'mexicaanse kruiden', 'amount': 0.5, 'unit': 'zakje'})
     controleer_tegen_tabel(r, rijen, '1+2')
     assert r['ingredients'][0]['check'] == "tabel zegt '% zakje(s)'"
+
+
+def test_lege_hoeveelheid_tegen_echte_cel_geeft_check_zonder_crash():
+    r = _recept({'name': 'ui', 'amount': '', 'unit': ''})
+    controleer_tegen_tabel(r, RIJEN, '1+2')
+    assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
+
+
+def test_stopwoord_koppelt_niet_los_van_de_echte_gedeelde_naam():
+    # 'en' staat in beide rijnamen en weegt dus in beide even zwaar mee; alleen
+    # het echte woord 'ui' hoort bij de juiste rij. Zonder stopwoordfilter is
+    # het 1-1 gelijkspel en wint de eerste rij (fout); met filter wint 'Ui'.
+    rijen = [{'naam': 'Prei en wortel', 'hoeveelheid': 'naar smaak', 'blok': 'kaart', 'y': 1},
+             {'naam': 'Ui', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 2}]
+    r = _recept({'name': 'ui en look', 'amount': None, 'unit': ''})
+    meldingen = controleer_tegen_tabel(r, rijen, '1+2')
+    assert meldingen == ["Pagina's 1+2 (X): tabelrij 'Prei en wortel | naar smaak' ontbreekt in het concept."]
+    assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
