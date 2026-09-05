@@ -16,10 +16,12 @@ from weekmenu.services.dump import _eerste_getal, parse_batch_response
 from weekmenu.services.ocr import _clean_ocr_text
 
 
-def _concept(app, ingredienten, status='pending', job_id='job-v'):
+def _concept(app, ingredienten, status='pending', job_id='job-v',
+            instructions='Stap 1. Doe iets.'):
     if not DumpJob.query.get(job_id):
         db.session.add(DumpJob(id=job_id, status='done'))
     d = RecipeDraft(job_id=job_id, name='Proefrecept', source_page=1, status=status,
+                    instructions=instructions,
                     ingredients_json=json.dumps(ingredienten))
     db.session.add(d)
     db.session.commit()
@@ -57,6 +59,33 @@ def test_onleesbare_hoeveelheid_laat_de_rest_staan(app, client):
     assert resp.status_code == 200
     suiker = [ri for ri in RecipeIngredient.query.all() if ri.amount == 50]
     assert len(suiker) == 1
+
+
+# ── Een lege bereiding mag niet stilzwijgend geaccepteerd worden ───────
+
+def test_lege_bereiding_blokkeert_opslaan(app, client):
+    """Zonder bereidingstekst zou het recept stappenloos in de database komen."""
+    d = _concept(app, [{'name': 'bloem', 'amount': 200, 'unit': 'g'}], instructions=None)
+    resp = client.post(f'/dump/draft/{d.id}/accept', json={})
+
+    assert resp.status_code == 409
+    assert 'bereiding' in resp.get_json()['message'].lower()
+    assert Recipe.query.count() == 0
+    assert RecipeDraft.query.get(d.id).status == 'pending'
+
+
+def test_witruimte_bereiding_telt_ook_als_leeg(app, client):
+    d = _concept(app, [{'name': 'bloem', 'amount': 200, 'unit': 'g'}], instructions='   \n\t  ')
+    resp = client.post(f'/dump/draft/{d.id}/accept', json={})
+
+    assert resp.status_code == 409
+
+
+def test_bereiding_met_tekst_mag_gewoon_opgeslagen_worden(app, client):
+    d = _concept(app, [{'name': 'bloem', 'amount': 200, 'unit': 'g'}], instructions='Meng de bloem.')
+    resp = client.post(f'/dump/draft/{d.id}/accept', json={})
+
+    assert resp.status_code == 200
 
 
 # ── Hetzelfde concept twee keer opslaan ────────────────────────────────

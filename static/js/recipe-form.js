@@ -60,6 +60,7 @@ function addIngredientRow(opts) {
             <input type="hidden" name="preparation[]" value="${esc(o.preparation ?? '')}">
             <input type="hidden" name="pantry_flag[]" value="0">
             <div class="ac-dropdown hidden absolute z-50 w-full bg-white border border-[#E8E4DC] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto"></div>
+            ${o.check ? `<p class="text-xs text-orange-600 mt-0.5">controleer: ${esc(o.check)}</p>` : ''}
         </div>
         <div class="col-span-1 order-2 md:order-5 flex items-center justify-center">
             <button type="button" onclick="this.closest('.ingredient-row').remove()"

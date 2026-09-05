@@ -106,6 +106,16 @@ def _hoeveelheid_ontbreekt(ingredienten):
             if i.get('amount') in (None, '') and (i.get('unit') or '').strip()]
 
 
+def _bereiding_ontbreekt(instructions):
+    """Een concept zonder bereidingstekst zou stappenloos in de database komen.
+
+    De nakijkkaart toont de bereiding niet als hij leeg is en er is verder
+    niets dat dat verraadt, dus dit is dezelfde stille val als de ontbrekende
+    hoeveelheid hierboven.
+    """
+    return not (instructions or '').strip()
+
+
 @bp.route('/dump/draft/<int:id>/accept', methods=['POST'])
 def dump_draft_accept(id):
     d = RecipeDraft.query.get_or_404(id)
@@ -126,6 +136,13 @@ def dump_draft_accept(id):
             'message': 'Bij {} ontbreekt de hoeveelheid. Kies "Aanpassen" en vul '
                        'hem aan, anders komt het ingrediënt op 0 in de '
                        'boodschappenlijst.'.format(', '.join(ontbreekt[:4])),
+        }), 409
+
+    if _bereiding_ontbreekt(d.instructions):
+        return jsonify({
+            'status': 'error',
+            'message': 'De bereiding ontbreekt. Kies "Aanpassen" en vul '
+                       'hem aan.',
         }), 409
 
     recipe = Recipe(name=d.name, serves=d.serves, cookbook_id=cookbook_id,

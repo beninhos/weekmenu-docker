@@ -150,6 +150,12 @@ function renderCard(d) {
         if (i.check) return `<li class="text-orange-600" title="${esc(i.check)}">${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)} — controleer: ${esc(i.check)}</li>`;
         return `<li>${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)}</li>`;
     }).join('');
+    // Een lege bereiding is op de kaart niet te zien zonder dit: de tekst
+    // staat verderop wel in het formulier, maar hier moet je 'm missen vóórdat
+    // je op Opslaan klikt, niet pas na de foutmelding.
+    const bereidingHtml = (d.instructions || '').trim()
+        ? `<p class="text-sm mt-2 whitespace-pre-wrap max-h-32 overflow-y-auto">${esc(d.instructions)}</p>`
+        : `<p class="text-sm mt-2 text-red-600">bereiding ontbreekt</p>`;
     const img = imageUrl(esc(d.image_path));
     const cookbookSel = document.getElementById('cookbookSelect');
     const cbParam = cookbookSel && cookbookSel.value ? `&cookbook=${encodeURIComponent(cookbookSel.value)}` : '';
@@ -160,6 +166,7 @@ function renderCard(d) {
             <h3 class="font-bold">${esc(d.name)}</h3>
             <p class="text-sm text-[#6B6B6B]">${d.serves ? esc(d.serves) + ' personen' : ''}${d.serves && d.source_page ? ' · ' : ''}${d.source_page ? 'scan ' + esc(d.source_page) : ''}</p>
             <ul class="text-sm mt-1 list-disc list-inside text-[#6B6B6B] max-h-40 overflow-y-auto">${ingHtml}</ul>
+            ${bereidingHtml}
             <div class="flex gap-2 mt-3">
                 <button onclick="acceptDraft(${d.id})" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">✓ Opslaan</button>
                 <a href="/recipe/new?draft=${d.id}${cbParam}" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✎ Aanpassen</a>
