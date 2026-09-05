@@ -165,12 +165,18 @@ function renderCard(d) {
     const img = imageUrl(esc(d.image_path));
     const cookbookSel = document.getElementById('cookbookSelect');
     const cbParam = cookbookSel && cookbookSel.value ? `&cookbook=${encodeURIComponent(cookbookSel.value)}` : '';
+    const meta = [
+        d.serves ? esc(d.serves) + ' personen' : '',
+        d.prep_time ? '⏱ ' + esc(d.prep_time) + ' min' : '',
+        d.source_page ? 'scan ' + esc(d.source_page) : '',
+    ].filter(Boolean).join(' · ');
+    const achterkant = imageUrl(esc(d.back_image_path));
     card.innerHTML = `
         ${img ? `<a href="${img}" target="_blank" title="Klik voor de volledige pagina" class="shrink-0">
                    <img src="${img}" class="w-40 h-40 object-cover rounded"></a>` : ''}
         <div class="flex-1 min-w-0">
             <h3 class="font-bold">${esc(d.name)}</h3>
-            <p class="text-sm text-[#6B6B6B]">${d.serves ? esc(d.serves) + ' personen' : ''}${d.serves && d.source_page ? ' · ' : ''}${d.source_page ? 'scan ' + esc(d.source_page) : ''}</p>
+            <p class="text-sm text-[#6B6B6B]">${meta}${achterkant ? ` · <a href="${achterkant}" target="_blank" class="underline">achterkant</a>` : ''}</p>
             <ul class="text-sm mt-1 list-disc list-inside text-[#6B6B6B] max-h-40 overflow-y-auto">${ingHtml}</ul>
             ${bereidingHtml}
             <div class="flex gap-2 mt-3">
