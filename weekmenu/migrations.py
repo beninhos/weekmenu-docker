@@ -503,6 +503,30 @@ def _migrate_v15(conn):
                 pass
 
 
+def _migrate_v16(conn):
+    """Receptkaart-modus en bereidingstijd.
+
+    `dump_job.mode` zegt of een batch kookboekpagina's ('boek') of
+    receptkaarten ('kaart', twee pagina's per recept) bevat; de vlag staat op
+    de job omdat een retry in een achtergrondthread draait zonder request.
+    `prep_time` wordt al jaren aan het model gevraagd maar bestond nergens.
+    `back_image_path` is de achterkant van een kaart, alleen voor de
+    nakijkkaart: daar staan de hoeveelheden die je wilt controleren.
+    """
+    for tabel, kolommen in [
+        ('dump_job', [('mode', "VARCHAR(10) DEFAULT 'boek'")]),
+        ('recipe', [('prep_time', 'INTEGER')]),
+        ('recipe_draft', [('prep_time', 'INTEGER'), ('back_image_path', 'VARCHAR(200)')]),
+    ]:
+        cols = [row[1] for row in conn.execute(text(f'PRAGMA table_info({tabel})')).fetchall()]
+        for col, col_def in kolommen:
+            if col not in cols:
+                try:
+                    conn.execute(text(f'ALTER TABLE {tabel} ADD COLUMN {col} {col_def}'))
+                except OperationalError:
+                    pass
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -548,8 +572,10 @@ def migrate_db():
             _migrate_v14(conn)
         if current < 15:
             _migrate_v15(conn)
+        if current < 16:
+            _migrate_v16(conn)
 
-        target = 15
+        target = 16
         if current < target:
             if row:
                 conn.execute(

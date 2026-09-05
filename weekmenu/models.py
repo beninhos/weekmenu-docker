@@ -16,6 +16,7 @@ class Recipe(db.Model):
     usage_count = db.Column(db.Integer, default=0)
     url = db.Column(db.Text, nullable=True)
     instructions = db.Column(db.Text, nullable=True)
+    prep_time = db.Column(db.Integer, nullable=True)  # bereidingstijd in minuten
     ingredients = db.relationship('RecipeIngredient', backref='recipe', lazy=True, cascade='all, delete-orphan')
     meal_types = db.relationship('RecipeMealType', backref='recipe', lazy=True, cascade='all, delete-orphan')
     cookbook = db.relationship('Cookbook', back_populates='recipes')
@@ -185,6 +186,8 @@ class DumpJob(db.Model):
     # kunnen één recept zijn — maar de gebruiker hoort het wel te weten.
     page_count = db.Column(db.Integer, nullable=True)
     warning = db.Column(db.Text, nullable=True)
+    # 'boek' (één pagina = één recept) of 'kaart' (twee pagina's = één recept).
+    mode = db.Column(db.String(10), nullable=False, default='boek')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     drafts = db.relationship('RecipeDraft', backref='job', lazy=True, cascade='all, delete-orphan')
 
@@ -198,6 +201,8 @@ class RecipeDraft(db.Model):
     ingredients_json = db.Column(db.Text, nullable=False, default='[]')
     image_path = db.Column(db.String(200), nullable=True)
     original_image_path = db.Column(db.String(200), nullable=True)
+    back_image_path = db.Column(db.String(200), nullable=True)  # achterkant van een kaart
+    prep_time = db.Column(db.Integer, nullable=True)
     source_page = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending|accepted|rejected
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
