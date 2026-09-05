@@ -1,11 +1,15 @@
 """Receptkaart: paren, modelinvoer, controle tegen de tabel."""
 from unittest.mock import patch
 
-from weekmenu.services.kaart import paren
+from weekmenu.services.kaart import benodigdheden, kaart_invoer, paren, zonder_tabelregels
 
 RIJEN = [{'naam': 'Ui', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 1},
          {'naam': 'Prei', 'hoeveelheid': '2 st', 'blok': 'kaart', 'y': 2},
          {'naam': 'Olijfolie', 'hoeveelheid': '1 el', 'blok': 'voorraad', 'y': 3}]
+
+ACHTER = ('Benodigdheden\nPan met deksel, koekenpan,\nsteelpan, saladekom\n'
+          'Ingrediënten voor 2 personen\nUi\nPrei\n1 st\n2 st\nZelf toevoegen\nOlijfolie\n1 el\n'
+          'Snijd de ui\nBak de prei 5 minuten.\n')
 
 
 def _tabel_op(paginas):
@@ -83,3 +87,23 @@ def test_letterlijke_reden_wordt_met_paginanummer_gemeld():
         "Pagina's 1 en 2 zijn niet als één kaart te lezen: "
         "de tabel op pagina 2 is niet te lezen (telling klopt niet: 11 namen, 8 hoeveelheden)."
     ]
+
+
+def test_zonder_tabelregels_haalt_alleen_celregels_weg():
+    uit = zonder_tabelregels(ACHTER, RIJEN)
+    assert 'Ui\n' not in uit and '1 st' not in uit and 'Olijfolie' not in uit
+    assert 'Snijd de ui' in uit and 'Bak de prei 5 minuten.' in uit
+    assert 'Ingrediënten voor 2 personen' in uit   # de kop blijft: daar staat 'yields'
+
+
+def test_kaart_invoer_heeft_drie_blokken_in_deze_volgorde():
+    uit = kaart_invoer('HELLO FRESH\nPrei-ui', ACHTER, RIJEN, 1, 2)
+    assert uit.index('--- Voorkant (pagina 1) ---') < uit.index('--- Ingrediënten (tabel) ---') \
+        < uit.index('--- Achterkant (pagina 2) ---')
+    assert 'Ui | 1 st\nPrei | 2 st\nOlijfolie | 1 el' in uit
+    assert 'Snijd de ui' in uit
+
+
+def test_benodigdheden_onder_de_kop_tot_de_regel_zonder_komma_aan_het_eind():
+    assert benodigdheden(ACHTER) == 'Pan met deksel, koekenpan, steelpan, saladekom'
+    assert benodigdheden('Snijd de ui\n') is None

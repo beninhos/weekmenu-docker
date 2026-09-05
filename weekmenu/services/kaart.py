@@ -61,3 +61,36 @@ def paren(texts, annotaties):
     if len(texts) % 2:
         meldingen.append(f'Pagina {len(texts)} heeft geen tegenhanger en is overgeslagen.')
     return uit, meldingen
+
+
+def zonder_tabelregels(achtertekst, rijen):
+    """Achterkant zonder de cellen van de tabel, zodat een anker er nooit op valt."""
+    cellen = {c.strip().lower() for r in rijen for c in (r['naam'], r['hoeveelheid']) if c}
+    return '\n'.join(regel for regel in achtertekst.split('\n')
+                     if re.sub(r'\s+', ' ', regel).strip().lower() not in cellen)
+
+
+def kaart_invoer(voortekst, achtertekst, rijen, voor, achter):
+    """De tekst die het model krijgt: voorkant, schone tabelrijen, achterkant."""
+    tabel = '\n'.join(f"{r['naam']} | {r['hoeveelheid']}" for r in rijen)
+    return (f'--- Voorkant (pagina {voor}) ---\n{voortekst.strip()}\n\n'
+            f'--- Ingrediënten (tabel) ---\n{tabel}\n\n'
+            f'--- Achterkant (pagina {achter}) ---\n{zonder_tabelregels(achtertekst, rijen).strip()}')
+
+
+def benodigdheden(tekst):
+    """De regels onder de kop 'Benodigdheden', letterlijk, tot een regel die
+    niet op een komma eindigt (hooguit vier regels). None zonder kop."""
+    regels = (tekst or '').split('\n')
+    for i, regel in enumerate(regels):
+        if is_benodigdheden_kop(regel):
+            uit = []
+            for volgende in regels[i + 1:i + 5]:
+                volgende = volgende.strip()
+                if not volgende:
+                    break
+                uit.append(volgende)
+                if not volgende.endswith(','):
+                    break
+            return ' '.join(uit) or None
+    return None
