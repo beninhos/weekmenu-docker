@@ -478,3 +478,40 @@ def test_tabelregel_voor_een_stap_is_geen_kopje():
         tekst, _ = knip_stappen(pagina, [{'start': 'Breng ruim water', 'end': 'met deksel.'}],
                                 ingredienten=['peper en zout'])
         assert tekst == "Breng ruim water aan de kook in een pan met deksel.", regel
+
+
+
+def test_bullet_in_anker_matcht_tekst_zonder_bullet():
+    # HelloFresh-kaarten hebben een bullet tussen kopje en stap ('2. Bakken •
+    # Verhit de olijfolie'); Vision leest de bullet als '•', normaliseer haalt
+    # hem weg. Het anker van het model moet dezelfde weg gaan, anders vindt
+    # `_zoek` fuzzy iets fouts even verderop en wordt de stap ruim geknipt.
+    from weekmenu.services.ankers import _zoek
+    tekst = 'Week 31 2022 457/05-06/457 2. Bakken Verhit de olijfolie in een hapjespan.'
+    pos = _zoek('2. Bakken • Verhit de', tekst)
+    assert pos is not None
+    assert tekst[pos[0]:pos[1]] == '2. Bakken Verhit de'
+
+
+def test_hellofresh_kaart_met_bullet_in_ankers():
+    # Een kaart met stap 1, 2, 3 in de OCR-volgorde 3-2-1 (kolomlay-out) en
+    # bullets tussen kopje en stap. Voor de fix werd stap 2 en 3 fuzzy op
+    # 'Week 31 2022 ... 2. Bakken' gematcht en slokte stap 1 alles op.
+    pagina = ("1. Snijden\nSnijd de prei fijn.\n"
+              "in de koelkast bewaren Voedingswaarden Per portie 3714/888 Vetten (g) 43\n"
+              "3. Saus bereiden Week 31 2022 457/05-06/457 2. Bakken\n"
+              "Verhit de olijfolie in een hapjespan.\nBak de gehaktballen in 3 minuten.\n"
+              "Voeg de knoflook toe en roerbak.\nBreng op smaak met peper en zout.\n"
+              "4. Serveren\nServeer op borden.\n")
+    stappen = [
+        {'start': '1. Snijden • Snijd', 'end': 'prei fijn.'},
+        {'start': '2. Bakken • Verhit', 'end': '3 minuten.'},
+        {'start': '3. Saus bereiden • Voeg', 'end': 'peper en zout.'},
+        {'start': '4. Serveren • Serveer', 'end': 'op borden.'},
+    ]
+    tekst, meldingen = knip_stappen(pagina, stappen)
+    assert meldingen == []
+    assert 'Verhit de olijfolie in een hapjespan.' in tekst
+    assert 'Voeg de knoflook toe' in tekst
+    stap1 = tekst.split('\n')[1]
+    assert 'Verhit' not in stap1 and 'gehaktballen' not in stap1

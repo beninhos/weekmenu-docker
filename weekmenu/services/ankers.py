@@ -102,6 +102,11 @@ def _zoek(anker, tekst, vanaf=0):
     # omvallen met een TypeError.
     if not isinstance(anker, str):
         return None
+    # HelloFresh-kaarten hebben een bullet tussen kopje en stap ('2. Bakken •
+    # Verhit de olijfolie'). normaliseer() strippet die uit de tekst; het anker
+    # van het model draagt hem nog. Zonder dezelfde bewerking zoekt de fuzzy
+    # match iets fouts even verderop en gaat de stap ruim geknipt.
+    anker = re.sub(f'[{_BULLETS}]', ' ', anker)
     anker = re.sub(r'\s+', ' ', anker).strip()
     if not anker:
         return None
