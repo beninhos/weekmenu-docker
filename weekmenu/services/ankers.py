@@ -181,18 +181,46 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
     # oversloeg mag niet verdwijnen. Wat in dat gat op een tabel lijkt gaat er
     # wel uit. Overlap (volgend begin vóór dit einde) laten we zoals het is;
     # dat is een dubbel woord, geen verloren tekst.
+    # Kopjes ('1. Pasta koken', 'Saus maken') staan op de kaart vlak vóór de
+    # stap, maar het model wijst de stap aan vanaf de eerste zin. Zo'n kopje
+    # hoort bij de stap eronder, op een eigen regel — niet aan het eind van
+    # de vorige stap, en niet weg als meubilair.
+    ankers = list(stukken)                      # zoals het model ze aanwees, vóór het kopje erbij
+    koppen = []
+    for i, (b, e) in enumerate(stukken):
+        grens = stukken[i - 1][1] if i else 0
+        kop = _kopregel(regels, b, grens, ingredienten)
+        if kop:
+            begin, tekst_kop = kop
+            # Een los stapnummer vlak vóór het kopje ('4' en dan 'Boontjes
+            # koken' op de volgende regel) hoort bij het kopje.
+            nummer = re.fullmatch(r'\s*(\d{1,2}\.?)\s*', regels[grens:begin])
+            if nummer:
+                begin, tekst_kop = grens, f'{nummer.group(1)} {tekst_kop}'
+            stukken[i] = (begin, e)
+        koppen.append(kop and tekst_kop)
+
     uit, weggelaten = [], []
     for i, (b, e) in enumerate(stukken):
-        if i and (b, e) == stukken[i - 1]:
+        if i and ankers[i] == ankers[i - 1]:
             continue                            # zelfde ankers twee keer: dezelfde tekst niet twee keer
         stuk = regels[b:e]
+        kop = koppen[i]
+        if kop:
+            # Het kopje staat vooraan in het stuk, mogelijk over twee regels
+            # ('4' en dan 'Boontjes koken'): woord voor woord eraf halen.
+            stuk = re.sub(r'^\s*' + r'\s+'.join(re.escape(w) for w in kop.split()) + r'\s*', '', stuk, count=1)
         if i + 1 < len(stukken) and stukken[i + 1][0] > e:
             gat, meubilair = _zonder_meubilair(regels[e:stukken[i + 1][0]])
+            if re.fullmatch(r'\s*\d{1,2}\.?\s*', gat):
+                gat = ''                        # los stapnummer van een genummerd kookboek
             stuk += gat
             weggelaten += meubilair
         stuk, weg = _zonder_ingredientregels(stuk, ingredienten)
         weggelaten += weg
         stuk = re.sub(r'\s+', ' ', stuk).strip().lstrip('.,;: ')
+        if kop:
+            uit.append(kop)
         if stuk:
             uit.append(stuk)
     if weggelaten:
@@ -232,6 +260,59 @@ def _staartzin(staart):
 
 
 _GENUMMERDE_STAP = re.compile(r'^\s*\d{1,2}[.)]?\s+[^\W\d_]')
+
+
+def _kopregel(regels, b, grens, ingredienten):
+    """Het kopje van de stap die op positie `b` begint: (beginpositie, tekst) of None.
+
+    Twee plekken: de regel waarmee de stap begint (het model nam het kopje in
+    het anker op: 'Groente snijden Snijd de paprika'), of de regel er vlak
+    boven, mits die ná het einde van de vorige stap ligt. Alleen als de stap
+    op een regelbegin start: midden in een regel is de tekst ervoor de
+    vorige regel, geen kopje.
+    """
+    if b > 0 and regels[b - 1] != '\n':
+        return None
+    eind = regels.find('\n', b)
+    eerste = regels[b:eind if eind >= 0 else len(regels)]
+    volgende = regels[eind + 1:regels.find('\n', eind + 1) if regels.find('\n', eind + 1) >= 0 else len(regels)] \
+        if eind >= 0 else ''
+    if _is_kop(eerste, volgende, ingredienten):
+        return b, eerste.strip()
+    if b == 0:
+        return None
+    begin = regels.rfind('\n', 0, b - 1) + 1
+    if begin < grens:
+        return None
+    ervoor = regels[begin:b - 1]
+    if _is_kop(ervoor, eerste, ingredienten):
+        return begin, ervoor.strip()
+    return None
+
+
+def _is_kop(regel, volgende, ingredienten=()):
+    """Kort, zonder leesteken aan het eind, eventueel genummerd, en de regel
+    erna begint met een hoofdletter (een afgebroken stap loopt in kleine
+    letters door). Geen getallen buiten het nummer ('Week 32 2022', '180 g')
+    en geen ingrediëntnaam ('Peper en zout')."""
+    woorden = regel.split()
+    if not 1 <= len(woorden) <= 5 or regel.rstrip()[-1:] in '.!?:;,':
+        return False
+    if regel.isupper():
+        return False                            # 'AAN DE SLAG': een rubriekkop van de pagina, geen stap
+    if not volgende.lstrip()[:1].isupper():
+        return False
+    if re.fullmatch(r'\d{1,2}\.?', woorden[0]):
+        woorden = woorden[1:]
+    if not woorden or not woorden[0][:1].isupper():
+        return False
+    if any(re.search(r'\d', w) for w in woorden):
+        return False
+    kopwoorden = {w.strip('.,;:()!?*\'"').lower() for w in woorden if len(w) >= 3}
+    for naam in ingredienten or ():
+        if kopwoorden & {w.lower() for w in re.findall(r"[^\W\d_]{3,}", naam or '')}:
+            return False                        # 'Peper en zout' is een ingrediënt, geen kopje
+    return True
 
 
 def _weggelaten_melding(regels):

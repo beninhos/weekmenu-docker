@@ -126,6 +126,15 @@
             <input type="hidden" name="draft_id" id="fieldDraftId" value="">
             <img id="importedImagePreview" src="" alt="Geïmporteerde afbeelding"
                  class="hidden mt-2 rounded max-h-40 object-cover">
+            <!-- Bij een concept uit de dump: bijsnijden hier, niet eerst terug
+                 naar de dump-pagina; en de volledige scan erbij om de inhoud
+                 tegen de bron te leggen. -->
+            <div id="importedImageTools" class="hidden mt-2 flex flex-wrap items-center gap-3 text-sm">
+                <button type="button" id="importedCropBtn" onclick="cropImportedImage()"
+                        class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✂️ Bijsnijden</button>
+                <a id="importedOriginalLink" href="#" target="_blank" class="hidden underline text-[#8B4513]">origineel ↗</a>
+                <a id="importedBackLink" href="#" target="_blank" class="hidden underline text-[#8B4513]">achterkant ↗</a>
+            </div>
         </div>
 
         <div>
@@ -500,6 +509,16 @@ async function importFromUrl() {
     }
 }
 
+/* ── Bijsnijden van de conceptfoto, zelfde modal en eindpunt als de dump-pagina ── */
+let _draftCrop = null;
+function cropImportedImage() {
+    if (!_draftCrop) return;
+    openCropModal('/' + _draftCrop.source, `/dump/draft/${_draftCrop.id}/crop`, (newPath) => {
+        document.getElementById('fieldImagePath').value = newPath;
+        document.getElementById('importedImagePreview').src = '/' + newPath + '?t=' + Date.now();
+    });
+}
+
 /* ── Prefill vanuit een dump-draft (?draft=<id>) ── */
 (async function() {
     const draftId = new URLSearchParams(location.search).get('draft');
@@ -524,6 +543,16 @@ async function importFromUrl() {
             const preview = document.getElementById('importedImagePreview');
             preview.src = '/' + data.image_path;
             preview.classList.remove('hidden');
+            _draftCrop = { id: draftId, source: data.original_image_path || data.image_path };
+            document.getElementById('importedImageTools').classList.remove('hidden');
+            const orig = document.getElementById('importedOriginalLink');
+            orig.href = '/' + _draftCrop.source;
+            orig.classList.remove('hidden');
+            if (data.back_image_path) {
+                const back = document.getElementById('importedBackLink');
+                back.href = '/' + data.back_image_path;
+                back.classList.remove('hidden');
+            }
         }
         if (data.ingredients && data.ingredients.length > 0) {
             document.getElementById('ingredients').innerHTML = '';
@@ -532,4 +561,5 @@ async function importFromUrl() {
     } catch (e) {}
 })();
 </script>
+{% include '_crop_modal.html' %}
 {% endblock %}

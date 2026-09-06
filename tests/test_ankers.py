@@ -209,9 +209,9 @@ def test_tabel_in_een_gat_gaat_eruit_de_tip_en_de_kop_blijven():
     stappen = [{'start': 'Voeg de pindakaas', 'end': 'aan de kook.'},
                {'start': 'Verhit de olie', 'end': 'hamburger gaar.'}]
     tekst, meldingen = knip_stappen(pagina, stappen)
-    stap1, stap2 = tekst.split('\n')
+    stap1, kop, stap2 = tekst.split('\n')
     assert 'Tip: Voeg eventueel extra melk' in stap1 and 'met sambal en/of ketchup.' in stap1
-    assert 'Hamburgers bakken' in stap1                 # kort, vlak na het blok: kan een zinstaart zijn
+    assert kop == 'Hamburgers bakken'                   # het kopje van stap 2, op een eigen regel erboven
     assert 'Gekruide runderburger' not in tekst and 'Voedingswaarden' not in tekst
     assert stap2 == 'Verhit de olie in een koekenpan en bak de hamburger gaar.'
     assert meldingen == []                            # de tabel eruit halen is geen bevinding
@@ -225,7 +225,9 @@ def test_los_stapnummer_in_een_gat_blijft_staan():
                {'start': 'Kook de boontjes', 'end': 'water gaar.'}]
     tekst, meldingen = knip_stappen(pagina, stappen)
     assert meldingen == []
-    assert tekst.split('\n')[0] == 'Bak de frietjes tot ze goudbruin zijn. 4 Boontjes koken'
+    # Het nummer en het kopje horen bij elkaar, boven de stap eronder.
+    assert tekst.split('\n') == ['Bak de frietjes tot ze goudbruin zijn.', '4 Boontjes koken',
+                                 'Kook de boontjes in ruim water gaar.']
 
 
 def test_bereidingszin_na_het_laatste_anker_wordt_gemeld_paginavoet_niet():
@@ -346,3 +348,52 @@ def test_echte_pagina_met_ingredientenlijst_door_de_bereiding():
     for stap in stappen[1:]:
         assert stap in genorm                       # letterlijk, en de eerste is gelijmd uit twee fragmenten
     assert meldingen == []
+
+
+# ── Kopjes ──────────────────────────────────────────────────────────────────
+# Receptkaarten zetten boven elke stap een kopje ('1. Pasta koken'). Het model
+# wijst de stap aan vanaf de eerste zin, dus het kopje valt in het gat ervoor
+# en plakte aan de vórige stap. Het hoort bij de stap eronder, op een eigen regel.
+
+def test_genummerd_kopje_voor_een_stap_komt_boven_die_stap():
+    pagina = ("1. Pasta koken\nBreng ruim water aan de kook in een pan met deksel.\n"
+              "2. Serveren\nVerdeel de pasta over de borden en garneer met basilicum.\n")
+    stappen = [{'start': 'Breng ruim water', 'end': 'met deksel.'},
+               {'start': 'Verdeel de pasta', 'end': 'met basilicum.'}]
+    tekst, meldingen = knip_stappen(pagina, stappen)
+    assert tekst == ("1. Pasta koken\nBreng ruim water aan de kook in een pan met deksel.\n"
+                     "2. Serveren\nVerdeel de pasta over de borden en garneer met basilicum.")
+    assert meldingen == []
+
+
+def test_kopje_dat_in_het_anker_zit_wordt_afgesplitst():
+    # Oudere kaartlay-out: kopje zonder nummer, en het model neemt het op in het anker.
+    pagina = "Groente snijden\nSnijd de paprika in repen en pers de knoflook.\n"
+    tekst, _ = knip_stappen(pagina, [{'start': 'Groente snijden Snijd', 'end': 'de knoflook.'}])
+    assert tekst == "Groente snijden\nSnijd de paprika in repen en pers de knoflook."
+
+
+def test_genummerde_kookboekstap_is_geen_kopje():
+    # 'Snipper de rode ui' is kort en zonder punt, maar de regel erna loopt in
+    # kleine letters door: dat is een afgebroken stap, geen kopje.
+    pagina = "1 Snipper de rode ui\nen bak hem 3 minuten in de olie.\n2 Voeg de tomaten toe.\n"
+    stappen = [{'start': 'Snipper de rode ui', 'end': 'in de olie.'}, {'start': 'Voeg de tomaten', 'end': 'toe.'}]
+    tekst, _ = knip_stappen(pagina, stappen)
+    assert tekst == "Snipper de rode ui en bak hem 3 minuten in de olie.\nVoeg de tomaten toe."
+
+
+def test_kopje_plakt_niet_meer_aan_het_eind_van_de_vorige_stap():
+    pagina = ("Snipper de rode ui.\nSaus maken\nVerhit de olijfolie in een hapjespan.\n")
+    stappen = [{'start': 'Snipper de rode ui', 'end': 'rode ui.'},
+               {'start': 'Verhit de olijfolie', 'end': 'hapjespan.'}]
+    tekst, _ = knip_stappen(pagina, stappen)
+    assert tekst == "Snipper de rode ui.\nSaus maken\nVerhit de olijfolie in een hapjespan."
+
+
+def test_tabelregel_voor_een_stap_is_geen_kopje():
+    # Een ingrediëntregel of getal vlak vóór de eerste stap mag niet als kopje meekomen.
+    for regel in ("2 st", "180 g", "Peper en zout", "Week 32 2022", "AAN DE SLAG"):
+        pagina = f"{regel}\nBreng ruim water aan de kook in een pan met deksel.\n"
+        tekst, _ = knip_stappen(pagina, [{'start': 'Breng ruim water', 'end': 'met deksel.'}],
+                                ingredienten=['peper en zout'])
+        assert tekst == "Breng ruim water aan de kook in een pan met deksel.", regel
