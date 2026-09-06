@@ -188,15 +188,18 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
     ankers = list(stukken)                      # zoals het model ze aanwees, vóór het kopje erbij
     koppen = []
     for i, (b, e) in enumerate(stukken):
-        grens = stukken[i - 1][1] if i else 0
-        kop = _kopregel(regels, b, grens, ingredienten)
+        # Een kopje mag niet uit een andere stap komen (kolomvolgorde van de
+        # OCR kan afwijken van de stapvolgorde, dus niet alleen de vorige).
+        bezet = [r for j, r in enumerate(ankers) if j != i]
+        kop = _kopregel(regels, b, bezet, ingredienten)
         if kop:
             begin, tekst_kop = kop
             # Een los stapnummer vlak vóór het kopje ('4' en dan 'Boontjes
             # koken' op de volgende regel) hoort bij het kopje.
-            nummer = re.fullmatch(r'\s*(\d{1,2}\.?)\s*', regels[grens:begin])
+            vorige_eind = max([e2 for _, e2 in bezet if e2 <= begin], default=0)
+            nummer = re.fullmatch(r'\s*(\d{1,2}\.?)\s*', regels[vorige_eind:begin])
             if nummer:
-                begin, tekst_kop = grens, f'{nummer.group(1)} {tekst_kop}'
+                begin, tekst_kop = vorige_eind, f'{nummer.group(1)} {tekst_kop}'
             stukken[i] = (begin, e)
         koppen.append(kop and tekst_kop)
 
@@ -210,15 +213,22 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
             # Het kopje staat vooraan in het stuk, mogelijk over twee regels
             # ('4' en dan 'Boontjes koken'): woord voor woord eraf halen.
             stuk = re.sub(r'^\s*' + r'\s+'.join(re.escape(w) for w in kop.split()) + r'\s*', '', stuk, count=1)
-        if i + 1 < len(stukken) and stukken[i + 1][0] > e:
-            gat, meubilair = _zonder_meubilair(regels[e:stukken[i + 1][0]])
+        if i + 1 < len(stukken) and ankers[i + 1][0] > e:
+            # Het gat loopt tot het anker van de volgende stap, ook als die
+            # stap een kopje heeft: de tabel in het gat wordt herkend aan zijn
+            # randen, en het kopje is vaak precies zo'n rand. Het kopje zelf
+            # gaat daarna van het eind van het gat af.
+            gat, meubilair = _zonder_meubilair(regels[e:ankers[i + 1][0]])
+            if koppen[i + 1]:
+                gat = re.sub(r'\s*' + r'\s+'.join(re.escape(w) for w in koppen[i + 1].split())
+                             + r'[\s·•.]*$', '', gat)
             if re.fullmatch(r'\s*\d{1,2}\.?\s*', gat):
                 gat = ''                        # los stapnummer van een genummerd kookboek
             stuk += gat
             weggelaten += meubilair
         stuk, weg = _zonder_ingredientregels(stuk, ingredienten)
         weggelaten += weg
-        stuk = re.sub(r'\s+', ' ', stuk).strip().lstrip('.,;: ')
+        stuk = re.sub(r'\s+', ' ', stuk).strip().lstrip('.,;:·• ')
         if kop:
             uit.append(kop)
         if stuk:
@@ -262,31 +272,35 @@ def _staartzin(staart):
 _GENUMMERDE_STAP = re.compile(r'^\s*\d{1,2}[.)]?\s+[^\W\d_]')
 
 
-def _kopregel(regels, b, grens, ingredienten):
+def _kopregel(regels, b, bezet, ingredienten):
     """Het kopje van de stap die op positie `b` begint: (beginpositie, tekst) of None.
 
     Twee plekken: de regel waarmee de stap begint (het model nam het kopje in
     het anker op: 'Groente snijden Snijd de paprika'), of de regel er vlak
-    boven, mits die ná het einde van de vorige stap ligt. Alleen als de stap
-    op een regelbegin start: midden in een regel is de tekst ervoor de
-    vorige regel, geen kopje.
+    boven, mits die niet binnen een andere stap (`bezet`) valt. Alleen als de
+    stap op een regelbegin start: midden in een regel is de tekst ervoor de
+    vorige regel, geen kopje. Een opmaakregel zonder letters (bullet, punt)
+    tussen kopje en stap telt niet mee.
     """
     if b > 0 and regels[b - 1] != '\n':
         return None
-    eind = regels.find('\n', b)
-    eerste = regels[b:eind if eind >= 0 else len(regels)]
-    volgende = regels[eind + 1:regels.find('\n', eind + 1) if regels.find('\n', eind + 1) >= 0 else len(regels)] \
-        if eind >= 0 else ''
+    lijnen = regels[b:].split('\n')
+    eerste = lijnen[0]
+    volgende = next((l for l in lijnen[1:] if re.search(r'[^\W\d_]', l)), '')
     if _is_kop(eerste, volgende, ingredienten):
         return b, eerste.strip()
-    if b == 0:
-        return None
-    begin = regels.rfind('\n', 0, b - 1) + 1
-    if begin < grens:
-        return None
-    ervoor = regels[begin:b - 1]
-    if _is_kop(ervoor, eerste, ingredienten):
-        return begin, ervoor.strip()
+    # de regel(s) erboven: opmaakregels overslaan tot een regel met letters
+    positie = b
+    while positie > 0:
+        begin = regels.rfind('\n', 0, positie - 1) + 1
+        if any(b2 <= begin < e2 for b2, e2 in bezet):
+            return None
+        ervoor = regels[begin:positie - 1]
+        if re.search(r'[^\W\d_]', ervoor):
+            return (begin, ervoor.strip()) if _is_kop(ervoor, eerste, ingredienten) else None
+        if ervoor.strip() and not re.fullmatch(r'[\s·•.]*', ervoor):
+            return None                     # een getal of iets anders: geen kopje erboven
+        positie = begin
     return None
 
 
@@ -302,12 +316,15 @@ def _is_kop(regel, volgende, ingredienten=()):
         return False                            # 'AAN DE SLAG': een rubriekkop van de pagina, geen stap
     if not volgende.lstrip()[:1].isupper():
         return False
-    if re.fullmatch(r'\d{1,2}\.?', woorden[0]):
+    genummerd = bool(re.fullmatch(r'\d{1,2}\.?', woorden[0]))
+    if genummerd:
         woorden = woorden[1:]
     if not woorden or not woorden[0][:1].isupper():
         return False
     if any(re.search(r'\d', w) for w in woorden):
         return False
+    if genummerd:
+        return True                             # '3. Snijbonen bakken': het nummer zegt genoeg
     kopwoorden = {w.strip('.,;:()!?*\'"').lower() for w in woorden if len(w) >= 3}
     for naam in ingredienten or ():
         if kopwoorden & {w.lower() for w in re.findall(r"[^\W\d_]{3,}", naam or '')}:

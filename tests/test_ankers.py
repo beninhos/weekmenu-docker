@@ -390,6 +390,35 @@ def test_kopje_plakt_niet_meer_aan_het_eind_van_de_vorige_stap():
     assert tekst == "Snipper de rode ui.\nSaus maken\nVerhit de olijfolie in een hapjespan."
 
 
+def test_genummerd_kopje_met_een_ingredientwoord_blijft_een_kopje():
+    # '3. Snijbonen bakken' deelt een woord met het ingrediënt, maar het nummer
+    # zegt genoeg. Alleen een ongenummerde regel wordt daarop afgekeurd.
+    pagina = "3. Snijbonen bakken\nVerhit de olijfolie en bak de snijbonen 5 minuten.\n"
+    tekst, _ = knip_stappen(pagina, [{'start': 'Verhit de olijfolie', 'end': '5 minuten.'}],
+                            ingredienten=['snijbonen'])
+    assert tekst == "3. Snijbonen bakken\nVerhit de olijfolie en bak de snijbonen 5 minuten."
+
+
+def test_opmaakregel_tussen_kopje_en_stap_telt_niet_mee():
+    # De OCR zet soms een bullet of punt op een eigen regel tussen kopje en stap.
+    pagina = "2. Cherrytomaten bakken\n·\nVerhit ½ el olijfolie in een hapjespan.\n"
+    tekst, _ = knip_stappen(pagina, [{'start': 'Verhit ½ el olijfolie', 'end': 'hapjespan.'}])
+    assert tekst == "2. Cherrytomaten bakken\nVerhit ½ el olijfolie in een hapjespan."
+
+
+def test_kopje_in_een_andere_kolomvolgorde_dan_de_stappen():
+    # Kaart met twee kolommen: de OCR leest '2. Bakken' + stap 2 vóór '1. Snijden'
+    # + stap 1. Het kopje staat dan vóór de tekst van een 'latere' stap; dat mag,
+    # zolang de regel niet binnen een andere stap valt.
+    pagina = ("2. Bakken\nVerhit de olijfolie in een hapjespan.\n"
+              "1. Snijden\nBreng ruim water aan de kook.\n")
+    stappen = [{'start': 'Breng ruim water', 'end': 'de kook.'},
+               {'start': 'Verhit de olijfolie', 'end': 'hapjespan.'}]
+    tekst, _ = knip_stappen(pagina, stappen)
+    assert tekst == ("1. Snijden\nBreng ruim water aan de kook.\n"
+                     "2. Bakken\nVerhit de olijfolie in een hapjespan.")
+
+
 def test_tabelregel_voor_een_stap_is_geen_kopje():
     # Een ingrediëntregel of getal vlak vóór de eerste stap mag niet als kopje meekomen.
     for regel in ("2 st", "180 g", "Peper en zout", "Week 32 2022", "AAN DE SLAG"):
