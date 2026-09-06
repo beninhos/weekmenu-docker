@@ -248,6 +248,7 @@ def test_weetje_of_tip_na_de_laatste_stap_is_geen_bereiding():
     # valse melding geven.
     stappen = [{'start': 'Rooster de kip', 'end': 'alles gaar is.'}]
     for staart in ("Weetje: Deze maaltijd zit vol vitaminen en mineralen.\n",
+                   "Weetje\nWist je dat tomaten in blik bijna evenveel vitaminen en mineralen\n",   # kop op eigen regel
                    "Weetje Wist je dat tomaten in blik bijna evenveel vitaminen bevatten\n",
                    "Tip: Voeg eventueel extra melk toe voor een romiger resultaat.\n",
                    "Eet smakelijk! Deze maaltijd is ook lekker met wat extra kaas erover.\n"):

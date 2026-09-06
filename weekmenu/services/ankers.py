@@ -206,8 +206,9 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
     # bereidingstekst, dan hoort de gebruiker dat te zien.
     staart = regels[stukken[-1][1]:].split('\n')
     zin = next((i for i, r in enumerate(staart) if _is_zin(r)), None)
-    if zin is not None and not _is_nawoord(staart[zin]):
+    if zin is not None:
         citaat = ' '.join(r.strip() for r in staart[:zin + 1] if r.strip())
+    if zin is not None and not _is_nawoord(citaat):     # de kop 'Weetje' staat vaak op een eigen regel
         meldingen.append(f"na de laatste stap stond nog {_kort(citaat, 100)}; "
                          "dat is niet overgenomen")
     return '\n'.join(uit), meldingen
