@@ -256,8 +256,10 @@ initialJobs.forEach(j => {
     } else if (j.status === 'error' && activeJobId === j.id) {
         setJobError(j.error_message);
     }
-    if (j.warning) setJobWarning(j.warning);
 });
+// Nieuwste batch eerst (zo staan ze in initialJobs), alles in één blok.
+const batchmeldingen = initialJobs.map(j => j.warning).filter(Boolean).join('\n');
+if (batchmeldingen) setJobWarning(batchmeldingen);
 
 /* ── Croppen ── */
 async function openCrop(id) {

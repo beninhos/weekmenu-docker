@@ -42,9 +42,13 @@ def dump_page():
     drafts = RecipeDraft.query.filter_by(status='pending').order_by(RecipeDraft.created_at).all()
     # Ook een geslaagde batch met een melding blijft zichtbaar: anders is de
     # waarschuwing dat er pagina's zijn kwijtgeraakt weg zodra je de pagina
-    # herlaadt, en dat is precies het geval waarin je hem nodig hebt.
+    # herlaadt, en dat is precies het geval waarin je hem nodig hebt. Maar
+    # alleen zolang er van die batch nog iets na te kijken is: anders blijft
+    # de melding van een batch van dagen geleden bovenaan staan.
+    nog_open = {d.job_id for d in drafts}
     jobs = DumpJob.query.filter(db.or_(DumpJob.status.in_(['processing', 'error']),
-                                       DumpJob.warning.isnot(None))) \
+                                       db.and_(DumpJob.warning.isnot(None),
+                                               DumpJob.id.in_(nog_open)))) \
                         .order_by(DumpJob.created_at.desc()).all()
     cookbooks = Cookbook.query.filter_by(is_archived=False).order_by(Cookbook.name).all()
     return render_template('dump.html',

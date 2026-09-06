@@ -64,3 +64,20 @@ def test_migratie_v17_voegt_de_kolom_toe():
         _migrate_v17(conn)          # idempotent
         cols = [r[1] for r in conn.execute(sa.text('PRAGMA table_info(recipe_draft)')).fetchall()]
     assert 'meldingen_json' in cols
+
+
+def test_batchmelding_van_een_afgehandelde_batch_verdwijnt_van_de_pagina(app, client):
+    # De pagina toonde de melding van élke batch ooit, en door de volgorde won
+    # de oudste: een logdump van dagen geleden bleef bovenaan staan. Een
+    # batchmelding hoort bij de concepten die je nog moet nakijken; zijn die
+    # weg, dan is de melding ook klaar.
+    from weekmenu.extensions import db
+    from weekmenu.models import DumpJob
+    db.session.add(DumpJob(id='oud', status='done', warning='OUDE-MELDING-XYZ'))
+    db.session.add(DumpJob(id='nieuw', status='done', warning='NIEUWE-MELDING-XYZ'))
+    db.session.add(RecipeDraft(job_id='nieuw', name='Nog na te kijken', ingredients_json='[]', status='pending'))
+    db.session.add(RecipeDraft(job_id='oud', name='Al afgewezen', ingredients_json='[]', status='rejected'))
+    db.session.commit()
+    html = client.get('/dump').get_data(as_text=True)
+    assert 'NIEUWE-MELDING-XYZ' in html
+    assert 'OUDE-MELDING-XYZ' not in html
