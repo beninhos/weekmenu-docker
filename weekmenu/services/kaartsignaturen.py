@@ -14,6 +14,10 @@ MERKEN = [
         # Het logo staat in kapitalen, en de OCR zet de titel er soms tussen:
         # 'HELLO Patatje oorlog met hamburger\nFRESH'. Bewust hoofdlettergevoelig.
         'voorkant': re.compile(r'\bHELLO[\s\S]{0,80}?FRESH\b'),
+        # De OCR zet het logo soms vóór de titel ('HELLO Kalkoenmedaillon-
+        # stukjes ... FRESH') en het model neemt dat woord over. Alleen als
+        # los woord (of twee) aan het begin; 'Hellofresh-bowl' blijft staan.
+        'titelprefix': re.compile(r'^\s*hello(\s+fresh)?\s+(?=\S)', re.IGNORECASE),
         'voorraadkop': re.compile(r'^\s*zelf toevoegen\s*$', re.IGNORECASE),
         'benodigdheden': re.compile(r'^\s*benodigdheden\s*$', re.IGNORECASE),
         # Drie kaartlay-outs voor dezelfde tijd: 'Bereidingstijd: N min.' (de
@@ -33,6 +37,16 @@ MERKEN = [
 def is_voorkant(tekst):
     """Bevat de paginatekst een merklogo dat alleen op de voorkant staat?"""
     return any(m['voorkant'].search(tekst or '') for m in MERKEN)
+
+
+def zonder_logo(titel):
+    """De titel zonder een merklogo dat de OCR ervoor plakte."""
+    titel = titel or ''
+    for m in MERKEN:
+        patroon = m.get('titelprefix')
+        if patroon:
+            titel = patroon.sub('', titel, count=1)
+    return titel.strip()
 
 
 def is_voorraadkop(regel):

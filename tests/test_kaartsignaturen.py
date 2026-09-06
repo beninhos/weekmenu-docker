@@ -63,3 +63,15 @@ def test_bereidingstijd_wint_niet_van_oventijd():
     # op dezelfde kaart staat (kaart 5 uit de meting).
     assert bereidingstijd(
         'VEGGIE FAMILIE Bereidingstijd: 40 min. Oventijd: 15 min.') == 40
+
+
+def test_logowoord_gaat_uit_de_titel():
+    # De OCR zet het logo soms vóór de titel ('HELLO Kalkoenmedaillonstukjes ...
+    # FRESH'), en het model neemt dat woord over. Merkloos opgelost: elk merk
+    # zegt zelf welk voorvoegsel niet bij de titel hoort.
+    from weekmenu.services.kaartsignaturen import zonder_logo
+    assert zonder_logo('Hello Kalkoenmedaillonstukjes met pasta') == 'Kalkoenmedaillonstukjes met pasta'
+    assert zonder_logo('HELLO FRESH Patatje oorlog') == 'Patatje oorlog'
+    assert zonder_logo('Patatje oorlog') == 'Patatje oorlog'
+    assert zonder_logo('Hellofresh-bowl met kip') == 'Hellofresh-bowl met kip'   # deel van een woord: laten staan
+    assert zonder_logo('') == '' and zonder_logo(None) == ''

@@ -15,7 +15,7 @@ from weekmenu.services.gemini import (
 from weekmenu.services.ankers import knip_stappen
 from weekmenu.services.kaart import (benodigdheden, controleer_tegen_tabel, kaart_invoer,
                                      paren, zonder_tabelregels)
-from weekmenu.services.kaartsignaturen import bereidingstijd, is_voorkant
+from weekmenu.services.kaartsignaturen import bereidingstijd, is_voorkant, zonder_logo
 from weekmenu.services.ocr import (_clean_ocr_text, lees_paginas, lees_paginas_met_annotaties,
                                    pages_as_labelled_text)
 
@@ -502,6 +502,7 @@ def _verwerk_kaarten(texts, annotaties, client, config):
             r['meldingen'].append(f'het model maakte {len(gevonden)} recepten van deze ene kaart; '
                                   'alleen het eerste is bewaard')
         r['photo_page'], r['back_page'] = voor, achter
+        r['name'] = zonder_logo(r['name']) or r['name']
         r['prep_time'] = bereidingstijd(voortekst) or bereidingstijd(achtertekst)
         nodig = benodigdheden(achtertekst)
         # Alleen vooraan een bestaande bereiding: zonder deze voorwaarde maakt

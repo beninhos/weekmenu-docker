@@ -89,6 +89,18 @@ def test_kaartmodus_maakt_een_concept_van_twee_paginas(app, tmp_path):
     assert job.warning is None
 
 
+class _AntwoordMetLogo:
+    text = ANTWOORD.replace('"title": "Patatje oorlog"', '"title": "Hello Patatje oorlog"')
+    candidates = []
+
+
+def test_logo_in_de_modeltitel_komt_niet_in_het_concept(app, tmp_path):
+    job, _ = _draai(tmp_path, 'kaart', [VOOR, ACHTER], [{'p': 1}, {'p': 2}],
+                    lambda ann, personen=None: (RIJEN, None) if ann['p'] == 2 else (None, 'geen tabel'),
+                    antwoorden=[_AntwoordMetLogo()])
+    assert RecipeDraft.query.filter_by(job_id=job.id).one().name == 'Patatje oorlog'
+
+
 def test_zonder_geknipte_bereiding_blijft_de_bereiding_leeg(app, tmp_path):
     # Vindt de ankerknip niets, dan is er geen bereiding. De benodigdheden
     # mogen er dan niet alsnog een niet-lege tekst van maken: de nakijkkaart
