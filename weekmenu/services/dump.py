@@ -457,7 +457,8 @@ def _process(job):
     if gemaakt < verwacht:
         meldingen.append(f'{len(images)} pagina\'s aangeleverd, {gemaakt} recept(en) '
                          f'herkend. Controleer of er niets ontbreekt.')
-    job.warning = ' '.join(meldingen) or None
+    # Eén melding per regel: de pagina toont ze los van elkaar.
+    job.warning = '\n'.join(meldingen) or None
 
 
 def _verwerk_kaarten(texts, annotaties, client, config):

@@ -2,8 +2,28 @@
 {% block content %}
 <div class="max-w-3xl mx-auto space-y-6">
     <h1 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Recepten-dump</h1>
-    <p class="text-sm text-[#6B6B6B]">Gooi hier foto's van kookboekpagina's of een PDF in.
+    <p class="text-sm text-[#6B6B6B]">Gooi hier foto's of een PDF van kookboekpagina's of receptkaarten in.
        De recepten worden automatisch herkend en verschijnen hieronder ter controle.</p>
+
+    <!-- Keuzes voor de hele batch: eerst kiezen, dan uploaden. De soort scan
+         bepaalt hoe de pagina's gelezen worden (één pagina per recept, of
+         voor- en achterkant van een kaart), dus die hoort vóór het sleepvak. -->
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <label class="text-sm font-medium flex items-center gap-2">Soort scan
+            <select id="scanMode" class="border border-[#E8E4DC] rounded px-2 py-1 text-sm font-normal">
+                <option value="boek">kookboekpagina's — 1 pagina per recept</option>
+                <option value="kaart">receptkaarten — voor- en achterkant per recept</option>
+            </select>
+        </label>
+        <label class="text-sm font-medium flex items-center gap-2">Kookboek voor opgeslagen recepten
+            <select id="cookbookSelect" class="border border-[#E8E4DC] rounded px-2 py-1 text-sm font-normal">
+                <option value="">— Geen —</option>
+                {% for cb in cookbooks %}
+                <option value="{{ cb.id }}">{{ cb.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+    </div>
 
     <!-- Dropzone -->
     <div id="dropzone"
@@ -21,22 +41,6 @@
         <button id="retryBtn" class="hidden underline text-[#8B4513]" onclick="retryJob()">Opnieuw proberen</button>
     </div>
     <div id="jobWarning" class="hidden text-sm text-amber-700 border border-amber-200 bg-amber-50 rounded p-3 mt-2"></div>
-
-    <!-- Kookboek-keuze voor de hele batch -->
-    <div class="flex items-center gap-3">
-        <label class="text-sm font-medium">Kookboek voor opgeslagen recepten:</label>
-        <select id="cookbookSelect" class="border border-[#E8E4DC] rounded px-2 py-1 text-sm">
-            <option value="">— Geen —</option>
-            {% for cb in cookbooks %}
-            <option value="{{ cb.id }}">{{ cb.name }}</option>
-            {% endfor %}
-        </select>
-        <label class="text-sm ml-4">Soort scan:</label>
-        <select id="scanMode" class="border border-[#E8E4DC] rounded px-2 py-1 text-sm">
-            <option value="boek">kookboekpagina's</option>
-            <option value="kaart">receptkaarten — 2 pagina's per recept</option>
-        </select>
-    </div>
 
     <!-- Draft-kaarten -->
     <div id="draftList" class="space-y-4"></div>
@@ -109,8 +113,23 @@ async function pollJob() {
 function setJobWarning(msg) {
     const box = document.getElementById('jobWarning');
     if (!box) return;
-    box.textContent = msg;
+    // Eén melding per regel (de service scheidt ze met een regeleinde).
+    box.innerHTML = String(msg).split(/\n+/)
+        .filter(Boolean).map(z => `<p>${esc(z)}</p>`).join('');
     box.classList.remove('hidden');
+}
+
+/* Eén regel die je moet nakijken, in de stijl van de SmartChef-kaart: een
+   klein driehoekje en een korte zin, geen jargon en geen percentages. */
+function flagNote(tekst) {
+    const zin = String(tekst || '');
+    const netjes = zin.charAt(0).toUpperCase() + zin.slice(1) + (/[.!?]$/.test(zin) ? '' : '.');
+    return `<div class="flex items-start gap-2 text-xs text-[#963f14] mt-1">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" class="shrink-0 mt-0.5" aria-hidden="true">
+            <path d="M7 1.2 13 12.4H1L7 1.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M7 5.4V8.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="7" cy="10.3" r="0.75" fill="currentColor"/></svg>
+        <span>${esc(netjes)}</span></div>`;
 }
 
 async function retryJob() {
@@ -153,9 +172,14 @@ function renderCard(d) {
     const ingHtml = d.ingredients.map(i => {
         const mist = (i.amount === null || i.amount === '') && (i.unit || '').trim();
         if (mist) return `<li class="text-red-600">hoeveelheid ontbreekt — ${esc(i.unit)} ${esc(i.name)}</li>`;
-        if (i.check) return `<li class="text-orange-600" title="${esc(i.check)}">${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)} — controleer: ${esc(i.check)}</li>`;
+        if (i.check) return `<li class="list-none -mx-2 my-1 px-2 py-1 rounded border border-[#e3bd9a] bg-[#f1dcc9] text-[#2C2C2C]">
+            <span class="font-semibold text-[#963f14]">${esc(i.amount ?? '')} ${esc(i.unit ?? '')}</span> ${esc(i.name)}
+            ${flagNote(i.check)}</li>`;
         return `<li>${esc(i.amount ?? '')} ${esc(i.unit ?? '')} ${esc(i.name)}</li>`;
     }).join('');
+    // Wat er aan dít recept na te kijken is, staat bij de bereiding waar je
+    // het kunt zien — niet in een blok bovenaan de batch.
+    const meldingenHtml = (d.meldingen || []).map(flagNote).join('');
     // Een lege bereiding is op de kaart niet te zien zonder dit: de tekst
     // staat verderop wel in het formulier, maar hier moet je 'm missen vóórdat
     // je op Opslaan klikt, niet pas na de foutmelding.
@@ -179,6 +203,7 @@ function renderCard(d) {
             <p class="text-sm text-[#6B6B6B]">${meta}${achterkant ? ` · <a href="${achterkant}" target="_blank" class="underline">achterkant</a>` : ''}</p>
             <ul class="text-sm mt-1 list-disc list-inside text-[#6B6B6B] max-h-40 overflow-y-auto">${ingHtml}</ul>
             ${bereidingHtml}
+            ${meldingenHtml}
             <div class="flex gap-2 mt-3">
                 <button onclick="acceptDraft(${d.id})" class="px-3 py-1.5 bg-[#8B4513] text-white rounded text-sm">✓ Opslaan</button>
                 <a href="/recipe/new?draft=${d.id}${cbParam}" class="px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✎ Aanpassen</a>
