@@ -190,7 +190,10 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
     for i, (b, e) in enumerate(stukken):
         # Een kopje mag niet uit een andere stap komen (kolomvolgorde van de
         # OCR kan afwijken van de stapvolgorde, dus niet alleen de vorige).
-        bezet = [r for j, r in enumerate(ankers) if j != i]
+        # Een stap waarvan het eindanker te ver weg gevonden is, overlapt
+        # deze stap helemaal; die telt niet als bezet, anders verliest deze
+        # stap zijn kopje door andermans fout.
+        bezet = [(b2, e2) for j, (b2, e2) in enumerate(ankers) if j != i and not b2 <= b < e2]
         kop = _kopregel(regels, b, bezet, ingredienten)
         if kop:
             begin, tekst_kop = kop

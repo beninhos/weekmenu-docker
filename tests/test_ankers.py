@@ -419,6 +419,19 @@ def test_kopje_in_een_andere_kolomvolgorde_dan_de_stappen():
                      "2. Bakken\nVerhit de olijfolie in een hapjespan.")
 
 
+def test_kopje_blijft_als_een_andere_stap_eroverheen_valt():
+    # Het eindanker van stap 2 wordt pas veel later gevonden, zodat stap 2
+    # stap 1 helemaal omvat. Dat is andermans fout; het kopje van stap 1 blijft.
+    pagina = ("2. Bakken\nVerhit de olie in de pan.\n1. Snijden\nSnijd de ui in ringen.\n"
+              "Bak de ui rondom bruin.\n")
+    stappen = [{'start': 'Snijd de ui', 'end': 'in ringen.'},
+               {'start': 'Verhit de olie', 'end': 'rondom bruin.'}]
+    tekst, _ = knip_stappen(pagina, stappen)
+    regels = tekst.split('\n')
+    assert regels[:2] == ['1. Snijden', 'Snijd de ui in ringen.']
+    assert '2. Bakken' in regels
+
+
 def test_tabelregel_voor_een_stap_is_geen_kopje():
     # Een ingrediëntregel of getal vlak vóór de eerste stap mag niet als kopje meekomen.
     for regel in ("2 st", "180 g", "Peper en zout", "Week 32 2022", "AAN DE SLAG"):
