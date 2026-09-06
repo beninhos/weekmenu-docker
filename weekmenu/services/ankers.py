@@ -41,6 +41,7 @@ herkende ingrediëntregels als aantal. Dat is de eigenlijke waarborg: de
 heuristieken hierboven verkleinen de ruis, maar wat ze weghalen is na te kijken.
 """
 import difflib
+import logging
 import re
 
 _BULLETS = '•⚫●▪■◦'
@@ -49,6 +50,8 @@ _BULLETS = '•⚫●▪■◦'
 _FUZZY_DREMPEL = 0.8
 # Een niet-gevonden anker wordt in de melding tot zoveel tekens afgekort.
 _ANKER_KORT = 40
+
+log = logging.getLogger(__name__)
 
 
 def normaliseer(text, corpus=None):
@@ -164,13 +167,13 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
         if begin is None:
             vorige = stukken[-1][1] if stukken else 0
             begin = (vorige, vorige)
-            meldingen.append(f"beginanker niet gevonden ({_kort(s.get('start'))}); "
-                             "stap ruim geknipt")
+            meldingen.append(f"een stap is ruim geknipt: het begin ({_kort(s.get('start'))}) "
+                             "was niet terug te vinden")
         if eind is None:
             volgende = next((h[0][0] for h in grenzen[i + 1:] if h[0] is not None), len(tekst))
             eind = (volgende, volgende)
-            meldingen.append(f"eindanker niet gevonden ({_kort(s.get('end'))}); "
-                             "stap ruim geknipt")
+            meldingen.append(f"een stap is ruim geknipt: het einde ({_kort(s.get('end'))}) "
+                             "was niet terug te vinden")
         stukken.append((begin[0], max(eind[1], begin[0])))
 
     # Een gat tussen twee stappen gaat bij de vorige: een zin die het model
@@ -192,17 +195,21 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
         if stuk:
             uit.append(stuk)
     if weggelaten:
-        meldingen.append(_weggelaten_melding(weggelaten))
+        # Tabel, voedingswaarden en ingrediëntregels uit de bereiding halen is
+        # gewenst gedrag, geen bevinding. De nakijker krijgt er dus geen
+        # melding van (twaalf keer 'Vetten (g)' verbergt de meldingen die er
+        # wél toe doen); voor wie de knip wil narekenen staat het in de log.
+        log.debug('%s', _weggelaten_melding(weggelaten))
 
     # Na het laatste eindanker houdt de knip op. Het model zei dat het recept
     # daar eindigt, dus er wordt niets toegevoegd — maar staat er nog een zin
     # bereidingstekst, dan hoort de gebruiker dat te zien.
     staart = regels[stukken[-1][1]:].split('\n')
     zin = next((i for i, r in enumerate(staart) if _is_zin(r)), None)
-    if zin is not None:
+    if zin is not None and not _is_nawoord(staart[zin]):
         citaat = ' '.join(r.strip() for r in staart[:zin + 1] if r.strip())
-        meldingen.append(f"na de laatste stap staat nog tekst die op bereiding lijkt "
-                         f"({_kort(citaat, 100)}); die is niet overgenomen")
+        meldingen.append(f"na de laatste stap stond nog {_kort(citaat, 100)}; "
+                         "dat is niet overgenomen")
     return '\n'.join(uit), meldingen
 
 
@@ -243,12 +250,27 @@ _MELDING_MAX = 20
 _ZIN_WOORDEN = 5
 
 
+# Wat er na de laatste stap nog volgt en géén bereiding is: het weetje, de
+# tip en de afsluiter van een receptkaart. Een 'Tip' vóór de laatste stap
+# blijft gewoon in het gat zitten (zie _zonder_meubilair); dit gaat alleen
+# over de staart.
+_NAWOORD = re.compile(r"^\s*(weetje|tip|eet smakelijk)\b", re.IGNORECASE)
+
+
+def _is_nawoord(regel):
+    return bool(_NAWOORD.match(regel))
+
+
 def _gewone_woorden_op_rij(regel):
-    """Langste reeks opeenvolgende gewone woorden (letters, geen kapitalen)."""
+    """Langste reeks opeenvolgende gewone woorden (≥ 2 letters, geen kapitalen).
+
+    Eén letter is geen woord: een sierrand die de OCR als 'a b c d e' leest
+    telde anders als vijf woorden en dus als zin.
+    """
     beste = reeks = 0
     for w in regel.split():
         kaal = w.strip('.,;:()!?*\'"').replace('-', '').replace("'", '')
-        if kaal and kaal.isalpha() and not kaal.isupper():
+        if len(kaal) >= 2 and kaal.isalpha() and not kaal.isupper():
             reeks += 1
             beste = max(beste, reeks)
         else:

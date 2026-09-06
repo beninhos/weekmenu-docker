@@ -64,9 +64,8 @@ def test_ingredientenlijst_dwars_door_een_stap_wordt_weggelaten():
     stappen = [{'start': 'Verkruimel de peper', 'end': 'bij de tomaat'}]
     namen = ['gedroogde peper', 'lente-uitjes', 'rijpe tomaat', 'verse koriander']
     tekst, meldingen = knip_stappen(pagina, stappen, ingredienten=namen)
-    # De melding noemt wat er weg is: de zekere ingrediëntregels geteld, de rest letterlijk.
-    assert meldingen == ['uit de bereiding weggelaten: 3 ingrediëntregels; '
-                         '2 regels met alleen een getal, eenheid of los woord']
+    # Wat eruit gaat is gewenst gedrag en geen bevinding: geen melding voor de nakijker.
+    assert meldingen == []
     assert tekst == ('Verkruimel de peper in de blender en giet er water '
                      'bij om ze te laten wellen Maak de lente-uitjes schoon en doe ze bij de tomaat')
 
@@ -79,8 +78,7 @@ def test_ingredientregel_die_aan_een_stapregel_vastzit_gaat_eraf():
     stappen = [{'start': 'Voeg wanneer de linzen', 'end': 'bak ze goudbruin'}]
     namen = ['verse tijm, rozemarijn en/ of laurier', 'gerookte pancetta', 'groene asperges']
     tekst, meldingen = knip_stappen(pagina, stappen, ingredienten=namen)
-    assert meldingen == ["uit de bereiding weggelaten: 2 ingrediëntregels; en verder: 'of laurier', "
-                         "'Voor erbij', '1 handvol verse tijm, rozemarijn en/'"]
+    assert meldingen == []
     assert tekst == ('Voeg wanneer de linzen koken en de spinazie geslonken is, peper en zout naar '
                      'smaak toe Doe de pancetta en de asperges in de koekenpan en bak ze goudbruin')
 
@@ -109,7 +107,7 @@ def test_ontbrekend_anker_knipt_ruim_en_meldt():
         {'start': 'Serveer de kip', 'end': 'koriander over'},
     ]
     tekst, meldingen = knip_stappen(PAGINA, stappen)
-    assert len(meldingen) == 1 and 'beginanker niet gevonden' in meldingen[0]
+    assert len(meldingen) == 1 and 'ruim geknipt' in meldingen[0] and 'het begin' in meldingen[0]
     regels = tekst.split('\n')
     assert len(regels) == 3
     assert regels[1].endswith('op de verpakking')      # ruim geknipt, niets kwijt
@@ -216,10 +214,7 @@ def test_tabel_in_een_gat_gaat_eruit_de_tip_en_de_kop_blijven():
     assert 'Hamburgers bakken' in stap1                 # kort, vlak na het blok: kan een zinstaart zijn
     assert 'Gekruide runderburger' not in tekst and 'Voedingswaarden' not in tekst
     assert stap2 == 'Verhit de olie in een koekenpan en bak de hamburger gaar.'
-    assert len(meldingen) == 1 and meldingen[0].startswith('uit de bereiding weggelaten: ')
-    # elke regel die tekst zou kunnen zijn staat erin, de rest is geteld
-    assert "'Gekruide runderburger'" in meldingen[0] and "'Peper en zout'" in meldingen[0]
-    assert 'regels met alleen een getal' in meldingen[0]
+    assert meldingen == []                            # de tabel eruit halen is geen bevinding
 
 
 def test_los_stapnummer_in_een_gat_blijft_staan():
@@ -247,12 +242,45 @@ def test_bereidingszin_na_het_laatste_anker_wordt_gemeld_paginavoet_niet():
     assert meldingen == []
 
 
+def test_weetje_of_tip_na_de_laatste_stap_is_geen_bereiding():
+    # Op HelloFresh-kaarten volgt na de laatste stap vaak een 'Weetje' of 'Tip';
+    # dat is proza, maar geen bereiding. Melden zou 3 van de 12 kaarten een
+    # valse melding geven.
+    stappen = [{'start': 'Rooster de kip', 'end': 'alles gaar is.'}]
+    for staart in ("Weetje: Deze maaltijd zit vol vitaminen en mineralen.\n",
+                   "Weetje Wist je dat tomaten in blik bijna evenveel vitaminen bevatten\n",
+                   "Tip: Voeg eventueel extra melk toe voor een romiger resultaat.\n",
+                   "Eet smakelijk! Deze maaltijd is ook lekker met wat extra kaas erover.\n"):
+        tekst, meldingen = knip_stappen("Rooster de kip een uur tot alles gaar is.\n" + staart, stappen)
+        assert tekst == 'Rooster de kip een uur tot alles gaar is.'
+        assert meldingen == [], staart
+
+
+def test_losse_letters_zijn_geen_zin():
+    # OCR-ruis 'a b c d e' (een sierrand) telde als vijf gewone woorden.
+    tekst, meldingen = knip_stappen("Rooster de kip een uur tot alles gaar is.\na b c d e\n",
+                                    [{'start': 'Rooster de kip', 'end': 'alles gaar is.'}])
+    assert meldingen == []
+
+
+def test_meldingen_zijn_voor_de_nakijker_geschreven():
+    # Geen jargon ('anker', 'geknipt op') en de zin die je moet nakijken staat erin.
+    pagina = ("Rooster de kip een uur tot alles gaar is.\n"
+              "Hussel de groenten voor het opscheppen nog even goed door het vocht.\n")
+    _, meldingen = knip_stappen(pagina, [{'start': 'Rooster de kip', 'end': 'alles gaar is.'}])
+    assert meldingen == ["na de laatste stap stond nog 'Hussel de groenten voor het opscheppen nog even "
+                         "goed door het vocht.'; dat is niet overgenomen"]
+    _, meldingen = knip_stappen(PAGINA, [{'start': 'Snijd de kip', 'end': 'dit staat er niet'}])
+    assert meldingen[0] == "een stap is ruim geknipt: het einde ('dit staat er niet') was niet terug te vinden"
+    assert all('anker' not in m for m in meldingen)
+
+
 def test_niet_tekstueel_anker_laat_de_batch_niet_omvallen():
     for raar in (5, ['a', 'b'], {'x': 1}, None, 3.5):
         tekst, meldingen = knip_stappen(PAGINA, [{'start': raar, 'end': 'in de pan'},
                                                  {'start': 'Kook intussen', 'end': 'op de verpakking'}])
         assert 'Kook intussen de rijst' in tekst
-        assert any('beginanker niet gevonden' in m for m in meldingen)
+        assert any('het begin' in m and 'ruim geknipt' in m for m in meldingen)
 
 
 def test_dezelfde_ankers_twee_keer_geven_de_tekst_niet_twee_keer():
@@ -296,4 +324,4 @@ def test_echte_pagina_met_ingredientenlijst_door_de_bereiding():
     assert '2 lente-uitjes' not in tekst and '½ bosje verse koriander' not in tekst
     for stap in stappen[1:]:
         assert stap in genorm                       # letterlijk, en de eerste is gelijmd uit twee fragmenten
-    assert len(meldingen) == 1 and meldingen[0].startswith('uit de bereiding weggelaten: 19 ingrediëntregels')
+    assert meldingen == []
