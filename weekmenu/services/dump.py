@@ -210,7 +210,8 @@ def _bereiding(item, photo_page, page_texts, ingredienten):
         return item.get('instructions') or '', [
             'bereidingsstappen aangewezen maar geen paginatekst om uit te knippen']
     tekst, meldingen = knip_stappen(page_texts[photo_page - 1], steps,
-                                    corpus='\n'.join(page_texts), ingredienten=ingredienten)
+                                    corpus='\n'.join(page_texts), ingredienten=ingredienten,
+                                    titel=item.get('title'))
     if not tekst:
         elders = _pagina_met_anker(steps, page_texts, photo_page)
         if elders:

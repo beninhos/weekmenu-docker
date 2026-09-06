@@ -393,6 +393,7 @@ async function importFromPhoto() {
 
         const preview = document.getElementById('importedImagePreview');
         const pathField = document.getElementById('fieldImagePath');
+        verbergConceptfoto();
         if (data.image_path) {
             pathField.value = data.image_path;
             preview.src = '/' + data.image_path;
@@ -484,6 +485,7 @@ async function importFromUrl() {
 
         const preview = document.getElementById('importedImagePreview');
         const pathField = document.getElementById('fieldImagePath');
+        verbergConceptfoto();
         if (data.image_path) {
             pathField.value = data.image_path;
             preview.src = '/' + data.image_path;
@@ -511,6 +513,12 @@ async function importFromUrl() {
 
 /* ── Bijsnijden van de conceptfoto, zelfde modal en eindpunt als de dump-pagina ── */
 let _draftCrop = null;
+/* Een foto- of linkimport ná het concept vervangt de foto: dan hoort het
+   bijsnijden van het concept-origineel niet meer bij wat je ziet. */
+function verbergConceptfoto() {
+    _draftCrop = null;
+    document.getElementById('importedImageTools').classList.add('hidden');
+}
 function cropImportedImage() {
     if (!_draftCrop) return;
     openCropModal('/' + _draftCrop.source, `/dump/draft/${_draftCrop.id}/crop`, (newPath) => {

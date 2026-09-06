@@ -122,7 +122,7 @@ def _zoek(anker, tekst, vanaf=0):
     return plek if beste >= _FUZZY_DREMPEL else None
 
 
-def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
+def knip_stappen(paginatekst, steps, corpus=None, ingredienten=(), titel=None):
     """Knip de bereidingsstappen uit de paginatekst. Geeft (tekst, meldingen).
 
     `steps` is de lijst van het model: {'start', 'end'}; `ingredienten` de
@@ -194,7 +194,7 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
         # deze stap helemaal; die telt niet als bezet, anders verliest deze
         # stap zijn kopje door andermans fout.
         bezet = [(b2, e2) for j, (b2, e2) in enumerate(ankers) if j != i and not b2 <= b < e2]
-        kop = _kopregel(regels, b, bezet, ingredienten)
+        kop = _kopregel(regels, b, e, bezet, ingredienten, titel)
         if kop:
             begin, tekst_kop = kop
             # Een los stapnummer vlak vóór het kopje ('4' en dan 'Boontjes
@@ -226,12 +226,13 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
                 gat = re.sub(r'\s*' + r'\s+'.join(re.escape(w) for w in koppen[i + 1].split())
                              + r'[\s·•.]*$', '', gat)
             if re.fullmatch(r'\s*\d{1,2}\.?\s*', gat):
-                gat = ''                        # los stapnummer van een genummerd kookboek
+                weggelaten.append(gat.strip())  # los stapnummer: niet in de tekst, wel in de log
+                gat = ''
             stuk += gat
             weggelaten += meubilair
         stuk, weg = _zonder_ingredientregels(stuk, ingredienten)
         weggelaten += weg
-        stuk = re.sub(r'\s+', ' ', stuk).strip().lstrip('.,;:·• ')
+        stuk = re.sub(r'\s+', ' ', stuk).strip().lstrip('.,;:·• ').rstrip('·• ')
         if kop:
             uit.append(kop)
         if stuk:
@@ -246,7 +247,9 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
     # Na het laatste eindanker houdt de knip op. Het model zei dat het recept
     # daar eindigt, dus er wordt niets toegevoegd — maar staat er nog een zin
     # bereidingstekst, dan hoort de gebruiker dat te zien.
-    staart = regels[stukken[-1][1]:].split('\n')
+    # Vanaf de laatste tekst die bij een stap hoort — niet vanaf de laatste
+    # stap van het model, want bij een kolomlay-out staat die niet achteraan.
+    staart = regels[max(e for _, e in stukken):].split('\n')
     citaat = _staartzin(staart)
     if citaat:
         meldingen.append(f"na de laatste stap stond nog {_kort(citaat, 100)}; "
@@ -275,22 +278,23 @@ def _staartzin(staart):
 _GENUMMERDE_STAP = re.compile(r'^\s*\d{1,2}[.)]?\s+[^\W\d_]')
 
 
-def _kopregel(regels, b, bezet, ingredienten):
+def _kopregel(regels, b, e, bezet, ingredienten, titel=None):
     """Het kopje van de stap die op positie `b` begint: (beginpositie, tekst) of None.
 
     Twee plekken: de regel waarmee de stap begint (het model nam het kopje in
-    het anker op: 'Groente snijden Snijd de paprika'), of de regel er vlak
-    boven, mits die niet binnen een andere stap (`bezet`) valt. Alleen als de
-    stap op een regelbegin start: midden in een regel is de tekst ervoor de
-    vorige regel, geen kopje. Een opmaakregel zonder letters (bullet, punt)
-    tussen kopje en stap telt niet mee.
+    het anker op: 'Groente snijden Snijd de paprika'), mits de stap daarna nog
+    doorloopt (anders is die regel de stap zelf); of de regel er vlak boven,
+    mits die niet binnen een andere stap (`bezet`) valt. Alleen als de stap
+    op een regelbegin start: midden in een regel is de tekst ervoor de vorige
+    regel, geen kopje. Een opmaakregel zonder letters (bullet, punt) tussen
+    kopje en stap telt niet mee.
     """
     if b > 0 and regels[b - 1] != '\n':
         return None
     lijnen = regels[b:].split('\n')
     eerste = lijnen[0]
     volgende = next((l for l in lijnen[1:] if re.search(r'[^\W\d_]', l)), '')
-    if _is_kop(eerste, volgende, ingredienten):
+    if b + len(eerste) < e and _is_kop(eerste, volgende, ingredienten, titel):
         return b, eerste.strip()
     # de regel(s) erboven: opmaakregels overslaan tot een regel met letters
     positie = b
@@ -300,23 +304,38 @@ def _kopregel(regels, b, bezet, ingredienten):
             return None
         ervoor = regels[begin:positie - 1]
         if re.search(r'[^\W\d_]', ervoor):
-            return (begin, ervoor.strip()) if _is_kop(ervoor, eerste, ingredienten) else None
+            return (begin, ervoor.strip()) if _is_kop(ervoor, eerste, ingredienten, titel) else None
         if ervoor.strip() and not re.fullmatch(r'[\s·•.]*', ervoor):
             return None                     # een getal of iets anders: geen kopje erboven
         positie = begin
     return None
 
 
-def _is_kop(regel, volgende, ingredienten=()):
+# Rubriekkoppen van een receptpagina: geen stapkopje, ook al staan ze vlak
+# boven de eerste stap. En de woorden waar een kopje niet op eindigt: een
+# afgebroken zin ('Voeg de' + 'Parmezaanse kaas') wel.
+_RUBRIEKKOPPEN = {'bereiding', 'bereidingswijze', 'werkwijze', 'zo maak je het', 'aan de slag',
+                  'instructies', 'stappen', 'stappenplan', 'recept', 'ingrediënten', 'ingredienten'}
+_GEEN_KOPEINDE = {'de', 'het', 'een', 'en', 'of', 'met', 'in', 'op', 'voor', 'van', 'te', 'tot',
+                  'naar', 'aan', 'bij', 'om', 'uit', 'door', 'over', 'per', 'onder', 'tegen', 'als'}
+
+
+def _is_kop(regel, volgende, ingredienten=(), titel=None):
     """Kort, zonder leesteken aan het eind, eventueel genummerd, en de regel
     erna begint met een hoofdletter (een afgebroken stap loopt in kleine
-    letters door). Geen getallen buiten het nummer ('Week 32 2022', '180 g')
-    en geen ingrediëntnaam ('Peper en zout')."""
+    letters door). Geen getallen buiten het nummer ('Week 32 2022', '180 g'),
+    geen ingrediëntnaam ('Peper en zout'), geen rubriekkop ('Bereiding') en
+    niet de recepttitel."""
     woorden = regel.split()
     if not 1 <= len(woorden) <= 5 or regel.rstrip()[-1:] in '.!?:;,':
         return False
     if regel.isupper():
         return False                            # 'AAN DE SLAG': een rubriekkop van de pagina, geen stap
+    kaal = re.sub(r'\s+', ' ', regel).strip().lower()
+    if kaal in _RUBRIEKKOPPEN or (titel and kaal == re.sub(r'\s+', ' ', titel).strip().lower()):
+        return False
+    if woorden[-1].lower() in _GEEN_KOPEINDE:
+        return False
     if not volgende.lstrip()[:1].isupper():
         return False
     genummerd = bool(re.fullmatch(r'\d{1,2}\.?', woorden[0]))
@@ -452,9 +471,9 @@ def _zonder_meubilair(gat):
     return '\n'.join([delen[0]] + [r for r, h in zip(midden, houden) if h] + [delen[-1]]), weggelaten
 
 
-# Zo veel regels moet een blok minstens zijn om als tabel te tellen. Eén los
-# stapnummer of paginanummer ('4') in een gat blijft dan gewoon staan: dat is
-# zichtbare ruis, en een enkele regel weghalen op vorm alleen is het niet waard.
+# Zo veel regels moet een blok minstens zijn om als tabel te tellen. Eén losse
+# regel weghalen op vorm alleen is het niet waard; alleen een gat dat uit niets
+# anders dan een stapnummer bestaat gaat eruit (zie knip_stappen).
 _MEUBILAIR_MIN = 3
 
 

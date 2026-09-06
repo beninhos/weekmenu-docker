@@ -414,9 +414,10 @@ def test_kopje_in_een_andere_kolomvolgorde_dan_de_stappen():
               "1. Snijden\nBreng ruim water aan de kook.\n")
     stappen = [{'start': 'Breng ruim water', 'end': 'de kook.'},
                {'start': 'Verhit de olijfolie', 'end': 'hapjespan.'}]
-    tekst, _ = knip_stappen(pagina, stappen)
+    tekst, meldingen = knip_stappen(pagina, stappen)
     assert tekst == ("1. Snijden\nBreng ruim water aan de kook.\n"
                      "2. Bakken\nVerhit de olijfolie in een hapjespan.")
+    assert meldingen == []
 
 
 def test_kopje_blijft_als_een_andere_stap_eroverheen_valt():
@@ -430,6 +431,44 @@ def test_kopje_blijft_als_een_andere_stap_eroverheen_valt():
     regels = tekst.split('\n')
     assert regels[:2] == ['1. Snijden', 'Snijd de ui in ringen.']
     assert '2. Bakken' in regels
+
+
+def test_kort_eindanker_verdubbelt_de_stap_niet():
+    # Reikt het eindanker niet tot het regeleinde, dan is de eerste regel geen
+    # kopje: anders komt de regel als kopje én als stap (via het gat) terug.
+    tekst, _ = knip_stappen("Snijd de ui in ringen\nBak de ui bruin.\n",
+                            [{'start': 'Snijd de ui', 'end': 'de ui'}, {'start': 'Bak de ui', 'end': 'bruin.'}])
+    assert tekst == 'Snijd de ui in ringen\nBak de ui bruin.'
+    tekst, _ = knip_stappen("Serveer direct ·\nGarneer met peterselie.\n",
+                            [{'start': 'Serveer direct', 'end': 'Serveer direct'},
+                             {'start': 'Garneer met', 'end': 'peterselie.'}])
+    assert tekst == 'Serveer direct\nGarneer met peterselie.'
+
+
+def test_rubriekkop_en_titel_boven_de_eerste_stap_zijn_geen_kopje():
+    stappen = [{'start': 'Verhit de olie', 'end': 'een pan.'}]
+    for kop in ('Bereiding', 'Bereidingswijze', 'Zo maak je het', 'Werkwijze', 'Aan de slag'):
+        tekst, _ = knip_stappen(f"{kop}\nVerhit de olie in een pan.\n", stappen)
+        assert tekst == 'Verhit de olie in een pan.', kop
+    tekst, _ = knip_stappen("Kip tandoori\nVerhit de olie in een pan.\n", stappen, titel='Kip tandoori')
+    assert tekst == 'Verhit de olie in een pan.'
+
+
+def test_afgebroken_zin_met_hoofdletter_erna_is_geen_kopje():
+    # Smalle kolom: 'Voeg de' + 'Parmezaanse kaas toe'. Een kopje eindigt niet op een lidwoord of voorzetsel.
+    tekst, _ = knip_stappen("Voeg de\nParmezaanse kaas toe en roer.\n",
+                            [{'start': 'Voeg de', 'end': 'en roer.'}], ingredienten=['Parmezaanse kaas'])
+    assert tekst == 'Voeg de Parmezaanse kaas toe en roer.'
+
+
+def test_staart_begint_na_de_laatste_tekst_niet_na_de_laatste_stap():
+    # Kolomvolgorde: de laatste stap van het model staat niet achteraan in de OCR.
+    pagina = ("2. Bakken\nVerhit de olijfolie in een hapjespan.\n"
+              "1. Snijden\nBreng ruim water aan de kook.\n")
+    stappen = [{'start': 'Breng ruim water', 'end': 'de kook.'},
+               {'start': 'Verhit de olijfolie', 'end': 'hapjespan.'}]
+    _, meldingen = knip_stappen(pagina, stappen)
+    assert meldingen == []
 
 
 def test_tabelregel_voor_een_stap_is_geen_kopje():
