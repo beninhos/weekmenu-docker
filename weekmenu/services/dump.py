@@ -502,7 +502,7 @@ def _verwerk_kaarten(texts, annotaties, client, config):
             r['meldingen'].append(f'het model maakte {len(gevonden)} recepten van deze ene kaart; '
                                   'alleen het eerste is bewaard')
         r['photo_page'], r['back_page'] = voor, achter
-        r['name'] = zonder_logo(r['name']) or r['name']
+        r['name'] = zonder_logo(r['name'], voortekst) or r['name']
         r['prep_time'] = bereidingstijd(voortekst) or bereidingstijd(achtertekst)
         nodig = benodigdheden(achtertekst)
         # Alleen vooraan een bestaande bereiding: zonder deze voorwaarde maakt

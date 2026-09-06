@@ -39,12 +39,16 @@ def is_voorkant(tekst):
     return any(m['voorkant'].search(tekst or '') for m in MERKEN)
 
 
-def zonder_logo(titel):
-    """De titel zonder een merklogo dat de OCR ervoor plakte."""
+def zonder_logo(titel, kaarttekst):
+    """De titel zonder het merklogo dat de OCR ervoor plakte.
+
+    Alleen voor een merk dat op de kaart zelf herkend is: 'Hello' aan het begin
+    van een titel zonder HelloFresh-logo op de voorkant is gewoon de titel.
+    """
     titel = titel or ''
     for m in MERKEN:
         patroon = m.get('titelprefix')
-        if patroon:
+        if patroon and m['voorkant'].search(kaarttekst or ''):
             titel = patroon.sub('', titel, count=1)
     return titel.strip()
 

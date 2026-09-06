@@ -70,8 +70,11 @@ def test_logowoord_gaat_uit_de_titel():
     # FRESH'), en het model neemt dat woord over. Merkloos opgelost: elk merk
     # zegt zelf welk voorvoegsel niet bij de titel hoort.
     from weekmenu.services.kaartsignaturen import zonder_logo
-    assert zonder_logo('Hello Kalkoenmedaillonstukjes met pasta') == 'Kalkoenmedaillonstukjes met pasta'
-    assert zonder_logo('HELLO FRESH Patatje oorlog') == 'Patatje oorlog'
-    assert zonder_logo('Patatje oorlog') == 'Patatje oorlog'
-    assert zonder_logo('Hellofresh-bowl met kip') == 'Hellofresh-bowl met kip'   # deel van een woord: laten staan
-    assert zonder_logo('') == '' and zonder_logo(None) == ''
+    kaart = 'HELLO Kalkoenmedaillonstukjes\nFRESH\nBereidingstijd: 15 min.'
+    assert zonder_logo('Hello Kalkoenmedaillonstukjes met pasta', kaart) == 'Kalkoenmedaillonstukjes met pasta'
+    assert zonder_logo('HELLO FRESH Patatje oorlog', kaart) == 'Patatje oorlog'
+    assert zonder_logo('Patatje oorlog', kaart) == 'Patatje oorlog'
+    assert zonder_logo('Hellofresh-bowl met kip', kaart) == 'Hellofresh-bowl met kip'   # deel van een woord
+    assert zonder_logo('', kaart) == '' and zonder_logo(None, kaart) == ''
+    # Alleen als het merk op de kaart herkend is: een échte titel met 'Hello' blijft heel.
+    assert zonder_logo('Hello Kitty-pannenkoeken', 'Pannenkoeken voor 4 personen') == 'Hello Kitty-pannenkoeken'

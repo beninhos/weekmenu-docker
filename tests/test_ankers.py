@@ -257,6 +257,26 @@ def test_weetje_of_tip_na_de_laatste_stap_is_geen_bereiding():
         assert meldingen == [], staart
 
 
+def test_genummerde_stap_na_een_nawoord_wordt_wel_gemeld():
+    # Wijst het model de laatste stap één te vroeg aan en staat er een 'Tip'
+    # of 'Eet smakelijk' tussen, dan mag dat nawoord de echte stap erna niet
+    # verzwijgen. Een genummerde stap is daar het herkenbare signaal voor.
+    stappen = [{'start': 'Rooster de kip', 'end': 'alles gaar is.'}]
+    for staart in ("Eet smakelijk!\n3 Garneer de rijst met de verse koriander en serveer direct.\n",
+                   "Tip\nBak de kip een paar minuten langer als je hem goed gaar wilt.\n"
+                   "3 Garneer de rijst met de verse koriander en serveer direct.\n"):
+        _, meldingen = knip_stappen("Rooster de kip een uur tot alles gaar is.\n" + staart, stappen)
+        assert len(meldingen) == 1 and "'3 Garneer de rijst" in meldingen[0], staart
+
+
+def test_u_en_a_tellen_wel_als_woord():
+    # De ≥2-letterregel mag een u-vorm-kookboek niet raken: 'Roer u de saus goed door' is een zin.
+    from weekmenu.services.ankers import _is_zin
+    assert _is_zin('Roer u de saus goed door')
+    assert _is_zin('Serveer à la minute met een salade')
+    assert not _is_zin('a b c d e')
+
+
 def test_losse_letters_zijn_geen_zin():
     # OCR-ruis 'a b c d e' (een sierrand) telde als vijf gewone woorden.
     tekst, meldingen = knip_stappen("Rooster de kip een uur tot alles gaar is.\na b c d e\n",

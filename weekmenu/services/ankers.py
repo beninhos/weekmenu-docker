@@ -35,10 +35,11 @@ bestand over gaat:
   het recept daar ophield, dus we voegen niets toe maar laten het ook niet
   stil verdwijnen.
 
-Wat hier wordt weggehaald komt in de meldingen terug: elke regel die tekst
-zou kunnen zijn letterlijk, de regels met alleen een getal of één woord en de
-herkende ingrediëntregels als aantal. Dat is de eigenlijke waarborg: de
-heuristieken hierboven verkleinen de ruis, maar wat ze weghalen is na te kijken.
+Wat hier wordt weggehaald gaat naar de log (info-niveau), niet naar de
+nakijker: op een batch van twaalf kaarten was de opsomming ('Vetten (g)',
+'Kan sporen bevatten van') twaalf keer ruis en nul keer een bevinding. Wat
+de nakijker wél te zien krijgt is wat er mogelijk ontbreekt: een zin na de
+laatste stap, of een stap die ruim geknipt is omdat een grens niet paste.
 """
 import difflib
 import logging
@@ -199,19 +200,38 @@ def knip_stappen(paginatekst, steps, corpus=None, ingredienten=()):
         # gewenst gedrag, geen bevinding. De nakijker krijgt er dus geen
         # melding van (twaalf keer 'Vetten (g)' verbergt de meldingen die er
         # wél toe doen); voor wie de knip wil narekenen staat het in de log.
-        log.debug('%s', _weggelaten_melding(weggelaten))
+        log.info('%s', _weggelaten_melding(weggelaten))
 
     # Na het laatste eindanker houdt de knip op. Het model zei dat het recept
     # daar eindigt, dus er wordt niets toegevoegd — maar staat er nog een zin
     # bereidingstekst, dan hoort de gebruiker dat te zien.
     staart = regels[stukken[-1][1]:].split('\n')
-    zin = next((i for i, r in enumerate(staart) if _is_zin(r)), None)
-    if zin is not None:
-        citaat = ' '.join(r.strip() for r in staart[:zin + 1] if r.strip())
-    if zin is not None and not _is_nawoord(citaat):     # de kop 'Weetje' staat vaak op een eigen regel
+    citaat = _staartzin(staart)
+    if citaat:
         meldingen.append(f"na de laatste stap stond nog {_kort(citaat, 100)}; "
                          "dat is niet overgenomen")
     return '\n'.join(uit), meldingen
+
+
+def _staartzin(staart):
+    """De eerste zin bereidingstekst na de laatste stap, of None.
+
+    Een nawoord (Weetje, Tip, Eet smakelijk; de kop staat vaak op een eigen
+    regel) slikt de rest van de staart — behalve een genummerde stap erna:
+    wijst het model de laatste stap één te vroeg aan, dan is dát de zin die
+    de nakijker moet zien.
+    """
+    zinnen = [i for i, r in enumerate(staart) if _is_zin(r)]
+    if not zinnen:
+        return None
+    citaat = ' '.join(r.strip() for r in staart[:zinnen[0] + 1] if r.strip())
+    if not _is_nawoord(citaat):
+        return citaat
+    stap = next((i for i in zinnen if _GENUMMERDE_STAP.match(staart[i])), None)
+    return staart[stap].strip() if stap is not None else None
+
+
+_GENUMMERDE_STAP = re.compile(r'^\s*\d{1,2}[.)]?\s+[^\W\d_]')
 
 
 def _weggelaten_melding(regels):
@@ -263,20 +283,24 @@ def _is_nawoord(regel):
 
 
 def _gewone_woorden_op_rij(regel):
-    """Langste reeks opeenvolgende gewone woorden (≥ 2 letters, geen kapitalen).
+    """Langste reeks opeenvolgende gewone woorden (letters, geen kapitalen).
 
-    Eén letter is geen woord: een sierrand die de OCR als 'a b c d e' leest
-    telde anders als vijf woorden en dus als zin.
+    Eén letter is geen woord — een sierrand die de OCR als 'a b c d e' leest
+    telde anders als vijf woorden en dus als zin — behalve de losse letters
+    die in een recept echt een woord zijn ('u', 'à').
     """
     beste = reeks = 0
     for w in regel.split():
         kaal = w.strip('.,;:()!?*\'"').replace('-', '').replace("'", '')
-        if len(kaal) >= 2 and kaal.isalpha() and not kaal.isupper():
+        if (len(kaal) >= 2 or kaal in _LOSSE_LETTERWOORDEN) and kaal.isalpha() and not kaal.isupper():
             reeks += 1
             beste = max(beste, reeks)
         else:
             reeks = 0
     return beste
+
+
+_LOSSE_LETTERWOORDEN = {'u', 'à'}
 
 
 def _is_zin(regel):
