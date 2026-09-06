@@ -98,7 +98,8 @@ def test_zonder_geknipte_bereiding_blijft_de_bereiding_leeg(app, tmp_path):
                     antwoorden=[_ZonderAnker()])
     d = RecipeDraft.query.filter_by(job_id=job.id).first()
     assert not (d.instructions or '').strip()
-    assert 'geen enkel anker gevonden' in job.warning
+    assert 'geen enkel anker gevonden' in json.loads(d.meldingen_json)[0]   # op het concept, bij de lege bereiding
+    assert job.warning is None
 
 
 def test_tabelcheck_en_twijfel_worden_beide_bewaard(app, tmp_path):
@@ -111,7 +112,7 @@ def test_tabelcheck_en_twijfel_worden_beide_bewaard(app, tmp_path):
                          twijfels=twijfels)
     d = RecipeDraft.query.filter_by(job_id=job.id).first()
     ing = json.loads(d.ingredients_json)
-    assert ing[1]['check'].startswith("tabel zegt '2 st'; Vision las '3'")
+    assert ing[1]['check'] == "tabel zegt '2 st'; Vision twijfelde aan dit getal: '3' kan ½ zijn"
 
 
 def test_slecht_paar_wordt_gemeld_en_de_rest_gaat_door(app, tmp_path):

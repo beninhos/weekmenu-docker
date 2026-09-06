@@ -425,11 +425,6 @@ def _process(job):
             meldingen.append("Pagina's {} lijken receptkaarten. Kies 'receptkaarten' als soort "
                              "scan en probeer opnieuw.".format(', '.join(map(str, kaarten))))
     _markeer_twijfels(recipes, twijfels)
-    for r in recipes:
-        for m in r.get('meldingen') or []:
-            waar = f"Pagina {r['photo_page']}" if not r.get('back_page') \
-                else f"Pagina's {r['photo_page']}+{r['back_page']}"
-            meldingen.append(f"{waar} ({r['name']}): {m}. Controleer de bereiding tegen de foto.")
 
     al_afgehandeld = _accepted_pages(job.id)
     overgeslagen = 0
@@ -446,6 +441,9 @@ def _process(job):
             prep_time=r.get('prep_time'),
             instructions=r['instructions'],
             ingredients_json=json.dumps(r['ingredients']),
+            # Wat over dit ene recept gaat staat op het concept, naast het
+            # veld waar het over gaat; job.warning is voor de hele batch.
+            meldingen_json=json.dumps(r.get('meldingen') or [], ensure_ascii=False),
             image_path=image_path,
             back_image_path=(_resolve_image(job.id, r['back_page'], page_map)
                              if r.get('back_page') else None),
@@ -498,10 +496,10 @@ def _verwerk_kaarten(texts, annotaties, client, config):
         if not gevonden:
             meldingen.append(f'{waar}: het model gaf geen recept terug.')
             continue
-        if len(gevonden) > 1:
-            meldingen.append(f'{waar}: het model gaf {len(gevonden)} recepten voor één kaart; '
-                             f'alleen het eerste is bewaard.')
         r = gevonden[0]
+        if len(gevonden) > 1:
+            r['meldingen'].append(f'het model maakte {len(gevonden)} recepten van deze ene kaart; '
+                                  'alleen het eerste is bewaard')
         r['photo_page'], r['back_page'] = voor, achter
         r['prep_time'] = bereidingstijd(voortekst) or bereidingstijd(achtertekst)
         nodig = benodigdheden(achtertekst)
@@ -511,7 +509,7 @@ def _verwerk_kaarten(texts, annotaties, client, config):
         # er stil doorheen (_bereiding_ontbreekt in routes/dump.py).
         if nodig and (r['instructions'] or '').strip():
             r['instructions'] = f'Benodigdheden: {nodig}\n' + r['instructions']
-        meldingen += controleer_tegen_tabel(r, rijen, f'{voor}+{achter}')
+        r['meldingen'] += controleer_tegen_tabel(r, rijen)
         recipes.append(r)
     return recipes, meldingen, len(paren_lijst)
 
@@ -547,9 +545,9 @@ def _markeer_twijfels(recipes, twijfels):
         for twijfel in lijst:
             treffer = _ingredient_bij_regel(twijfel['regel'], per_pagina.get(pagina, []))
             if treffer is not None:
-                nieuwe = (f"Vision las '{twijfel['cijfer']}' met "
-                         f"{twijfel['zekerheid']:.0%} zekerheid; mogelijk "
-                         f"een breukteken (½)")
+                # Voor de nakijker, niet voor de ontwikkelaar: geen
+                # percentage, wel wat er gelezen is en wat het kan zijn.
+                nieuwe = f"Vision twijfelde aan dit getal: '{twijfel['cijfer']}' kan ½ zijn"
                 bestaande = treffer.get('check')
                 # Nooit overschrijven: de tabel (controleer_tegen_tabel) heeft
                 # 'check' al gezet vóórdat deze functie draait en is leidend,

@@ -527,6 +527,21 @@ def _migrate_v16(conn):
                     pass
 
 
+def _migrate_v17(conn):
+    """Meldingen per concept.
+
+    Wat over één recept gaat ('na de laatste stap stond nog ...', 'tabelrij
+    ontbreekt') stond in één blok op de job; twaalf kaarten gaven een halve
+    pagina tekst die niemand las. Het staat nu op het concept zelf.
+    """
+    cols = [row[1] for row in conn.execute(text('PRAGMA table_info(recipe_draft)')).fetchall()]
+    if 'meldingen_json' not in cols:
+        try:
+            conn.execute(text('ALTER TABLE recipe_draft ADD COLUMN meldingen_json TEXT'))
+        except OperationalError:
+            pass
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -574,8 +589,10 @@ def migrate_db():
             _migrate_v15(conn)
         if current < 16:
             _migrate_v16(conn)
+        if current < 17:
+            _migrate_v17(conn)
 
-        target = 16
+        target = 17
         if current < target:
             if row:
                 conn.execute(

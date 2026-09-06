@@ -110,7 +110,7 @@ def test_twijfel_komt_op_het_juiste_ingredient():
     twijfels = [[], [], [], [], [{'regel': '2 theelepel komijnzaad', 'cijfer': '2', 'zekerheid': 0.49}]]
     _markeer_twijfels(recipes, twijfels)
     assert 'check' not in recipes[0]['ingredients'][0]
-    assert recipes[0]['ingredients'][1]['check'] == "Vision las '2' met 49% zekerheid; mogelijk een breukteken (½)"
+    assert recipes[0]['ingredients'][1]['check'] == "Vision twijfelde aan dit getal: '2' kan ½ zijn"
 
 
 def test_twijfel_zonder_gedeeld_woord_wordt_stil_genegeerd():
@@ -153,7 +153,7 @@ def test_twijfel_overschrijft_de_tabelcheck_niet():
     twijfels = [[{'regel': '3 st Prei', 'cijfer': '3', 'zekerheid': 0.4}]]
     _markeer_twijfels(recipes, twijfels)
     assert recipes[0]['ingredients'][0]['check'] == (
-        "tabel zegt '2 st'; Vision las '3' met 40% zekerheid; mogelijk een breukteken (½)")
+        "tabel zegt '2 st'; Vision twijfelde aan dit getal: '3' kan ½ zijn")
 
 
 def test_twijfel_op_de_achterkant_komt_op_het_kaartrecept():

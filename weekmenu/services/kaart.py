@@ -181,7 +181,7 @@ def _zelfde_hoeveelheid(ingredient, cel):
     return True
 
 
-def controleer_tegen_tabel(recipe, rijen, paginas):
+def controleer_tegen_tabel(recipe, rijen):
     """De tabel is leidend: elke afwijking wordt zichtbaar, niets wordt omgeschreven.
 
     Koppelt elk ingrediënt aan de tabelrij met de meeste gedeelde woorden
@@ -207,6 +207,5 @@ def controleer_tegen_tabel(recipe, rijen, paginas):
             ing['check'] = f"tabel zegt '{rij['hoeveelheid']}'"
         if rij['blok'] == 'voorraad':
             ing['kaart_voorraad'] = True
-    return [f"Pagina's {paginas} ({recipe['name']}): tabelrij "
-            f"'{rijen[i]['naam']} | {rijen[i]['hoeveelheid']}' ontbreekt in het concept."
+    return [f"tabelrij '{rijen[i]['naam']} | {rijen[i]['hoeveelheid']}' ontbreekt bij de ingrediënten"
             for i in vrij]

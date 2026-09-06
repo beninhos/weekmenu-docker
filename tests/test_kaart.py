@@ -141,7 +141,7 @@ def _recept(*ingredienten):
 def test_kloppende_hoeveelheid_krijgt_geen_check():
     r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'}, {'name': 'prei', 'amount': 2.0, 'unit': 'stuks'},
                 {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'})
-    meldingen = controleer_tegen_tabel(r, RIJEN, '1+2')
+    meldingen = controleer_tegen_tabel(r, RIJEN)
     assert meldingen == []
     assert all('check' not in i for i in r['ingredients'])
     assert r['ingredients'][2]['kaart_voorraad'] is True
@@ -151,7 +151,7 @@ def test_kloppende_hoeveelheid_krijgt_geen_check():
 def test_afwijkende_hoeveelheid_krijgt_check_met_de_celtekst():
     r = _recept({'name': 'ui', 'amount': 10.0, 'unit': 'stuks'}, {'name': 'prei', 'amount': 2.0, 'unit': 'stuks'},
                 {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'})
-    controleer_tegen_tabel(r, RIJEN, '1+2')
+    controleer_tegen_tabel(r, RIJEN)
     assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
 
 
@@ -162,48 +162,48 @@ def test_breuk_en_eenheid_worden_genormaliseerd_voor_de_vergelijking():
     r = _recept({'name': 'zonnebloemolie', 'amount': 0.5, 'unit': 'el'},
                 {'name': 'peper en zout', 'amount': None, 'unit': ''},
                 {'name': 'kip', 'amount': 300.0, 'unit': 'g'})
-    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert controleer_tegen_tabel(r, rijen) == []
     assert all('check' not in i for i in r['ingredients'])
 
 
 def test_ingredient_buiten_de_tabel_blijft_staan_met_check():
     r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'}, {'name': 'prei', 'amount': 2.0, 'unit': 'stuks'},
                 {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'}, {'name': 'snuf peper', 'amount': None, 'unit': ''})
-    controleer_tegen_tabel(r, RIJEN, '1+2')
+    controleer_tegen_tabel(r, RIJEN)
     assert r['ingredients'][3]['check'] == 'staat niet in de tabel'
     assert len(r['ingredients']) == 4
 
 
 def test_ontbrekende_tabelrij_wordt_gemeld():
     r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'}, {'name': 'olijfolie', 'amount': 1.0, 'unit': 'el'})
-    meldingen = controleer_tegen_tabel(r, RIJEN, '3+4')
-    assert meldingen == ["Pagina's 3+4 (X): tabelrij 'Prei | 2 st' ontbreekt in het concept."]
+    meldingen = controleer_tegen_tabel(r, RIJEN)
+    assert meldingen == ["tabelrij 'Prei | 2 st' ontbreekt bij de ingrediënten"]
 
 
 def test_stuk_s_uit_de_kaart_komt_overeen_met_stuks():
     rijen = [{'naam': 'Ui', 'hoeveelheid': '1 stuk(s)', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'ui', 'amount': 1.0, 'unit': 'stuks'})
-    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert controleer_tegen_tabel(r, rijen) == []
     assert 'check' not in r['ingredients'][0]
 
 
 def test_bol_len_uit_de_kaart_komt_overeen_met_bol():
     rijen = [{'naam': 'Mozzarella', 'hoeveelheid': '1 bol(len)', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'mozzarella', 'amount': 1.0, 'unit': 'bol'})
-    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert controleer_tegen_tabel(r, rijen) == []
     assert 'check' not in r['ingredients'][0]
 
 
 def test_ocr_misread_breuk_als_procent_geeft_check_met_de_celtekst():
     rijen = [{'naam': 'Mexicaanse kruiden', 'hoeveelheid': '% zakje(s)', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'mexicaanse kruiden', 'amount': 0.5, 'unit': 'zakje'})
-    controleer_tegen_tabel(r, rijen, '1+2')
+    controleer_tegen_tabel(r, rijen)
     assert r['ingredients'][0]['check'] == "tabel zegt '% zakje(s)'"
 
 
 def test_lege_hoeveelheid_tegen_echte_cel_geeft_check_zonder_crash():
     r = _recept({'name': 'ui', 'amount': '', 'unit': ''})
-    controleer_tegen_tabel(r, RIJEN, '1+2')
+    controleer_tegen_tabel(r, RIJEN)
     assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
 
 
@@ -212,21 +212,21 @@ def test_scheutje_met_amount_1_krijgt_geen_check():
     # (amount 1, unit 'scheutje') — dat is niets om na te kijken.
     rijen = [{'naam': 'Melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'melk', 'amount': 1.0, 'unit': 'scheutje'})
-    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert controleer_tegen_tabel(r, rijen) == []
     assert 'check' not in r['ingredients'][0]
 
 
 def test_scheutje_zonder_modelhoeveelheid_krijgt_geen_check():
     rijen = [{'naam': 'Melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'melk', 'amount': None, 'unit': ''})
-    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert controleer_tegen_tabel(r, rijen) == []
     assert 'check' not in r['ingredients'][0]
 
 
 def test_scheutje_met_afwijkende_modelhoeveelheid_krijgt_wel_check():
     rijen = [{'naam': 'Melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'melk', 'amount': 2.0, 'unit': 'el'})
-    controleer_tegen_tabel(r, rijen, '1+2')
+    controleer_tegen_tabel(r, rijen)
     assert r['ingredients'][0]['check'] == "tabel zegt 'scheutje'"
 
 
@@ -235,7 +235,7 @@ def test_pakje_vs_pak_ken_wordt_als_dezelfde_eenheid_gezien():
     # getal klopt — geen echte afwijking.
     rijen = [{'naam': 'Passata', 'hoeveelheid': '1 pak(ken)', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'passata', 'amount': 1.0, 'unit': 'pakje'})
-    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert controleer_tegen_tabel(r, rijen) == []
     assert 'check' not in r['ingredients'][0]
 
 
@@ -244,7 +244,7 @@ def test_ontbrekende_eenheid_bij_het_model_blijft_een_afwijking():
     # verloren gegaan, dus dat blijft zichtbaar.
     rijen = [{'naam': 'Little gem', 'hoeveelheid': '2 krop', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'little gem', 'amount': 2.0, 'unit': ''})
-    controleer_tegen_tabel(r, rijen, '1+2')
+    controleer_tegen_tabel(r, rijen)
     assert r['ingredients'][0]['check'] == "tabel zegt '2 krop'"
 
 
@@ -253,7 +253,7 @@ def test_echt_andere_eenheid_blijft_een_afwijking():
     # naar iets anders), dus dat blijft een echte check.
     rijen = [{'naam': 'Knoflookteen', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'knoflookteen', 'amount': 1.0, 'unit': 'teen'})
-    controleer_tegen_tabel(r, rijen, '1+2')
+    controleer_tegen_tabel(r, rijen)
     assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
 
 
@@ -264,7 +264,7 @@ def test_ocr_glitch_zonder_modelhoeveelheid_blijft_toch_een_afwijking():
     # anders verdwijnt precies de leesfout die zichtbaar moet blijven.
     rijen = [{'naam': 'Gemalen komijnzaad', 'hoeveelheid': '% zakje(s)', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'gemalen komijnzaad', 'amount': None, 'unit': 'zakje'})
-    controleer_tegen_tabel(r, rijen, '1+2')
+    controleer_tegen_tabel(r, rijen)
     assert r['ingredients'][0]['check'] == "tabel zegt '% zakje(s)'"
 
 
@@ -275,8 +275,8 @@ def test_stopwoord_koppelt_niet_los_van_de_echte_gedeelde_naam():
     rijen = [{'naam': 'Prei en wortel', 'hoeveelheid': 'naar smaak', 'blok': 'kaart', 'y': 1},
              {'naam': 'Ui', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 2}]
     r = _recept({'name': 'ui en look', 'amount': None, 'unit': ''})
-    meldingen = controleer_tegen_tabel(r, rijen, '1+2')
-    assert meldingen == ["Pagina's 1+2 (X): tabelrij 'Prei en wortel | naar smaak' ontbreekt in het concept."]
+    meldingen = controleer_tegen_tabel(r, rijen)
+    assert meldingen == ["tabelrij 'Prei en wortel | naar smaak' ontbreekt bij de ingrediënten"]
     assert r['ingredients'][0]['check'] == "tabel zegt '1 st'"
 
 
@@ -287,7 +287,7 @@ def test_unicode_numeral_glyph_geeft_check_geen_silent_pass():
     # die zichtbaar moet blijven. (Ook '①', '②', 'Ⅷ', '²' moeten dit vangnet triggeren.)
     rijen = [{'naam': 'komijn', 'hoeveelheid': '⅐ zakje(s)', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'komijn', 'amount': None, 'unit': ''})
-    controleer_tegen_tabel(r, rijen, '1+2')
+    controleer_tegen_tabel(r, rijen)
     assert r['ingredients'][0]['check'] == "tabel zegt '⅐ zakje(s)'"
 
 
@@ -295,5 +295,5 @@ def test_echt_woord_scheutje_krijgt_nog_steeds_geen_check():
     # Blijft werken: 'scheutje' is echt alfabetisch, dus woordhoeveelheid.
     rijen = [{'naam': 'melk', 'hoeveelheid': 'scheutje', 'blok': 'kaart', 'y': 1}]
     r = _recept({'name': 'melk', 'amount': None, 'unit': ''})
-    assert controleer_tegen_tabel(r, rijen, '1+2') == []
+    assert controleer_tegen_tabel(r, rijen) == []
     assert 'check' not in r['ingredients'][0]

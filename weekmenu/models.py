@@ -202,6 +202,9 @@ class RecipeDraft(db.Model):
     image_path = db.Column(db.String(200), nullable=True)
     original_image_path = db.Column(db.String(200), nullable=True)
     back_image_path = db.Column(db.String(200), nullable=True)  # achterkant van een kaart
+    # Wat er bij dít concept na te kijken is (JSON-lijst van korte zinnen);
+    # batchbrede meldingen staan op DumpJob.warning.
+    meldingen_json = db.Column(db.Text, nullable=True)
     prep_time = db.Column(db.Integer, nullable=True)
     source_page = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending|accepted|rejected

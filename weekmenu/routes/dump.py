@@ -33,6 +33,7 @@ def serialize_draft(d):
         'back_image_path': d.back_image_path,
         'source_page': d.source_page,
         'status': d.status,
+        'meldingen': json.loads(d.meldingen_json or '[]'),
     }
 
 
