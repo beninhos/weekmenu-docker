@@ -514,7 +514,11 @@ async function importFromUrl() {
 /* ── Bijsnijden van de conceptfoto, zelfde modal en eindpunt als de dump-pagina ── */
 let _draftCrop = null;
 /* Een foto- of linkimport ná het concept vervangt de foto: dan hoort het
-   bijsnijden van het concept-origineel niet meer bij wat je ziet. */
+   bijsnijden van het concept-origineel niet meer bij wat je ziet.
+   fieldDraftId blijft met opzet staan — daar hangt aan dat het concept op
+   'accepted' komt. Dat het origineel dan niet meegaat naar het recept beslist
+   de server zelf, door het opgeslagen pad tegen dat van het concept te leggen;
+   hier iets vergeten mag nooit een vreemde boekpagina opleveren. */
 function verbergConceptfoto() {
     _draftCrop = null;
     document.getElementById('importedImageTools').classList.add('hidden');

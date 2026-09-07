@@ -323,7 +323,14 @@ def new_recipe():
             # en is de volledige pagina definitief kwijt. Alleen bij een
             # overgenomen afbeelding: wie zelf een bestand kiest wil niet de
             # oude pagina als origineel.
-            if draft:
+            #
+            # En alleen als de afbeelding die we opslaan aantoonbaar nog die
+            # van het concept is. Een foto- of linkimport ná het concept zet
+            # een andere afbeelding in het formulier terwijl draft_id blijft
+            # staan (dat hoort ook, het concept moet op 'accepted'); erfde het
+            # recept dan de boekpagina, dan opende het aanpasformulier de crop
+            # op een pagina die er niets mee te maken heeft.
+            if draft and image_path in (draft.image_path, draft.original_image_path):
                 original_image_path = draft.original_image_path
 
         cookbook_id = request.form.get('cookbook') or None

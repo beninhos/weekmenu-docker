@@ -344,3 +344,42 @@ def test_nieuw_bestand_in_het_aanpasformulier_wist_het_oude_origineel(app, clien
     r = db.session.get(Recipe, recipe.id)
     assert r.image_path != 'static/uploads/klein.jpg'
     assert r.original_image_path is None
+
+
+def test_andere_geimporteerde_foto_erft_het_origineel_van_het_concept_niet(app, client):
+    """Tegenhanger van de test hierboven: een foto- of linkimport ná het concept.
+
+    Die import vervangt de afbeelding in het formulier, maar `draft_id` blijft
+    staan (het concept hoort nog steeds op 'accepted' te komen). Erfde het
+    recept dan tóch de boekpagina van het concept, dan opende het
+    aanpasformulier de crop op een pagina die niets met dit recept te maken
+    heeft en verving 'opslaan' de receptfoto door een uitsnede daarvan.
+    """
+    draft = _concept(name='Andere foto',
+                     image_path='static/uploads/uitsnede.jpg',
+                     original_image_path='static/uploads/boekpagina.jpg')
+    resp = client.post('/recipe/new', data={
+        'name': 'Andere foto', 'serves': '2', 'page': '',
+        'draft_id': str(draft.id),
+        'image_path_imported': 'static/uploads/webfoto.jpg',
+    })
+    assert resp.status_code == 302
+    recipe = Recipe.query.filter_by(name='Andere foto').first()
+    assert recipe.image_path == 'static/uploads/webfoto.jpg'
+    assert recipe.original_image_path is None
+    # het concept is wél afgehandeld: de import kwam er alleen overheen
+    assert db.session.get(RecipeDraft, draft.id).status == 'accepted'
+
+
+def test_het_origineel_zelf_opslaan_houdt_het_origineel_bij_het_recept(app, client):
+    """Wie de ongesneden pagina laat staan, snijdt later uit diezelfde pagina."""
+    draft = _concept(name='Hele pagina',
+                     image_path='static/uploads/uitsnede.jpg',
+                     original_image_path='static/uploads/boekpagina.jpg')
+    client.post('/recipe/new', data={
+        'name': 'Hele pagina', 'serves': '2', 'page': '',
+        'draft_id': str(draft.id),
+        'image_path_imported': 'static/uploads/boekpagina.jpg',
+    })
+    recipe = Recipe.query.filter_by(name='Hele pagina').first()
+    assert recipe.original_image_path == 'static/uploads/boekpagina.jpg'
