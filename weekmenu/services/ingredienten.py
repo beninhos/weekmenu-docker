@@ -1,0 +1,806 @@
+"""Varianten van hetzelfde product samenvoegen tot één ingredient.
+
+Elke schrijfwijze werd tot nu toe een eigen ingredientrij: 'knoflook' naast
+'knoflookteen', 'bosui' naast 'lente-ui' naast 'lente-uitjes'. Op de
+boodschappenlijst betekent dat twee regels met elk een eigen
+verpakkingsberekening — twee bolletjes knoflook voor vier tenen, terwijl één
+bolletje twaalf tenen heeft.
+
+Deze module lost dat op zoals de rest van de app zulke dingen doet: hij stelt
+voor en legt het bewijs op tafel, maar verandert niets uit zichzelf. Elke
+samenvoeging komt van een klik op /twijfelgevallen.
+
+De verliezer verdwijnt niet spoorloos: zijn naam blijft achter als
+IngredientAlias op de winnaar, zodat een volgende import diezelfde spelling
+meteen bij het goede ingredient uitkomt en het probleem niet terugkomt.
+
+Twee dingen mogen bij zo'n samenvoeging niet gebeuren, en daar gaat het meeste
+werk in deze module naartoe:
+
+  - een regel mag niet van betekenis veranderen. 'stuks' is bij Knoflook een
+    bolletje van twaalf tenen en bij Knoflookteen één teen; wie alleen het
+    ingredient_id omzet maakt van twee tenen vierentwintig. Zie
+    _bevries_eenheden, en _eenheidsbotsingen voor de waarschuwing vooraf.
+  - er mag geen besluit ontstaan dat je nooit genomen hebt. Wat je over de
+    regel van de verliezer besloot ging over die regel, niet over het geheel.
+    Zie _wis_weekbesluiten, en _voorraad_volgt_de_winnaar voor dezelfde
+    afweging bij de voorraadkast.
+"""
+import re
+from collections import defaultdict
+
+from weekmenu.constants import _UNIT_CONVERSIONS
+from weekmenu.extensions import db
+from weekmenu.models import (
+    CustomShoppingIngredient, Ingredient, IngredientAlias,
+    IngredientUnitConversion, MenuItem, PantryIngredient, QuickAddItem,
+    RecipeIngredient, ShoppingCheck, ShoppingListExclusion,
+    ShoppingListOverride, VariantApart,
+)
+from weekmenu.services.units import (
+    _convert_unit_for_agg, _norm_unit, _normalize_ingredient,
+)
+
+
+# AH-velden verhuizen als blok: een halve koppeling (id zonder verpakking) is
+# erger dan geen koppeling, want dan rekent de lijst met lucht.
+_AH_VELDEN = (
+    'ah_product_id', 'ah_product_name', 'ah_product_size', 'ah_product_price',
+    'ah_product_image', 'ah_product_bonus', 'ah_product_updated', 'ah_product_color',
+    'ah_product_was_price', 'ah_product_bonus_mechanism', 'ah_product_brand',
+    'ah_product_category', 'ah_pkg_qty', 'ah_pkg_unit', 'ah_conv_factor', 'ah_conv_unit',
+)
+
+# Tabellen waarin een ingredient hoogstens één rij per sleutel mag hebben —
+# hetzelfde lijstje als in migratie v14, met erbij op welke velden die
+# uniciteit geldt. v14 gooide de rij van de verliezer altijd weg; hier
+# verhuist hij als de winnaar op die sleutel nog niets heeft staan.
+#
+# Dit zijn de rijen die iets over het PRODUCT vastleggen: 'een bos is zes
+# stuks', 'deze spelling is iets anders'. Die blijven kloppen als de twee
+# schrijfwijzen één product worden.
+#
+# pantry_ingredient stond hier ook in en hoort er niet: zie
+# _voorraad_volgt_de_winnaar.
+#
+# ingredient_unit_conversion heeft in de database UNIQUE(ingredient_id,
+# from_unit) staan, en _convert_unit_for_agg zoekt ook alleen op from_unit.
+# Daarom is from_unit de sleutel en niet (from_unit, to_unit).
+_UNIEKE_TABELLEN = (
+    (IngredientUnitConversion, ('from_unit',)),
+    (VariantApart, ('sleutel',)),
+)
+
+# Rijen die niet over het product gaan maar over één REGEL op de lijst van één
+# week. Die verhuizen niet mee; zie _wis_weekbesluiten voor het waarom.
+_WEEKBESLUITEN = (ShoppingListExclusion, ShoppingListOverride)
+
+# Geen echt ingredient: _convert_unit_for_agg wil alleen een sleutel om de
+# conversietabel op te vinden.
+_LEESSLEUTEL = -1
+
+# Meervoudsuitgangen die in het Nederlands niets aan het product veranderen.
+# Bewust géén bijvoeglijke naamwoorden: 'witte bonen' en 'zwarte bonen' zijn
+# echt verschillende producten en mogen nooit als kandidaat opduiken.
+_MEERVOUD = ('tjes', 'jes', 'en', 's', 'je')
+
+
+def variantsleutel(naam):
+    """Naam zonder spaties en leestekens: 'rode wijnazijn' == 'rodewijnazijn'."""
+    return re.sub(r'[^a-z0-9]', '', _normalize_ingredient((naam or '').lower()))
+
+
+# ── samenvoegen ──────────────────────────────────────────────────────────
+
+def voeg_samen(verliezer_id, winnaar_id):
+    """Voeg de verliezer op in de winnaar. Geeft (payload, statuscode).
+
+    Alles gebeurt in één transactie: gaat er onderweg iets mis, dan staat de
+    database er precies zo bij als ervoor. Een half samengevoegd ingredient —
+    receptregels verhuisd maar de rij nog aanwezig — zou de boodschappenlijst
+    stiller kapotmaken dan het probleem dat we oplossen.
+    """
+    try:
+        verliezer_id, winnaar_id = int(verliezer_id or 0), int(winnaar_id or 0)
+    except (TypeError, ValueError):
+        return {'status': 'error', 'message': 'ongeldige ingredient-id'}, 400
+
+    if verliezer_id == winnaar_id:
+        return {'status': 'error', 'message': 'een ingredient kan niet in zichzelf op'}, 400
+
+    verliezer = Ingredient.query.get(verliezer_id)
+    winnaar = Ingredient.query.get(winnaar_id)
+    if not verliezer or not winnaar:
+        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+
+    verliezer_naam = verliezer.display
+    verliezer_canoniek = verliezer.name
+
+    try:
+        # Eerst de weken vastleggen waarin de verliezer op de lijst stond, want
+        # zodra zijn receptregels verhuisd zijn is dat niet meer te zien.
+        weken_verliezer = _weken_op_de_lijst(verliezer_id)
+
+        # Dan de betekenis van de regels vastzetten, vóór de conversietabellen
+        # samengaan — anders leest de winnaar ze met zijn eigen omrekening.
+        omgerekend = _bevries_eenheden(verliezer, winnaar)
+        db.session.flush()
+
+        verplaatst = _verhuis_receptregels(verliezer_id, winnaar_id)
+
+        # Aliassen kunnen niet botsen: alias is over de hele tabel uniek, dus
+        # een verhuizing naar de winnaar houdt hem geldig.
+        for alias in IngredientAlias.query.filter_by(ingredient_id=verliezer_id).all():
+            alias.ingredient_id = winnaar_id
+
+        for model, sleutelvelden in _UNIEKE_TABELLEN:
+            _verhuis_unieke_rijen(model, sleutelvelden, verliezer_id, winnaar_id)
+
+        _voorraad_volgt_de_winnaar(verliezer_id)
+        _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer)
+
+        # Handmatige boodschappen hebben geen UNIQUE: twee rijen voor dezelfde
+        # week zouden blijven staan en dubbel meetellen. Optellen dus.
+        _verhuis_unieke_rijen(
+            CustomShoppingIngredient, ('year', 'week_number', 'unit'),
+            verliezer_id, winnaar_id,
+            samenvoegen=lambda blijft, gaat: setattr(
+                blijft, 'amount', (blijft.amount or 0) + (gaat.amount or 0)))
+
+        _erf_velden(verliezer, winnaar)
+
+        # Het besluit 'deze twee zijn apart' is met deze klik achterhaald.
+        _wis_apart_tussen(verliezer, winnaar)
+
+        db.session.flush()
+        _leg_alias_vast(verliezer_canoniek, winnaar_id)
+        _leg_alias_vast(verliezer_naam, winnaar_id)
+
+        db.session.delete(verliezer)
+        db.session.commit()
+    except Exception as fout:                       # noqa: BLE001 — alles terugdraaien
+        db.session.rollback()
+        return {'status': 'error', 'message': f'samenvoegen mislukt: {fout}'}, 500
+
+    return {
+        'status': 'ok',
+        'winnaar_id': winnaar.id,
+        'winnaar': winnaar.display,
+        'verliezer': verliezer_naam,
+        'recepten_verplaatst': verplaatst,
+        'omgerekend': omgerekend,
+    }, 200
+
+
+def _conversietabel(ing):
+    """De eigen omrekeningen van een ingredient: from_unit -> (to_unit, factor).
+
+    Sleutel op from_unit zoals de boodschappenlijst hem opzoekt, dus zonder
+    _norm_unit eroverheen — precies wat _build_shopping_dict doet.
+
+    Bewust een eigen query en niet ing.unit_conversions: die backref laadt de
+    collectie op het ingredient, en dan draait SQLAlchemy bij het verwijderen
+    van de verliezer de verhuizing van die rijen weer terug.
+    """
+    return {c.from_unit: (c.to_unit, c.factor) for c
+            in IngredientUnitConversion.query.filter_by(ingredient_id=ing.id).all()}
+
+
+def _eigen_weten(conversies, eenheid):
+    """Wat dit ingredient zélf over deze eenheid weet, of None.
+
+    Dit is de enige vraag waar het samenvoegen op hoeft te letten. Een rij in
+    ingredient_unit_conversion legt meestal iets over het PRODUCT vast: bij
+    Knoflook is 1 stuks twaalf tenen, bij Sjalot is 1 stuks veertig gram. Dat
+    weet je alleen van dát product, dus verandert het als een regel naar een
+    ander ingredient verhuist — en alleen dán verandert een regel van betekenis.
+
+    Dezelfde tabel wordt ook gebruikt om een gewone maat vast te leggen: kilo's
+    naar grammen maal duizend, deciliters naar milliliters maal honderd.
+    scripts/normalize_units.py --interactive zet zulke rijen met één enter neer,
+    want hij vult de factor voor uit de algemene maattabel. Zo'n rij is geen
+    weten van het ingredient: hij staat al in die maattabel, geldt bij elk
+    ingredient even hard en houdt de hoeveelheid gelijk. Daarom telt hij hier
+    niet mee — anders zou een samenvoeging 1,2 kg voor 1,2 g aanzien.
+
+    Opgezocht zoals de boodschappenlijst hem opzoekt: de genormaliseerde eenheid
+    tegen de rauwe from_unit, precies wat _build_shopping_dict doet.
+    """
+    van = _norm_unit(eenheid)
+    naar, factor = conversies.get(van, (None, None))
+    if naar is None or _UNIT_CONVERSIONS.get((van, _norm_unit(naar))) == factor:
+        return None
+    return _norm_unit(naar), factor
+
+
+def _lees(eenheid, hoeveelheid, conversies, voorkeur):
+    """Wat een regel betekent bij een ingredient met deze tabel en voorkeur.
+
+    Dit is dezelfde functie als de boodschappenlijst gebruikt, met een verzonnen
+    sleutel ervoor: eerst de eigen conversietabel, dan de algemene omrekentabel,
+    anders blijft de eenheid staan. Zo kan het antwoord hier niet uit de pas
+    gaan lopen met wat er straks op de lijst komt.
+
+    Zonder `voorkeur` blijft die tweede stap uit en lees je alleen wat dít
+    ingredient over de eenheid weet — wat _bevries_eenheden nodig heeft.
+    """
+    return _convert_unit_for_agg(
+        _LEESSLEUTEL, _norm_unit(eenheid), hoeveelheid,
+        {(_LEESSLEUTEL, van): naar for van, naar in conversies.items()},
+        {_LEESSLEUTEL: voorkeur} if voorkeur else {})
+
+
+def _regels_met_eenheid(ingredient_id):
+    """Alles wat een getal én een eenheid draagt: receptregels en handmatige regels."""
+    return (RecipeIngredient.query.filter_by(ingredient_id=ingredient_id).all()
+            + CustomShoppingIngredient.query.filter_by(ingredient_id=ingredient_id).all())
+
+
+def _bevries_eenheden(verliezer, winnaar):
+    """Zet de betekenis van de regels vast vóórdat de conversietabellen samengaan.
+
+    Een receptregel draagt alleen een getal en een eenheid; wát die eenheid
+    betekent staat bij het ingredient. 'stuks' bij Knoflook is een bolletje van
+    twaalf tenen, 'stuks' bij Knoflookteen is één teen. Verhuist zo'n regel
+    alleen op ingredient_id, dan valt hij ineens onder de conversie van de
+    winnaar en wordt 2 opeens 24 — en andersom net zo goed, want de conversie
+    van de verliezer verhuist mee en gaat dan over de regels van de winnaar.
+
+    Daarom eerst dit, aan beide kanten, en met één vraag per regel: weet het
+    samengevoegde ingredient iets anders over de eenheid van deze regel dan het
+    ingredient waar de regel nu bij hoort? Dat is precies wat _eigen_weten
+    beantwoordt. Luidt het antwoord ja, dan schrijven we de oude betekenis in de
+    regel zelf, zodat de regel na de samenvoeging nog hetzelfde zegt.
+
+    Meer hoeft er niet vergeleken te worden. Alles wat níét in
+    ingredient_unit_conversion staat — de algemene maattabel, de
+    voorkeurseenheid die hem aanroept — geldt aan beide kanten even hard en
+    verandert dus nooit door een samenvoeging. Kijk je er tóch op, dan zie je
+    verschillen die er niet zijn en wordt 1,2 kg omgezet in 1,2 g. Gemeten op
+    een kopie van data/weekmenu.db, kaart meervoud-198-237 (kg naast g) en
+    kaart ah-21-336 (dl naast el).
+
+    Rekent het samengevoegde ingredient die oude betekenis zelf óók nog om, dan
+    zoekt _blijft_staan een schrijfwijze die hij wél met rust laat.
+
+    Geeft terug wat er omgeschreven is, als leesbare regels voor de melding.
+    """
+    v_conv, w_conv = _conversietabel(verliezer), _conversietabel(winnaar)
+
+    # Wat het samengevoegde ingredient straks weet: de tabel van de winnaar,
+    # aangevuld met die van de verliezer waar de winnaar niets had (dat doet
+    # _verhuis_unieke_rijen), en de voorkeurseenheid van de winnaar of anders
+    # die van de verliezer (dat doet _erf_velden).
+    samen_conv = dict(v_conv)
+    samen_conv.update(w_conv)
+    samen_voorkeur = winnaar.preferred_unit or verliezer.preferred_unit
+
+    omgerekend = []
+    for ing, eigen_conv in ((verliezer, v_conv), (winnaar, w_conv)):
+        for regel in _regels_met_eenheid(ing.id):
+            if _eigen_weten(eigen_conv, regel.unit) == _eigen_weten(samen_conv, regel.unit):
+                continue
+
+            hoeveelheid = regel.amount or 0
+            oud = _lees(regel.unit, hoeveelheid, eigen_conv, None)
+            vorm = _blijft_staan(oud, ing.preferred_unit, samen_conv, samen_voorkeur)
+            if vorm is None or vorm == (regel.unit, regel.amount):
+                continue
+
+            eenheid, aantal = vorm
+            omgerekend.append(f'{ing.display}: {hoeveelheid:g} {regel.unit} '
+                              f'→ {aantal:g} {eenheid}')
+            regel.unit, regel.amount = eenheid, aantal
+    return omgerekend
+
+
+def _blijft_staan(oud, eigen_voorkeur, samen_conv, samen_voorkeur):
+    """De oude betekenis opschrijven zodat het samengevoegde ingredient hem laat staan.
+
+    `oud` is wat de regel bij zijn eigen ingredient betekende: bijvoorbeeld
+    2 stuks bij Knoflookteen, waar niets omgerekend werd. Rekent het
+    samengevoegde ingredient diezelfde eenheid wél om (1 stuks = 12 teen), dan
+    is 'oud' letterlijk overschrijven niet genoeg — de lijst maakt er alsnog
+    24 teen van. We zoeken dus een eenheid die hij met rust laat, en zetten het
+    aantal daar één op één in over.
+
+    We proberen daarvoor drie schrijfwijzen, en de eerste die het samengevoegde
+    ingredient met rust laat wint:
+
+      1. de eenheid van 'oud' zelf. Laat hij die staan, dan is er niets aan de
+         hand en houdt de regel gewoon zijn eigen woord.
+      2. de eenheid waarin het ingredient van de regel zelf telt
+         (preferred_unit). Dat is de meest letterlijke lezing van 'oud': 'stuks'
+         bij Knoflookteen wordt 'teen', want een knoflookteen is er één.
+      3. de eenheid waarin het samengevoegde ingredient telt (preferred_unit van
+         de winnaar, anders van de verliezer). Weet ook die van niets, dan wijst
+         de botsende omrekening zelf de eenheid aan waarin hij telt — bij
+         Knoflook is dat 'teen'.
+
+    Punt 3 dekt de regels zonder preferred_unit. Die vielen eerder terug op de
+    oorspronkelijke eenheid; dan veranderde er niets en kwam het maal-twaalf
+    onverkort terug. Twee van de 23 kaarten hebben nu al een kant zonder
+    preferred_unit, en de ronde die per ingredient gaat omrekenen zet er
+    conversies op.
+
+    Eén op één omzetten is een keuze, geen berekening: was die eenheid bij de
+    verliezer stiekem tóch een bundel — de app wist er alleen niets van — dan
+    is één op één te weinig. Daarom waarschuwt de kandidatenlijst hierover vóór
+    de klik; zie _eenheidsbotsingen.
+
+    Wordt ook die teleenheid zelf omgerekend (preferred_unit 'stuks' naast een
+    omrekening ván 'stuks'), dan is er geen eenheid meer die dit ingredient met
+    rust laat, en is zijn omrekening het enige wat er over die eenheid bekend
+    is. Dan geeft deze functie None terug: de regel blijft staan zoals hij
+    stond en krijgt dezelfde behandeling als de regels van de winnaar zelf.
+    Eén op één omzetten zou daar juist schade doen — 1 stuks sjalot wordt dan
+    1 g in plaats van 40.
+    """
+    eenheid, aantal = oud
+
+    # De eenheid waarin het samengevoegde ingredient telt. Weet hij dat niet,
+    # dan wijst de botsende omrekening hem aan: dat is de eenheid waar hij naar
+    # rekent. Die halen we uit de lezing zelf en niet uit een tweede greep in
+    # samen_conv, want die tabel is op de rauwe from_unit gesleuteld en een
+    # handmatige greep loopt daar vroeg of laat op stuk.
+    telt_in = samen_voorkeur or _lees(eenheid, aantal, samen_conv, None)[0]
+
+    for kandidaat in (eenheid, eigen_voorkeur, telt_in):
+        if not kandidaat:
+            continue
+        genormaliseerd = _norm_unit(kandidaat)
+        if _lees(kandidaat, aantal, samen_conv, None) == (genormaliseerd, aantal):
+            return genormaliseerd, aantal
+    return None
+
+
+def _weken_op_de_lijst(ingredient_id):
+    """De (jaar, week)-paren waarin dit ingredient op de boodschappenlijst stond."""
+    weken = set()
+    recepten = {ri.recipe_id for ri
+                in RecipeIngredient.query.filter_by(ingredient_id=ingredient_id).all()}
+    if recepten:
+        for item in MenuItem.query.filter(MenuItem.recipe_id.in_(recepten)).all():
+            if not item.skip_shopping_list:
+                weken.add((item.year, item.week_number))
+        for item in QuickAddItem.query.filter(QuickAddItem.recipe_id.in_(recepten)).all():
+            weken.add((item.year, item.week_number))
+    for ci in CustomShoppingIngredient.query.filter_by(ingredient_id=ingredient_id).all():
+        weken.add((ci.year, ci.week_number))
+    return weken
+
+
+def _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer):
+    """Weekbesluiten gaan over een regel op de lijst, niet over een ingredient.
+
+    De regel van de verliezer verdwijnt met deze samenvoeging, dus verdwijnen
+    zijn besluiten mee. 'Bosui deze week niet nodig' is geen 'Lente-Ui deze week
+    niet nodig': verhuizen maakt een besluit dat je nooit genomen hebt, en doet
+    dat onzichtbaar — de regel valt gewoon van de lijst en je merkt het pas in
+    de winkel. Weggooien laat hooguit iets terugkomen dat je al weggeklikt had;
+    dát zie je, en wegklikken kost één tik.
+
+    De besluiten van de winnaar blijven staan. Die regel bestaat nog, onder
+    dezelfde naam, en 'deze week even niet' of 'ik koop er drie' gaat over het
+    product — precies wat je met het samenvoegen bevestigt.
+
+    Afvinken ligt nét anders. Een vinkje is geen besluit over de lijst maar een
+    feit: dit ligt al in de kar. Dat feit ging over de kleinere regel van vóór
+    de samenvoeging. Stond de verliezer die week nog open op de lijst, dan dekt
+    het vinkje van de winnaar de nieuwe, grotere regel niet meer, en gaat het er
+    ook af — anders verdwijnt het deel dat je nog moet halen uit het zicht.
+    Waren ze allebei afgevinkt, dan klopt het vinkje nog en blijft het staan.
+    """
+    for model in _WEEKBESLUITEN:
+        for rij in model.query.filter_by(ingredient_id=verliezer_id).all():
+            db.session.delete(rij)
+
+    afgevinkt = set()
+    for rij in ShoppingCheck.query.filter_by(ingredient_id=verliezer_id).all():
+        afgevinkt.add((rij.year, rij.week_number))
+        db.session.delete(rij)
+
+    for rij in ShoppingCheck.query.filter_by(ingredient_id=winnaar_id).all():
+        week = (rij.year, rij.week_number)
+        if week in weken_verliezer and week not in afgevinkt:
+            db.session.delete(rij)
+
+
+def _voorraad_volgt_de_winnaar(verliezer_id):
+    """'Altijd in huis' ging over één schrijfwijze, niet over allebei.
+
+    Dit is dezelfde familie als de weekbesluiten hierboven. 'Ik heb
+    rodewijnazijn in huis' zei je terwijl 'rode wijnazijn' een aparte rij was;
+    dat je die twee nu hetzelfde product noemt, maakt de fles in je kast niet
+    groter. Verhuisde de voorraadrij mee naar een winnaar die er zelf geen had,
+    dan gold het samengevoegde ingredient ineens overal als 'heb ik al' en
+    verdween het uit ELKE boodschappenlijst — zonder iets op het scherm.
+
+    Er waren twee redelijke uitwegen, en ze komen op hetzelfde neer: de rij van
+    de verliezer weggooien (zoals bij de weekbesluiten), of hem alleen laten
+    meeverhuizen als de winnaar er zelf ook een had — want in dat geval botst
+    hij en gaat hij toch weg. In beide gevallen staat het samengevoegde
+    ingredient in de kast precies dan als de winnaar erin stond.
+
+    Die kant kiezen we bewust, want de twee fouten wegen niet even zwaar. Blijft
+    de kast te leeg, dan komt er iets op de lijst dat je al had: dat zie je
+    staan, en één tik zet het terug in de kast. Blijft de kast te vol, dan
+    verdwijnt er iets van elke lijst en merk je het pas in de winkel. Daarom
+    waarschuwt de kandidatenlijst hier ook vooraf; zie _voorraadverschil.
+    """
+    for rij in PantryIngredient.query.filter_by(ingredient_id=verliezer_id).all():
+        db.session.delete(rij)
+
+
+def _verhuis_receptregels(verliezer_id, winnaar_id):
+    """Receptregels naar de winnaar; binnen één recept smelten gelijke regels samen.
+
+    'knoflook 2 teen' en 'knoflookteen 1 teen' in hetzelfde recept horen na de
+    samenvoeging één regel van 3 tenen te zijn. Verschilt de bereiding, dan
+    blijven het twee regels: 'geperst' en 'fijngesneden' optellen tot
+    'geperst' zou informatie weggooien die de kok nodig heeft.
+    """
+    def sleutel(ri):
+        return (ri.recipe_id, _norm_unit(ri.unit), (ri.preparation or '').strip().lower())
+
+    bezet = {}
+    for ri in RecipeIngredient.query.filter_by(ingredient_id=winnaar_id).all():
+        bezet.setdefault(sleutel(ri), ri)
+
+    verplaatst = 0
+    for ri in RecipeIngredient.query.filter_by(ingredient_id=verliezer_id).all():
+        tweeling = bezet.get(sleutel(ri))
+        if tweeling is not None:
+            tweeling.amount = (tweeling.amount or 0) + (ri.amount or 0)
+            db.session.delete(ri)
+        else:
+            ri.ingredient_id = winnaar_id
+            bezet[sleutel(ri)] = ri
+        verplaatst += 1
+    return verplaatst
+
+
+def _verhuis_unieke_rijen(model, sleutelvelden, verliezer_id, winnaar_id, samenvoegen=None):
+    """Rijen van de verliezer overzetten, botsingen in het voordeel van de winnaar."""
+    bezet = {}
+    for rij in model.query.filter_by(ingredient_id=winnaar_id).all():
+        bezet.setdefault(tuple(getattr(rij, veld) for veld in sleutelvelden), rij)
+
+    for rij in model.query.filter_by(ingredient_id=verliezer_id).all():
+        sleutel = tuple(getattr(rij, veld) for veld in sleutelvelden)
+        botsing = bezet.get(sleutel)
+        if botsing is None:
+            rij.ingredient_id = winnaar_id
+            bezet[sleutel] = rij
+        else:
+            if samenvoegen:
+                samenvoegen(botsing, rij)
+            db.session.delete(rij)
+
+
+def _erf_velden(verliezer, winnaar):
+    """Wat de winnaar mist en de verliezer wel heeft, gaat mee."""
+    if not winnaar.ah_product_id and verliezer.ah_product_id:
+        for veld in _AH_VELDEN:
+            setattr(winnaar, veld, getattr(verliezer, veld))
+
+    for veld in ('preferred_unit', 'bron'):
+        if not getattr(winnaar, veld) and getattr(verliezer, veld):
+            setattr(winnaar, veld, getattr(verliezer, veld))
+
+
+def _wis_apart_tussen(verliezer, winnaar):
+    """Een eerder 'toch apart' tussen deze twee vervalt met de samenvoeging."""
+    sleutels = {variantsleutel(verliezer.name), variantsleutel(verliezer.display),
+                variantsleutel(winnaar.name), variantsleutel(winnaar.display)}
+    for rij in VariantApart.query.filter(
+            VariantApart.ingredient_id.in_([verliezer.id, winnaar.id])).all():
+        if rij.sleutel in sleutels:
+            db.session.delete(rij)
+
+
+def _leg_alias_vast(tekst, ingredient_id):
+    """Zorg dat deze spelling voortaan bij dit ingredient uitkomt."""
+    sleutel = _normalize_ingredient((tekst or '').lower().strip())
+    if not sleutel:
+        return
+    bestaand = IngredientAlias.query.filter_by(alias=sleutel).first()
+    if bestaand:
+        bestaand.ingredient_id = ingredient_id
+    else:
+        db.session.add(IngredientAlias(alias=sleutel, ingredient_id=ingredient_id))
+
+
+# ── 'zelfde product' en 'toch apart' ─────────────────────────────────────
+
+def koppel_alias(naam, ingredient_id):
+    """'Zelfde product': deze spelling hoort bij dat bestaande ingredient.
+
+    Bestaat de spelling al als eigen ingredientrij, dan is een alias niet
+    genoeg — die rij zou blijven staan en op de lijst blijven verschijnen.
+    Dan is dit een volwaardige samenvoeging, en de klik is de bevestiging.
+    """
+    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    if not ing:
+        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+
+    canoniek = _normalize_ingredient((naam or '').lower().strip())
+    if not canoniek:
+        return {'status': 'error', 'message': 'naam verplicht'}, 400
+
+    dubbel = Ingredient.query.filter_by(name=canoniek).first()
+    if dubbel and dubbel.id != ing.id:
+        payload, code = voeg_samen(dubbel.id, ing.id)
+        if code == 200:
+            payload['samengevoegd'] = True
+        return payload, code
+
+    try:
+        _leg_alias_vast(canoniek, ing.id)
+        db.session.commit()
+    except Exception as fout:                       # noqa: BLE001
+        db.session.rollback()
+        return {'status': 'error', 'message': f'vastleggen mislukt: {fout}'}, 500
+
+    return {'status': 'ok', 'samengevoegd': False,
+            'ingredient_id': ing.id, 'naam': ing.display}, 200
+
+
+def markeer_apart(naam, ingredient_id):
+    """'Toch apart': vraag deze spelling nooit meer bij dit ingredient na."""
+    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    if not ing:
+        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+
+    sleutel = variantsleutel(naam)
+    if not sleutel:
+        return {'status': 'error', 'message': 'naam verplicht'}, 400
+
+    bestaand = VariantApart.query.filter_by(sleutel=sleutel, ingredient_id=ing.id).first()
+    if not bestaand:
+        db.session.add(VariantApart(sleutel=sleutel, ingredient_id=ing.id))
+        db.session.commit()
+    return {'status': 'ok'}, 200
+
+
+def markeer_paar_apart(a_id, b_id):
+    """Twee bestaande ingredienten uit elkaar houden — beide kanten op.
+
+    Beide richtingen, want de kandidatenlijst kan het paar de volgende keer
+    andersom voorstellen (de winnaar hangt af van wie de meeste recepten heeft).
+    """
+    a = Ingredient.query.get(a_id) if a_id else None
+    b = Ingredient.query.get(b_id) if b_id else None
+    if not a or not b:
+        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+    if a.id == b.id:
+        return {'status': 'error', 'message': 'twee verschillende ingredienten nodig'}, 400
+
+    for bron, doel in ((a, b), (b, a)):
+        sleutel = variantsleutel(bron.name)
+        if not sleutel:
+            continue
+        if not VariantApart.query.filter_by(sleutel=sleutel, ingredient_id=doel.id).first():
+            db.session.add(VariantApart(sleutel=sleutel, ingredient_id=doel.id))
+    db.session.commit()
+    return {'status': 'ok'}, 200
+
+
+def apart_paren():
+    """Alle vastgelegde 'nee'-besluiten als set van (sleutel, ingredient_id)."""
+    return {(v.sleutel, v.ingredient_id) for v in VariantApart.query.all()}
+
+
+# ── kandidatenlijst ──────────────────────────────────────────────────────
+
+def samenvoeg_kandidaten():
+    """Paren die waarschijnlijk hetzelfde product zijn, met het bewijs erbij.
+
+    Drie signalen, van sterk naar zwak:
+      ah           allebei aan hetzelfde AH-product gekoppeld — dat heb jij
+                   zelf gekozen, dus dit is het sterkste signaal dat er is
+      schrijfwijze dezelfde naam op spaties en streepjes na
+      meervoud     de een is het meervoud van de ander
+
+    Bij een groep van drie ('bosui', 'lente-ui', 'lente-uitjes') komt het
+    ingredient met de meeste recepten vooraan te staan en worden de anderen
+    er los naast gezet: je bevestigt dan twee keer, en ziet bij elke stap wat
+    er gebeurt. Paren die je 'apart' hebt genoemd vallen weg.
+    """
+    ingredienten = Ingredient.query.all()
+    if len(ingredienten) < 2:
+        return []
+
+    per_id = {i.id: i for i in ingredienten}
+    recepten = defaultdict(int)
+    for rij in db.session.query(
+            RecipeIngredient.ingredient_id, db.func.count(RecipeIngredient.id)
+    ).group_by(RecipeIngredient.ingredient_id).all():
+        recepten[rij[0]] = rij[1]
+
+    voorraad = {p.ingredient_id for p in PantryIngredient.query.all()}
+    conversies = defaultdict(list)
+    tabellen = defaultdict(dict)
+    for conv in IngredientUnitConversion.query.all():
+        conversies[conv.ingredient_id].append(conv)
+        tabellen[conv.ingredient_id][conv.from_unit] = (conv.to_unit, conv.factor)
+
+    # Welke eenheden er per ingredient echt in regels staan — anders zou de
+    # waarschuwing over een botsing gaan die niemand ooit tegenkomt.
+    gebruikt = defaultdict(set)
+    for model in (RecipeIngredient, CustomShoppingIngredient):
+        for ing_id, eenheid in db.session.query(
+                model.ingredient_id, model.unit).distinct().all():
+            gebruikt[ing_id].add(_norm_unit(eenheid))
+
+    # In één keer ophalen: dit scherm staat naast 400 ingredienten, een telling
+    # per kandidaat zou tientallen losse queries kosten.
+    aliassen = defaultdict(int)
+    for rij in db.session.query(
+            IngredientAlias.ingredient_id, db.func.count(IngredientAlias.id)
+    ).group_by(IngredientAlias.ingredient_id).all():
+        aliassen[rij[0]] = rij[1]
+
+    apart = apart_paren()
+    gezien = set()
+    paren = []
+
+    for reden, bewijs, groep in _groepen(ingredienten):
+        # De koploper wordt het voorstel: die heeft de meeste receptregels, dus
+        # daar hoeft het minste te verhuizen.
+        geordend = sorted(groep, key=lambda i: (-recepten[i.id], i.id))
+        kop = geordend[0]
+        for ander in geordend[1:]:
+            stel = (min(kop.id, ander.id), max(kop.id, ander.id))
+            if stel in gezien:
+                continue
+            if _is_apart(kop, ander, apart):
+                continue
+            gezien.add(stel)
+            paren.append({
+                'sleutel': f'{reden}-{stel[0]}-{stel[1]}',
+                'reden': reden,
+                'bewijs': bewijs,
+                'eenheidsbotsing': _eenheidsbotsingen(kop, ander, tabellen, gebruikt),
+                'voorraadverschil': _voorraadverschil(kop, ander, voorraad),
+                'ingredienten': [
+                    _kandidaat(per_id[i.id], recepten, voorraad, conversies, aliassen)
+                    for i in (kop, ander)
+                ],
+            })
+
+    volgorde = {'ah': 0, 'schrijfwijze': 1, 'meervoud': 2}
+    paren.sort(key=lambda p: (volgorde.get(p['reden'], 9),
+                              -sum(i['recepten'] for i in p['ingredienten']),
+                              p['ingredienten'][0]['naam']))
+    return paren
+
+
+def _eenheidsbotsingen(a, b, tabellen, gebruikt):
+    """Eenheden die deze twee ingredienten verschillend lezen, in gewone taal.
+
+    Zonder deze regel op het scherm is het samenvoegen een sprong in het duister:
+    'stuks' is bij Knoflook een bolletje van twaalf tenen en bij Knoflookteen één
+    teen, en pas op de boodschappenlijst zou blijken dat er iets geks gebeurde.
+    _bevries_eenheden houdt elke regel op zijn oude betekenis, maar bij een
+    eenheid die de app niet kende gokt hij één op één (zie daar). Zo'n gok hoor
+    je te zien vóór je klikt, niet erna.
+
+    Waarschuwen doen we op precies dezelfde vraag als waar het samenvoegen op
+    beslist — _eigen_weten — anders gaat het scherm iets anders melden dan er
+    daarna gebeurt. Een rij die alleen de meetlat herhaalt (kg naar g maal
+    duizend) verandert dus niets en haalt dus ook het scherm niet.
+
+    Alleen eenheden die ook echt in regels voorkomen: een botsing die nergens
+    staat verandert niets, en een waarschuwing die nooit ergens over gaat leert
+    je hem wegkijken.
+
+    `tabellen` en `gebruikt` komen kant en klaar van de aanroeper, want dit
+    draait per kandidatenpaar en het scherm staat naast 400 ingredienten.
+    """
+    a_conv, b_conv = tabellen.get(a.id, {}), tabellen.get(b.id, {})
+    in_gebruik = gebruikt.get(a.id, set()) | gebruikt.get(b.id, set())
+
+    botsingen = []
+    for eenheid in sorted(set(a_conv) | set(b_conv)):
+        if _norm_unit(eenheid) not in in_gebruik:
+            continue
+        if _eigen_weten(a_conv, eenheid) == _eigen_weten(b_conv, eenheid):
+            continue
+        a_lezing = _lees(eenheid, 1.0, a_conv, a.preferred_unit)
+        b_lezing = _lees(eenheid, 1.0, b_conv, b.preferred_unit)
+        botsingen.append(
+            f"‘{eenheid}’ betekent niet hetzelfde: bij {a.display} is 1 {eenheid} "
+            f"{_toon_lezing(eenheid, a_lezing)}, bij {b.display} is 1 {eenheid} "
+            f"{_toon_lezing(eenheid, b_lezing)}")
+    return botsingen
+
+
+def _voorraadverschil(a, b, voorraad):
+    """De ene staat in de voorraadkast en de andere niet — dat hoor je te zien.
+
+    Het is dezelfde soort mededeling als de botsende eenheid: iets wat na de
+    klik anders is dan je zou raden, en wat je erna alleen in de winkel merkt.
+    'Ik heb rodewijnazijn in huis' zei je over die ene schrijfwijze; welke van
+    de twee je nu houdt, bepaalt of het samengevoegde ingredient nog van de
+    lijst geweerd wordt. Zie _voorraad_volgt_de_winnaar voor de keuze zelf.
+
+    Staan ze er allebei in of allebei niet, dan is er niets te melden.
+    """
+    kast = [i for i in (a, b) if i.id in voorraad]
+    buiten = [i for i in (a, b) if i.id not in voorraad]
+    if len(kast) != 1 or len(buiten) != 1:
+        return ''
+    return (f'‘{kast[0].display}’ staat in de voorraadkast en '
+            f'‘{buiten[0].display}’ niet. De voorraadrij blijft bij de naam die '
+            f'je houdt: houd je ‘{buiten[0].display}’, dan staat het '
+            f'samengevoegde ingrediënt niet meer in de kast en komt het weer '
+            f'op de boodschappenlijst.')
+
+
+def _toon_lezing(eenheid, lezing):
+    """'12 teen', of 'gewoon 1 stuks' als het ingredient de eenheid laat staan."""
+    naar, aantal = lezing
+    if naar == _norm_unit(eenheid) and aantal == 1:
+        return f'gewoon 1 {naar}'
+    return f'{aantal:g} {naar}'
+
+
+def _groepen(ingredienten):
+    """(reden, bewijs, [ingredienten]) per signaal."""
+    per_ah = defaultdict(list)
+    per_sleutel = defaultdict(list)
+    per_naam = {}
+    for ing in ingredienten:
+        if ing.ah_product_id:
+            per_ah[ing.ah_product_id].append(ing)
+        per_sleutel[variantsleutel(ing.name)].append(ing)
+        per_naam.setdefault(ing.name, ing)
+
+    for product_id, groep in per_ah.items():
+        if len(groep) > 1:
+            naam = next((i.ah_product_name for i in groep if i.ah_product_name), None)
+            label = f'{naam} (#{product_id})' if naam else f'#{product_id}'
+            yield 'ah', f'Allebei gekoppeld aan hetzelfde AH-product: {label}', groep
+
+    for sleutel, groep in per_sleutel.items():
+        if sleutel and len(groep) > 1:
+            yield 'schrijfwijze', 'Zelfde naam op spaties en streepjes na', groep
+
+    for naam, ing in per_naam.items():
+        for staart in _MEERVOUD:
+            if not naam.endswith(staart):
+                continue
+            enkelvoud = per_naam.get(naam[:-len(staart)])
+            if enkelvoud is not None and enkelvoud.id != ing.id:
+                yield ('meervoud',
+                       f"'{ing.display}' is '{enkelvoud.display}' met een "
+                       f"Nederlandse uitgang erachter",
+                       [enkelvoud, ing])
+                break
+
+
+def _is_apart(a, b, apart):
+    """Heeft de gebruiker dit paar al uit elkaar gehouden?"""
+    return ((variantsleutel(a.name), b.id) in apart
+            or (variantsleutel(b.name), a.id) in apart)
+
+
+def _kandidaat(ing, recepten, voorraad, conversies, aliassen):
+    """Alles wat je moet weten om te kiezen, zonder in de database te kijken."""
+    return {
+        'id': ing.id,
+        'naam': ing.display,
+        'canoniek': ing.name,
+        'categorie': ing.category,
+        'preferred_unit': ing.preferred_unit or '',
+        'recepten': recepten.get(ing.id, 0),
+        'in_voorraad': ing.id in voorraad,
+        'conversies': [f'{c.from_unit} → {c.to_unit} (×{c.factor:g})'
+                       for c in conversies.get(ing.id, [])],
+        'ah_product_id': ing.ah_product_id,
+        'ah_product_name': ing.ah_product_name,
+        'verpakking': (f'{ing.ah_pkg_qty:g} {ing.ah_pkg_unit}'
+                       if ing.ah_pkg_qty and ing.ah_pkg_unit else ''),
+        'aliassen': aliassen.get(ing.id, 0),
+    }

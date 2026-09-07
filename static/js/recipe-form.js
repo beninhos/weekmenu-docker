@@ -157,14 +157,41 @@ function showVariantHint(row, twin) {
         <button type="button" class="variant-accept text-xs px-2.5 py-1 rounded border border-[#378ADD] text-[#0C447C] hover:bg-[#B5D4F4]">Zelfde product</button>
         <button type="button" class="variant-dismiss text-xs px-2 py-1 text-[#185FA5] hover:underline">Toch apart</button>`;
 
-  box.querySelector('.variant-accept').addEventListener('click', () => {
-    row.querySelector('input[name="ingredient[]"]').value = twin.name;
+  // Beide keuzes worden vastgelegd, anders staat dezelfde vraag er bij de
+  // volgende import gewoon weer: 'Zelfde product' als alias op het bestaande
+  // ingredient, 'Toch apart' als besluit dat deze twee los blijven.
+  box.querySelector('.variant-accept').addEventListener('click', async () => {
+    const veld = row.querySelector('input[name="ingredient[]"]');
+    const getypt = (veld && veld.value) || '';
+    await onthoudVariant('/api/ingredienten/alias', getypt, twin.id);
+    if (veld) veld.value = twin.name;
     row.querySelector('input[name="ingredient_id[]"]').value = twin.id;
     const cb = row.querySelector('.pantry-cb');
     if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
     clearVariantHint(row);
   });
-  box.querySelector('.variant-dismiss').addEventListener('click', () => clearVariantHint(row));
+  box.querySelector('.variant-dismiss').addEventListener('click', async () => {
+    const veld = row.querySelector('input[name="ingredient[]"]');
+    await onthoudVariant('/api/ingredienten/apart', (veld && veld.value) || '', twin.id);
+    row.dataset.hint = '';
+    clearVariantHint(row);
+  });
+}
+
+/** Leg de keuze vast op de server. Mislukt dat, dan gaat het formulier gewoon
+ *  door: het recept opslaan is belangrijker dan het onthouden. */
+async function onthoudVariant(url, naam, ingredientId) {
+  if (!naam || !ingredientId) return null;
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({naam, ingredient_id: Number(ingredientId)}),
+    });
+    return await resp.json();
+  } catch (e) {
+    return null;
+  }
 }
 
 /** Haal de variantwaarschuwing weg, bijvoorbeeld als de rij een ander

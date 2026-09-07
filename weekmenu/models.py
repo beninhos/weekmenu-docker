@@ -81,6 +81,26 @@ class IngredientAlias(db.Model):
     ingredient = db.relationship('Ingredient', backref='aliases')
 
 
+class VariantApart(db.Model):
+    """Besluit: deze schrijfwijze is NIET hetzelfde product als dat ingredient.
+
+    Zonder zo'n besluit vraagt de import elke keer opnieuw of 'rode wijnazijn'
+    soms de 'rodewijnazijn' uit je voorraad is. Een alias naar jezelf zet die
+    vraag niet uit — de vraag komt van de gelijkende voorraadnaam, niet van de
+    eigen naam. Vandaar een vlag die 'nee' vasthoudt.
+
+    `sleutel` is de variantsleutel van de naam (spaties en leestekens weg),
+    zodat het besluit ook geldt voor een spelling die nog geen eigen rij heeft.
+    """
+    __tablename__ = 'variant_apart'
+    __table_args__ = (
+        db.UniqueConstraint('sleutel', 'ingredient_id', name='uq_apart_sleutel_ingredient'),
+    )
+    id            = db.Column(db.Integer, primary_key=True)
+    sleutel       = db.Column(db.String(100), nullable=False)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+
+
 class RecipeIngredient(db.Model):
     __tablename__ = 'recipe_ingredient'
     id = db.Column(db.Integer, primary_key=True)

@@ -23,6 +23,15 @@
         <a href="{{ url_for('settings.settings_page') }}" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C]">← Instellingen</a>
     </div>
 
+    <!-- Dubbele koppelingen: twee ingrediënten aan hetzelfde product -->
+    {% if dubbel_aantal %}
+    <div class="bg-[#FAEEDA] rounded-lg border border-[#E8D3B0] px-4 py-3 text-sm text-[#854F0B]">
+        {{ dubbel_aantal }} keer lijken twee ingrediënten hetzelfde product te zijn —
+        dat geeft twee regels op de boodschappenlijst.
+        <a href="{{ url_for('pantry.review') }}#dubbel" class="underline font-medium">Nakijken</a>
+    </div>
+    {% endif %}
+
     <!-- Zoekfilter -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] px-4 py-3">
         <input type="text" id="filterInput" placeholder="Filter ingrediënten..."

@@ -319,5 +319,12 @@ def ah_pkg_config(ingredient_id):
 
 @bp.route('/ah-producten')
 def ah_products():
+    """Koppelscherm, met een verwijzing naar de dubbelen die hier ontstaan.
+
+    Twee ingrediënten aan hetzelfde AH-product koppelen is het sterkste
+    signaal dat het één product is; dat zie je hier, maar je lost het op
+    /twijfelgevallen op. Alleen een telling dus, geen tweede scherm."""
+    from weekmenu.services.ingredienten import samenvoeg_kandidaten
     ingredients = Ingredient.query.order_by(Ingredient.name).all()
-    return render_template('ah_products.html', ingredients=ingredients)
+    return render_template('ah_products.html', ingredients=ingredients,
+                           dubbel_aantal=len(samenvoeg_kandidaten()))
