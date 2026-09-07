@@ -45,16 +45,23 @@
                 <span class="text-xs text-[#6B6B6B]">{{ paar.bewijs }}</span>
             </div>
 
-            {% if paar.eenheidsbotsing %}
+            {% if paar.eenheidsbotsing or paar.voorraadverschil %}
             <div class="mb-2 rounded border border-[#E8C88A] bg-[#FDF6E7] px-2.5 py-2">
                 {% for regel in paar.eenheidsbotsing %}
                 <p class="text-xs text-[#854F0B]">⚠ {{ regel }}</p>
                 {% endfor %}
+                {% if paar.eenheidsbotsing %}
                 <p class="text-[11px] text-[#8A6A2F] mt-1">
-                    Die regels worden bij het samenvoegen omgerekend naar wat ze bij hun
-                    eigen ingrediënt betekenden. Kende de app de eenheid daar niet, dan
-                    telt hij hem één op één — kijk dus even of dat klopt.
+                    Die regels worden bij het samenvoegen vastgezet op wat ze bij hun eigen
+                    ingrediënt betekenden: één op één in de eenheid waarin het samengevoegde
+                    ingrediënt telt. Rekent dat ingrediënt de botsende eenheid zelf al om,
+                    dan blijft de regel staan en telt hij voortaan zoals bij de naam die je
+                    houdt — kijk dus even of dat klopt.
                 </p>
+                {% endif %}
+                {% if paar.voorraadverschil %}
+                <p class="text-xs text-[#854F0B]{{ ' mt-2' if paar.eenheidsbotsing }}">⌂ {{ paar.voorraadverschil }}</p>
+                {% endif %}
             </div>
             {% endif %}
 

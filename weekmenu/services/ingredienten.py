@@ -23,7 +23,8 @@ werk in deze module naartoe:
     _bevries_eenheden, en _eenheidsbotsingen voor de waarschuwing vooraf.
   - er mag geen besluit ontstaan dat je nooit genomen hebt. Wat je over de
     regel van de verliezer besloot ging over die regel, niet over het geheel.
-    Zie _wis_weekbesluiten.
+    Zie _wis_weekbesluiten, en _voorraad_volgt_de_winnaar voor dezelfde
+    afweging bij de voorraadkast.
 """
 import re
 from collections import defaultdict
@@ -54,15 +55,17 @@ _AH_VELDEN = (
 # uniciteit geldt. v14 gooide de rij van de verliezer altijd weg; hier
 # verhuist hij als de winnaar op die sleutel nog niets heeft staan.
 #
-# Dit zijn de rijen die over het PRODUCT gaan: 'staat altijd in de kast',
-# 'een bos is zes stuks', 'deze spelling is iets anders'. Die blijven kloppen
-# als de twee schrijfwijzen één product worden.
+# Dit zijn de rijen die iets over het PRODUCT vastleggen: 'een bos is zes
+# stuks', 'deze spelling is iets anders'. Die blijven kloppen als de twee
+# schrijfwijzen één product worden.
+#
+# pantry_ingredient stond hier ook in en hoort er niet: zie
+# _voorraad_volgt_de_winnaar.
 #
 # ingredient_unit_conversion heeft in de database UNIQUE(ingredient_id,
 # from_unit) staan, en _convert_unit_for_agg zoekt ook alleen op from_unit.
 # Daarom is from_unit de sleutel en niet (from_unit, to_unit).
 _UNIEKE_TABELLEN = (
-    (PantryIngredient, ()),
     (IngredientUnitConversion, ('from_unit',)),
     (VariantApart, ('sleutel',)),
 )
@@ -132,6 +135,7 @@ def voeg_samen(verliezer_id, winnaar_id):
         for model, sleutelvelden in _UNIEKE_TABELLEN:
             _verhuis_unieke_rijen(model, sleutelvelden, verliezer_id, winnaar_id)
 
+        _voorraad_volgt_de_winnaar(verliezer_id)
         _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer)
 
         # Handmatige boodschappen hebben geen UNIQUE: twee rijen voor dezelfde
@@ -188,6 +192,9 @@ def _lees(eenheid, hoeveelheid, conversies, voorkeur):
     sleutel ervoor: eerst de eigen conversietabel, dan de algemene omrekentabel,
     anders blijft de eenheid staan. Zo kan het antwoord hier niet uit de pas
     gaan lopen met wat er straks op de lijst komt.
+
+    Zonder `voorkeur` blijft die tweede stap uit en lees je alleen wat dít
+    ingredient over de eenheid weet — wat _bevries_eenheden nodig heeft.
     """
     return _convert_unit_for_agg(
         _LEESSLEUTEL, _norm_unit(eenheid), hoeveelheid,
@@ -216,14 +223,17 @@ def _bevries_eenheden(verliezer, winnaar):
     Verschilt dat, dan schrijven we die oude betekenis in de regel zelf, zodat
     de regel na de samenvoeging nog hetzelfde zegt.
 
-    Rekent het samengevoegde ingredient de eenheid van die oude betekenis zelf
-    óók nog om, dan blijft er één eenheid over die hij met rust laat: de
-    eenheid waarin het ingredient zelf telde (preferred_unit), één op één.
-    Dat is een keuze: 'stuks' bij Knoflookteen wordt zo 'teen', want een
-    knoflookteen is er één. Was die eenheid bij de verliezer stiekem tóch een
-    bundel — de app wist er alleen niets van — dan is één op één te weinig.
-    Daarom waarschuwt de kandidatenlijst hierover vóór de klik; zie
-    _eenheidsbotsingen.
+    We lezen daarvoor alléén met de eigen omrekentabellen, zonder
+    voorkeurseenheid. Die tweede stap in _convert_unit_for_agg — kilo's naar
+    grammen, deciliters naar milliliters — is geen weten van dit ingredient
+    maar gewone maatkennis: hij staat in de algemene tabel, geldt aan beide
+    kanten en houdt de hoeveelheid gelijk. Zou de bevriezing daar wél op
+    kijken, dan zag ze een verschil dat er niet is en zette ze 1,2 kg om in
+    1,2 g. Gemeten op een kopie van data/weekmenu.db, kaart meervoud-198-237
+    (kg naast g) en kaart ah-21-336 (dl naast el).
+
+    Rekent het samengevoegde ingredient die oude betekenis zelf óók nog om, dan
+    zoekt _blijft_staan een schrijfwijze die hij wél met rust laat.
 
     Geeft terug wat er omgeschreven is, als leesbare regels voor de melding.
     """
@@ -241,20 +251,73 @@ def _bevries_eenheden(verliezer, winnaar):
     for ing, eigen_conv in ((verliezer, v_conv), (winnaar, w_conv)):
         for regel in _regels_met_eenheid(ing.id):
             hoeveelheid = regel.amount or 0
-            oud = _lees(regel.unit, hoeveelheid, eigen_conv, ing.preferred_unit)
-            if oud == _lees(regel.unit, hoeveelheid, samen_conv, samen_voorkeur):
+            oud = _lees(regel.unit, hoeveelheid, eigen_conv, None)
+            if oud == _lees(regel.unit, hoeveelheid, samen_conv, None):
                 continue
 
-            eenheid, aantal = oud
-            if _lees(eenheid, aantal, samen_conv, samen_voorkeur) != (eenheid, aantal):
-                eenheid = ing.preferred_unit or eenheid
-            if (regel.unit, regel.amount) == (eenheid, aantal):
+            vorm = _blijft_staan(oud, ing.preferred_unit, samen_conv, samen_voorkeur)
+            if vorm is None or vorm == (regel.unit, regel.amount):
                 continue
 
+            eenheid, aantal = vorm
             omgerekend.append(f'{ing.display}: {hoeveelheid:g} {regel.unit} '
                               f'→ {aantal:g} {eenheid}')
             regel.unit, regel.amount = eenheid, aantal
     return omgerekend
+
+
+def _blijft_staan(oud, eigen_voorkeur, samen_conv, samen_voorkeur):
+    """De oude betekenis opschrijven zodat het samengevoegde ingredient hem laat staan.
+
+    `oud` is wat de regel bij zijn eigen ingredient betekende: bijvoorbeeld
+    2 stuks bij Knoflookteen, waar niets omgerekend werd. Rekent het
+    samengevoegde ingredient diezelfde eenheid wél om (1 stuks = 12 teen), dan
+    is 'oud' letterlijk overschrijven niet genoeg — de lijst maakt er alsnog
+    24 teen van. We zoeken dus een eenheid die hij met rust laat, en zetten het
+    aantal daar één op één in over.
+
+    Die eenheid is de eenheid waarin het ingredient telt, en daar zijn twee
+    bronnen voor, in deze volgorde:
+
+      1. die van het ingredient van de regel zelf (preferred_unit). Dat is de
+         meest letterlijke lezing van 'oud': 'stuks' bij Knoflookteen wordt
+         'teen', want een knoflookteen is er één.
+      2. die van het samengevoegde ingredient (preferred_unit van de winnaar,
+         anders van de verliezer). Weet ook die van niets, dan wijst de
+         botsende omrekening zelf de eenheid aan waarin hij telt — bij Knoflook
+         is dat 'teen'.
+
+    Punt 2 is nieuw en dekt de regels zonder preferred_unit. Die vielen eerder
+    terug op de oorspronkelijke eenheid; dan veranderde er niets en kwam het
+    maal-twaalf onverkort terug. Twee van de 23 kaarten hebben nu al een kant
+    zonder preferred_unit, en de ronde die per ingredient gaat omrekenen zet er
+    conversies op.
+
+    Eén op één omzetten is een keuze, geen berekening: was die eenheid bij de
+    verliezer stiekem tóch een bundel — de app wist er alleen niets van — dan
+    is één op één te weinig. Daarom waarschuwt de kandidatenlijst hierover vóór
+    de klik; zie _eenheidsbotsingen.
+
+    Wordt ook die teleenheid zelf omgerekend (preferred_unit 'stuks' naast een
+    omrekening ván 'stuks'), dan is er geen eenheid meer die dit ingredient met
+    rust laat, en is zijn omrekening het enige wat er over die eenheid bekend
+    is. Dan geeft deze functie None terug: de regel blijft staan zoals hij
+    stond en krijgt dezelfde behandeling als de regels van de winnaar zelf.
+    Eén op één omzetten zou daar juist schade doen — 1 stuks sjalot wordt dan
+    1 g in plaats van 40.
+    """
+    eenheid, aantal = oud
+    if _lees(eenheid, aantal, samen_conv, None) == (eenheid, aantal):
+        return eenheid, aantal
+
+    telt_in = samen_voorkeur or samen_conv.get(_norm_unit(eenheid), (None, None))[0]
+    for kandidaat in (eigen_voorkeur, telt_in):
+        if not kandidaat:
+            continue
+        genormaliseerd = _norm_unit(kandidaat)
+        if _lees(kandidaat, aantal, samen_conv, None) == (genormaliseerd, aantal):
+            return genormaliseerd, aantal
+    return None
 
 
 def _weken_op_de_lijst(ingredient_id):
@@ -307,6 +370,32 @@ def _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer):
         week = (rij.year, rij.week_number)
         if week in weken_verliezer and week not in afgevinkt:
             db.session.delete(rij)
+
+
+def _voorraad_volgt_de_winnaar(verliezer_id):
+    """'Altijd in huis' ging over één schrijfwijze, niet over allebei.
+
+    Dit is dezelfde familie als de weekbesluiten hierboven. 'Ik heb
+    rodewijnazijn in huis' zei je terwijl 'rode wijnazijn' een aparte rij was;
+    dat je die twee nu hetzelfde product noemt, maakt de fles in je kast niet
+    groter. Verhuisde de voorraadrij mee naar een winnaar die er zelf geen had,
+    dan gold het samengevoegde ingredient ineens overal als 'heb ik al' en
+    verdween het uit ELKE boodschappenlijst — zonder iets op het scherm.
+
+    Er waren twee redelijke uitwegen, en ze komen op hetzelfde neer: de rij van
+    de verliezer weggooien (zoals bij de weekbesluiten), of hem alleen laten
+    meeverhuizen als de winnaar er zelf ook een had — want in dat geval botst
+    hij en gaat hij toch weg. In beide gevallen staat het samengevoegde
+    ingredient in de kast precies dan als de winnaar erin stond.
+
+    Die kant kiezen we bewust, want de twee fouten wegen niet even zwaar. Blijft
+    de kast te leeg, dan komt er iets op de lijst dat je al had: dat zie je
+    staan, en één tik zet het terug in de kast. Blijft de kast te vol, dan
+    verdwijnt er iets van elke lijst en merk je het pas in de winkel. Daarom
+    waarschuwt de kandidatenlijst hier ook vooraf; zie _voorraadverschil.
+    """
+    for rij in PantryIngredient.query.filter_by(ingredient_id=verliezer_id).all():
+        db.session.delete(rij)
 
 
 def _verhuis_receptregels(verliezer_id, winnaar_id):
@@ -539,6 +628,7 @@ def samenvoeg_kandidaten():
                 'reden': reden,
                 'bewijs': bewijs,
                 'eenheidsbotsing': _eenheidsbotsingen(kop, ander, tabellen, gebruikt),
+                'voorraadverschil': _voorraadverschil(kop, ander, voorraad),
                 'ingredienten': [
                     _kandidaat(per_id[i.id], recepten, voorraad, conversies, aliassen)
                     for i in (kop, ander)
@@ -585,6 +675,28 @@ def _eenheidsbotsingen(a, b, tabellen, gebruikt):
             f"{_toon_lezing(eenheid, a_lezing)}, bij {b.display} is 1 {eenheid} "
             f"{_toon_lezing(eenheid, b_lezing)}")
     return botsingen
+
+
+def _voorraadverschil(a, b, voorraad):
+    """De ene staat in de voorraadkast en de andere niet — dat hoor je te zien.
+
+    Het is dezelfde soort mededeling als de botsende eenheid: iets wat na de
+    klik anders is dan je zou raden, en wat je erna alleen in de winkel merkt.
+    'Ik heb rodewijnazijn in huis' zei je over die ene schrijfwijze; welke van
+    de twee je nu houdt, bepaalt of het samengevoegde ingredient nog van de
+    lijst geweerd wordt. Zie _voorraad_volgt_de_winnaar voor de keuze zelf.
+
+    Staan ze er allebei in of allebei niet, dan is er niets te melden.
+    """
+    kast = [i for i in (a, b) if i.id in voorraad]
+    buiten = [i for i in (a, b) if i.id not in voorraad]
+    if len(kast) != 1 or len(buiten) != 1:
+        return ''
+    return (f'‘{kast[0].display}’ staat in de voorraadkast en '
+            f'‘{buiten[0].display}’ niet. De voorraadrij blijft bij de naam die '
+            f'je houdt: houd je ‘{buiten[0].display}’, dan staat het '
+            f'samengevoegde ingrediënt niet meer in de kast en komt het weer '
+            f'op de boodschappenlijst.')
 
 
 def _toon_lezing(eenheid, lezing):

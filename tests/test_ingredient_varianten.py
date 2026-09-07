@@ -358,11 +358,11 @@ def test_een_verpakkingsberekening_in_plaats_van_twee(app):
 
 # ── dezelfde eenheid, twee betekenissen ──────────────────────────────────
 #
-# Dit is de echte situatie in data/weekmenu.db: Knoflook (24) weet dat 1 stuks
-# twaalf tenen is, Knoflookteen (146) weet dat niet en heeft drie receptregels
-# in 'stuks' waar 'stuks' gewoon 'teen' betekent. Verhuist zo'n regel alleen op
-# ingredient_id, dan valt hij onder de conversie van de winnaar en wordt 2
-# opeens 24.
+# Dit is de echte situatie in data/weekmenu.db: ingredient 24 (Knoflook) weet
+# dat 1 stuks twaalf tenen is, ingredient 146 (Knoflookteen) weet dat niet en
+# heeft drie receptregels in 'stuks' waar 'stuks' gewoon 'teen' betekent.
+# Verhuist zo'n regel alleen op ingredient_id, dan valt hij onder de conversie
+# van de winnaar en wordt 2 opeens 2 × 12 = 24.
 
 def test_stuks_bij_de_verliezer_wordt_niet_ineens_een_bolletje(app):
     winnaar, verliezer = _knoflookpaar()      # winnaar: 1 stuks = 12 teen
@@ -447,6 +447,163 @@ def test_een_eenheid_die_allebei_hetzelfde_lezen_blijft_staan(app):
     assert (regel.amount, regel.unit) == (2, 'stuks')
 
 
+# Zonder preferred_unit had de bevriezing niets om op terug te vallen: de oude
+# betekenis kwam er dan uit als de oorspronkelijke eenheid, en de bewaking
+# eronder sloeg de regel helemaal over. Twee van de 23 kaarten hebben nu al een
+# kant zonder preferred_unit (ah-84-231 en meervoud-54-301), en de ronde die
+# per ingredient gaat omrekenen zet er conversies op.
+
+def test_zonder_voorkeurseenheid_blijft_de_betekenis_ook_staan(app):
+    """De verliezer weet niet waarin hij telt, de winnaar leest stuks als 12 teen."""
+    winnaar = _ing('knoflook', display_name='Knoflook', preferred_unit='teen')
+    db.session.add(IngredientUnitConversion(ingredient_id=winnaar.id, from_unit='stuks',
+                                            to_unit='teen', factor=12.0))
+    verliezer = _ing('knoflookteen', display_name='Knoflookteen')   # preferred_unit NULL
+    r = _recept('Soep', verliezer, 2, eenheid='stuks')
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (2, 'teen')
+
+
+def test_zonder_voorkeurseenheid_telt_de_lijst_twee_tenen_en_niet_vierentwintig(app):
+    winnaar = _ing('knoflook', display_name='Knoflook', preferred_unit='teen')
+    db.session.add(IngredientUnitConversion(ingredient_id=winnaar.id, from_unit='stuks',
+                                            to_unit='teen', factor=12.0))
+    verliezer = _ing('knoflookteen', display_name='Knoflookteen')
+    r = _recept('Soep', verliezer, 2, eenheid='stuks')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    na = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'noflook' in x['name']]
+    assert len(na) == 1
+    assert (na[0]['amount'], na[0]['unit']) == (2, 'teen')
+
+
+def test_zonder_voorkeurseenheid_gaat_het_andersom_net_zo(app):
+    """Nu is het de winnaar die niet weet waarin hij telt; de conversie van de
+    verliezer verhuist mee en mag zijn regels niet alsnog maal twaalf doen."""
+    winnaar = _ing('knoflookteen', display_name='Knoflookteen')     # preferred_unit NULL
+    verliezer = _ing('knoflook', display_name='Knoflook', preferred_unit='teen')
+    db.session.add(IngredientUnitConversion(ingredient_id=verliezer.id, from_unit='stuks',
+                                            to_unit='teen', factor=12.0))
+    r = _recept('Soep', winnaar, 2, eenheid='stuks')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (2, 'teen')
+
+    na = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'noflook' in x['name']]
+    assert (na[0]['amount'], na[0]['unit']) == (2, 'teen')
+
+
+# Kilo's naar grammen en deciliters naar milliliters is geen weten van dít
+# ingredient maar gewone maatkennis: het staat in de algemene omrekentabel,
+# geldt aan beide kanten en houdt de hoeveelheid gelijk. Alleen de eigen
+# omrekening van een ingredient kan een regel van betekenis laten veranderen,
+# en alleen daarop hoort de bevriezing te kijken.
+
+def test_kilos_worden_niet_bevroren_tot_grammen(app):
+    """Gemeten op een kopie van data/weekmenu.db, kaart meervoud-198-237:
+    'Kruimige aardappel' telt in kg, 'kruimige aardappelen' in g. Van 1,2 kg
+    mag nooit 1,2 g worden."""
+    winnaar = _ing('kruimige aardappelen', display_name='Kruimige aardappelen',
+                   preferred_unit='g')
+    verliezer = _ing('kruimige aardappel', display_name='Kruimige aardappel',
+                     preferred_unit='kg')
+    r = _recept('Stamppot', verliezer, 1.2, eenheid='kg')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (1.2, 'kg')
+    na = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'ardappel' in x['name']]
+    assert (na[0]['amount'], na[0]['unit']) == (1200, 'g')
+
+
+def test_deciliters_worden_niet_bevroren_tot_eetlepels(app):
+    """Gemeten op een kopie van data/weekmenu.db, kaart ah-21-336: 'Yoghurt'
+    telt in ml en 'magere yoghurt' in el. Een regel van 2,5 dl werd 2,5 el —
+    ruim twee deciliter weg — terwijl er aan geen van beide kanten een eigen
+    omrekening staat."""
+    winnaar = _ing('yoghurt', display_name='Yoghurt', preferred_unit='ml',
+                   category='Zuivel, Eieren & Boter')
+    verliezer = _ing('magere yoghurt', display_name='magere yoghurt',
+                     preferred_unit='el', category='Zuivel, Eieren & Boter')
+    r = _recept('Smoothie', verliezer, 2.5, eenheid='dl')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (2.5, 'dl')
+    na = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'oghurt' in x['name']]
+    assert (na[0]['amount'], na[0]['unit']) == (250, 'ml')
+
+
+def test_zonder_enige_voorkeurseenheid_wijst_de_omrekening_de_eenheid_aan(app):
+    """Weet geen van beide kanten waarin hij telt, dan blijft de eenheid over
+    waar de botsende omrekening naartoe wijst."""
+    winnaar = _ing('knoflook', display_name='Knoflook')          # preferred_unit NULL
+    db.session.add(IngredientUnitConversion(ingredient_id=winnaar.id, from_unit='stuks',
+                                            to_unit='teen', factor=12.0))
+    verliezer = _ing('knoflookteen', display_name='Knoflookteen')  # ook NULL
+    r = _recept('Soep', verliezer, 2, eenheid='stuks')
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (2, 'teen')
+
+
+def test_een_omrekening_vanuit_de_teleenheid_zelf_laat_de_regel_staan(app):
+    """Rekent het samengevoegde ingredient zijn eigen teleenheid om — hier
+    'stuks' naar gram — dan is er geen eenheid meer die hij met rust laat, en
+    is zijn omrekening het enige wat er over 'stuks' bekend is. Eén op één
+    omzetten zou van 1 sjalot 1 gram maken; de regel blijft dus staan en telt
+    net als de regels van de winnaar zelf voor 40 g."""
+    winnaar = _ing('sjalot', display_name='Sjalot', preferred_unit='stuks')
+    db.session.add(IngredientUnitConversion(ingredient_id=winnaar.id, from_unit='stuks',
+                                            to_unit='g', factor=40.0))
+    verliezer = _ing('sjalotje', display_name='Sjalotje')        # preferred_unit NULL
+    r = _recept('Stoof', verliezer, 1, eenheid='stuks')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (1, 'stuks')
+    na = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'jalot' in x['name']]
+    assert (na[0]['amount'], na[0]['unit']) == (40, 'g')
+
+
 def test_de_kandidaat_waarschuwt_voor_de_botsende_eenheid(app):
     winnaar, verliezer = _knoflookpaar()
     _recept('Soep', verliezer, 2, eenheid='stuks')
@@ -459,9 +616,27 @@ def test_de_kandidaat_waarschuwt_voor_de_botsende_eenheid(app):
     assert 'stuks' in tekst and '12 teen' in tekst
 
 
-def test_zonder_botsing_geen_waarschuwing(app):
+def test_zonder_omrekening_geen_waarschuwing(app):
+    """Geen van beide kanten kent een omrekening, dus valt er niets te botsen."""
     _ing('limoen', preferred_unit='stuks')
     _ing('limoenen', preferred_unit='stuks')
+    db.session.commit()
+
+    assert samenvoeg_kandidaten()[0]['eenheidsbotsing'] == []
+
+
+def test_een_botsing_die_in_geen_enkele_regel_staat_geeft_geen_waarschuwing(app):
+    """De filter op eenheden die echt gebruikt worden.
+
+    'stuks' lezen deze twee verschillend — de winnaar als twaalf tenen, de
+    verliezer als één — maar geen enkele regel telt in stuks, dus is er niets
+    om voor te waarschuwen. Op die filter rust dat er op data/weekmenu.db maar
+    één van de 23 kaarten een waarschuwing draagt; zonder hem gaat hij over
+    botsingen die niemand tegenkomt, en leer je hem wegkijken.
+    """
+    winnaar, verliezer = _knoflookpaar()
+    _recept('Pasta aglio', winnaar, 3, eenheid='teen')
+    _recept('Soep', verliezer, 2, eenheid='teen')
     db.session.commit()
 
     assert samenvoeg_kandidaten()[0]['eenheidsbotsing'] == []
@@ -565,6 +740,86 @@ def test_het_vinkje_van_de_winnaar_blijft_in_een_week_zonder_de_verliezer(app):
     voeg_samen(verliezer.id, winnaar.id)
 
     assert ShoppingCheck.query.count() == 1
+
+
+# ── de voorraadkast gaat over één schrijfwijze ───────────────────────────
+#
+# Gemeten op data/weekmenu.db: van de 23 kaarten hebben er twee precies één
+# voorraadkant — [141, 181] rodewijnazijn + rode wijnazijn (141 staat in de
+# kast) en [196, 427] Kippen bouillonblokje + Kippenbouillonblokje (427 staat
+# erin). Verhuisde die rij mee naar de winnaar, dan gold het samengevoegde
+# ingredient als 'heb ik in huis' en verdween het uit elke boodschappenlijst.
+
+def _azijnpaar():
+    kast = _ing('rodewijnazijn', display_name='Rodewijnazijn',
+                category='Oliën, Sauzen & Smaakmakers', preferred_unit='el')
+    los = _ing('rode wijnazijn', display_name='Rode wijnazijn',
+               category='Oliën, Sauzen & Smaakmakers', preferred_unit='el')
+    db.session.commit()
+    return kast, los
+
+
+def _in_het_menu(recept):
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=recept.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+
+def test_de_voorraadrij_van_de_verliezer_verhuist_niet_mee(app):
+    kast, los = _azijnpaar()
+    db.session.add(PantryIngredient(ingredient_id=kast.id))
+    _in_het_menu(_recept('Dressing', los, 1, eenheid='el'))
+
+    voeg_samen(kast.id, los.id)
+
+    assert PantryIngredient.query.count() == 0
+    namen = [x['name'] for x in build_combined_shopping_list(today=VANDAAG)['open']]
+    assert 'Rode wijnazijn' in namen
+
+
+def test_de_voorraadrij_van_de_winnaar_blijft_wel_staan(app):
+    """Die gaat over de naam die blijft; daar verandert het samenvoegen niets aan."""
+    kast, los = _azijnpaar()
+    db.session.add(PantryIngredient(ingredient_id=kast.id))
+    _in_het_menu(_recept('Dressing', los, 1, eenheid='el'))
+
+    voeg_samen(los.id, kast.id)
+
+    rijen = PantryIngredient.query.all()
+    assert len(rijen) == 1 and rijen[0].ingredient_id == kast.id
+    namen = [x['name'] for x in build_combined_shopping_list(today=VANDAAG)['open']]
+    assert 'Rodewijnazijn' not in namen
+
+
+def test_de_kandidaat_meldt_dat_maar_een_kant_in_de_voorraadkast_staat(app):
+    kast, los = _azijnpaar()
+    db.session.add(PantryIngredient(ingredient_id=kast.id))
+    db.session.commit()
+
+    paar = samenvoeg_kandidaten()[0]
+
+    assert 'Rodewijnazijn' in paar['voorraadverschil']
+    assert 'Rode wijnazijn' in paar['voorraadverschil']
+
+
+def test_zonder_verschil_in_de_voorraadkast_geen_melding(app):
+    kast, los = _azijnpaar()
+    for ing in (kast, los):
+        db.session.add(PantryIngredient(ingredient_id=ing.id))
+    db.session.commit()
+
+    assert samenvoeg_kandidaten()[0]['voorraadverschil'] == ''
+
+
+def test_het_scherm_meldt_het_voorraadverschil_voor_je_klikt(client, app):
+    kast, los = _azijnpaar()
+    db.session.add(PantryIngredient(ingredient_id=kast.id))
+    db.session.commit()
+
+    body = client.get('/twijfelgevallen').get_data(as_text=True)
+
+    assert 'staat in de voorraadkast' in body
 
 
 # ── 'Toch apart' echt onthouden ──────────────────────────────────────────
