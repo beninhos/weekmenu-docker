@@ -539,6 +539,77 @@ def test_kilos_worden_niet_bevroren_tot_grammen(app):
     assert (na[0]['amount'], na[0]['unit']) == (1200, 'g')
 
 
+# Dezelfde maatkennis kan ook als eigen rij bij het ingredient staan.
+# scripts/normalize_units.py --interactive zet ze zo neer: hij vult de factor
+# voor met UNIT_CONVERSIONS.get((other, choice)), dus kg naar g maal duizend
+# met één enter. Zo'n rij zegt over de aardappel niets wat de meetlat niet ook
+# zegt, en mag dus niets in beweging zetten.
+
+def test_een_eigen_omrekening_die_de_meetlat_herhaalt_bevriest_niets(app):
+    winnaar = _ing('kruimige aardappelen', display_name='Kruimige aardappelen',
+                   preferred_unit='g')
+    db.session.add(IngredientUnitConversion(ingredient_id=winnaar.id, from_unit='kg',
+                                            to_unit='g', factor=1000.0))
+    verliezer = _ing('kruimige aardappel', display_name='Kruimige aardappel',
+                     preferred_unit='kg')
+    r = _recept('Stamppot', verliezer, 1.2, eenheid='kg')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    uitkomst = voeg_samen(verliezer.id, winnaar.id)[0]
+
+    assert uitkomst['omgerekend'] == []
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (1.2, 'kg')
+    na = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'ardappel' in x['name']]
+    assert (na[0]['amount'], na[0]['unit']) == (1200, 'g')
+
+
+def test_de_meetlat_herhalen_hangt_niet_aan_een_voorkeurseenheid(app):
+    """Dezelfde rij, maar nu weet geen van beide kanten waarin hij telt. Of een
+    rij alleen de meetlat herhaalt hangt van die rij af, niet van waar het
+    ingredient toevallig in telt."""
+    winnaar = _ing('kruimige aardappelen', display_name='Kruimige aardappelen')
+    db.session.add(IngredientUnitConversion(ingredient_id=winnaar.id, from_unit='kg',
+                                            to_unit='g', factor=1000.0))
+    verliezer = _ing('kruimige aardappel', display_name='Kruimige aardappel')
+    r = _recept('Stamppot', verliezer, 1.2, eenheid='kg')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (1.2, 'kg')
+    na = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'ardappel' in x['name']]
+    assert (na[0]['amount'], na[0]['unit']) == (1200, 'g')
+
+
+def test_een_eigen_omrekening_die_de_meetlat_herhaalt_geeft_geen_waarschuwing(app):
+    """De waarschuwing vooraf hoort over precies dezelfde rijen te gaan als de
+    bevriezing erna: rekent zo'n rij alleen maten om, dan valt er niets te
+    melden."""
+    a = _ing('kruimige aardappelen', display_name='Kruimige aardappelen',
+             preferred_unit='g')
+    db.session.add(IngredientUnitConversion(ingredient_id=a.id, from_unit='kg',
+                                            to_unit='g', factor=1000.0))
+    b = _ing('kruimige aardappel', display_name='Kruimige aardappel',
+             preferred_unit='kg')
+    _recept('Stamppot', b, 1.2, eenheid='kg')
+    db.session.commit()
+
+    paar = [p for p in samenvoeg_kandidaten()
+            if {i['naam'] for i in p['ingredienten']}
+            == {'Kruimige aardappelen', 'Kruimige aardappel'}][0]
+    assert paar['eenheidsbotsing'] == []
+
+
 def test_deciliters_worden_niet_bevroren_tot_eetlepels(app):
     """Gemeten op een kopie van data/weekmenu.db, kaart ah-21-336: 'Yoghurt'
     telt in ml en 'magere yoghurt' in el. Een regel van 2,5 dl werd 2,5 el —

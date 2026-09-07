@@ -29,6 +29,7 @@ werk in deze module naartoe:
 import re
 from collections import defaultdict
 
+from weekmenu.constants import _UNIT_CONVERSIONS
 from weekmenu.extensions import db
 from weekmenu.models import (
     CustomShoppingIngredient, Ingredient, IngredientAlias,
@@ -185,6 +186,33 @@ def _conversietabel(ing):
             in IngredientUnitConversion.query.filter_by(ingredient_id=ing.id).all()}
 
 
+def _eigen_weten(conversies, eenheid):
+    """Wat dit ingredient zélf over deze eenheid weet, of None.
+
+    Dit is de enige vraag waar het samenvoegen op hoeft te letten. Een rij in
+    ingredient_unit_conversion legt meestal iets over het PRODUCT vast: bij
+    Knoflook is 1 stuks twaalf tenen, bij Sjalot is 1 stuks veertig gram. Dat
+    weet je alleen van dát product, dus verandert het als een regel naar een
+    ander ingredient verhuist — en alleen dán verandert een regel van betekenis.
+
+    Dezelfde tabel wordt ook gebruikt om een gewone maat vast te leggen: kilo's
+    naar grammen maal duizend, deciliters naar milliliters maal honderd.
+    scripts/normalize_units.py --interactive zet zulke rijen met één enter neer,
+    want hij vult de factor voor uit de algemene maattabel. Zo'n rij is geen
+    weten van het ingredient: hij staat al in die maattabel, geldt bij elk
+    ingredient even hard en houdt de hoeveelheid gelijk. Daarom telt hij hier
+    niet mee — anders zou een samenvoeging 1,2 kg voor 1,2 g aanzien.
+
+    Opgezocht zoals de boodschappenlijst hem opzoekt: de genormaliseerde eenheid
+    tegen de rauwe from_unit, precies wat _build_shopping_dict doet.
+    """
+    van = _norm_unit(eenheid)
+    naar, factor = conversies.get(van, (None, None))
+    if naar is None or _UNIT_CONVERSIONS.get((van, _norm_unit(naar))) == factor:
+        return None
+    return _norm_unit(naar), factor
+
+
 def _lees(eenheid, hoeveelheid, conversies, voorkeur):
     """Wat een regel betekent bij een ingredient met deze tabel en voorkeur.
 
@@ -218,19 +246,19 @@ def _bevries_eenheden(verliezer, winnaar):
     winnaar en wordt 2 opeens 24 — en andersom net zo goed, want de conversie
     van de verliezer verhuist mee en gaat dan over de regels van de winnaar.
 
-    Daarom eerst dit, aan beide kanten: van elke regel kijken we hoe zijn eigen
-    ingredient hem las en hoe het samengevoegde ingredient hem zou lezen.
-    Verschilt dat, dan schrijven we die oude betekenis in de regel zelf, zodat
-    de regel na de samenvoeging nog hetzelfde zegt.
+    Daarom eerst dit, aan beide kanten, en met één vraag per regel: weet het
+    samengevoegde ingredient iets anders over de eenheid van deze regel dan het
+    ingredient waar de regel nu bij hoort? Dat is precies wat _eigen_weten
+    beantwoordt. Luidt het antwoord ja, dan schrijven we de oude betekenis in de
+    regel zelf, zodat de regel na de samenvoeging nog hetzelfde zegt.
 
-    We lezen daarvoor alléén met de eigen omrekentabellen, zonder
-    voorkeurseenheid. Die tweede stap in _convert_unit_for_agg — kilo's naar
-    grammen, deciliters naar milliliters — is geen weten van dit ingredient
-    maar gewone maatkennis: hij staat in de algemene tabel, geldt aan beide
-    kanten en houdt de hoeveelheid gelijk. Zou de bevriezing daar wél op
-    kijken, dan zag ze een verschil dat er niet is en zette ze 1,2 kg om in
-    1,2 g. Gemeten op een kopie van data/weekmenu.db, kaart meervoud-198-237
-    (kg naast g) en kaart ah-21-336 (dl naast el).
+    Meer hoeft er niet vergeleken te worden. Alles wat níét in
+    ingredient_unit_conversion staat — de algemene maattabel, de
+    voorkeurseenheid die hem aanroept — geldt aan beide kanten even hard en
+    verandert dus nooit door een samenvoeging. Kijk je er tóch op, dan zie je
+    verschillen die er niet zijn en wordt 1,2 kg omgezet in 1,2 g. Gemeten op
+    een kopie van data/weekmenu.db, kaart meervoud-198-237 (kg naast g) en
+    kaart ah-21-336 (dl naast el).
 
     Rekent het samengevoegde ingredient die oude betekenis zelf óók nog om, dan
     zoekt _blijft_staan een schrijfwijze die hij wél met rust laat.
@@ -250,11 +278,11 @@ def _bevries_eenheden(verliezer, winnaar):
     omgerekend = []
     for ing, eigen_conv in ((verliezer, v_conv), (winnaar, w_conv)):
         for regel in _regels_met_eenheid(ing.id):
-            hoeveelheid = regel.amount or 0
-            oud = _lees(regel.unit, hoeveelheid, eigen_conv, None)
-            if oud == _lees(regel.unit, hoeveelheid, samen_conv, None):
+            if _eigen_weten(eigen_conv, regel.unit) == _eigen_weten(samen_conv, regel.unit):
                 continue
 
+            hoeveelheid = regel.amount or 0
+            oud = _lees(regel.unit, hoeveelheid, eigen_conv, None)
             vorm = _blijft_staan(oud, ing.preferred_unit, samen_conv, samen_voorkeur)
             if vorm is None or vorm == (regel.unit, regel.amount):
                 continue
@@ -276,21 +304,23 @@ def _blijft_staan(oud, eigen_voorkeur, samen_conv, samen_voorkeur):
     24 teen van. We zoeken dus een eenheid die hij met rust laat, en zetten het
     aantal daar één op één in over.
 
-    Die eenheid is de eenheid waarin het ingredient telt, en daar zijn twee
-    bronnen voor, in deze volgorde:
+    We proberen daarvoor drie schrijfwijzen, en de eerste die het samengevoegde
+    ingredient met rust laat wint:
 
-      1. die van het ingredient van de regel zelf (preferred_unit). Dat is de
-         meest letterlijke lezing van 'oud': 'stuks' bij Knoflookteen wordt
-         'teen', want een knoflookteen is er één.
-      2. die van het samengevoegde ingredient (preferred_unit van de winnaar,
-         anders van de verliezer). Weet ook die van niets, dan wijst de
-         botsende omrekening zelf de eenheid aan waarin hij telt — bij Knoflook
-         is dat 'teen'.
+      1. de eenheid van 'oud' zelf. Laat hij die staan, dan is er niets aan de
+         hand en houdt de regel gewoon zijn eigen woord.
+      2. de eenheid waarin het ingredient van de regel zelf telt
+         (preferred_unit). Dat is de meest letterlijke lezing van 'oud': 'stuks'
+         bij Knoflookteen wordt 'teen', want een knoflookteen is er één.
+      3. de eenheid waarin het samengevoegde ingredient telt (preferred_unit van
+         de winnaar, anders van de verliezer). Weet ook die van niets, dan wijst
+         de botsende omrekening zelf de eenheid aan waarin hij telt — bij
+         Knoflook is dat 'teen'.
 
-    Punt 2 is nieuw en dekt de regels zonder preferred_unit. Die vielen eerder
-    terug op de oorspronkelijke eenheid; dan veranderde er niets en kwam het
-    maal-twaalf onverkort terug. Twee van de 23 kaarten hebben nu al een kant
-    zonder preferred_unit, en de ronde die per ingredient gaat omrekenen zet er
+    Punt 3 dekt de regels zonder preferred_unit. Die vielen eerder terug op de
+    oorspronkelijke eenheid; dan veranderde er niets en kwam het maal-twaalf
+    onverkort terug. Twee van de 23 kaarten hebben nu al een kant zonder
+    preferred_unit, en de ronde die per ingredient gaat omrekenen zet er
     conversies op.
 
     Eén op één omzetten is een keuze, geen berekening: was die eenheid bij de
@@ -307,11 +337,15 @@ def _blijft_staan(oud, eigen_voorkeur, samen_conv, samen_voorkeur):
     1 g in plaats van 40.
     """
     eenheid, aantal = oud
-    if _lees(eenheid, aantal, samen_conv, None) == (eenheid, aantal):
-        return eenheid, aantal
 
-    telt_in = samen_voorkeur or samen_conv.get(_norm_unit(eenheid), (None, None))[0]
-    for kandidaat in (eigen_voorkeur, telt_in):
+    # De eenheid waarin het samengevoegde ingredient telt. Weet hij dat niet,
+    # dan wijst de botsende omrekening hem aan: dat is de eenheid waar hij naar
+    # rekent. Die halen we uit de lezing zelf en niet uit een tweede greep in
+    # samen_conv, want die tabel is op de rauwe from_unit gesleuteld en een
+    # handmatige greep loopt daar vroeg of laat op stuk.
+    telt_in = samen_voorkeur or _lees(eenheid, aantal, samen_conv, None)[0]
+
+    for kandidaat in (eenheid, eigen_voorkeur, telt_in):
         if not kandidaat:
             continue
         genormaliseerd = _norm_unit(kandidaat)
@@ -652,6 +686,11 @@ def _eenheidsbotsingen(a, b, tabellen, gebruikt):
     eenheid die de app niet kende gokt hij één op één (zie daar). Zo'n gok hoor
     je te zien vóór je klikt, niet erna.
 
+    Waarschuwen doen we op precies dezelfde vraag als waar het samenvoegen op
+    beslist — _eigen_weten — anders gaat het scherm iets anders melden dan er
+    daarna gebeurt. Een rij die alleen de meetlat herhaalt (kg naar g maal
+    duizend) verandert dus niets en haalt dus ook het scherm niet.
+
     Alleen eenheden die ook echt in regels voorkomen: een botsing die nergens
     staat verandert niets, en een waarschuwing die nooit ergens over gaat leert
     je hem wegkijken.
@@ -666,10 +705,10 @@ def _eenheidsbotsingen(a, b, tabellen, gebruikt):
     for eenheid in sorted(set(a_conv) | set(b_conv)):
         if _norm_unit(eenheid) not in in_gebruik:
             continue
+        if _eigen_weten(a_conv, eenheid) == _eigen_weten(b_conv, eenheid):
+            continue
         a_lezing = _lees(eenheid, 1.0, a_conv, a.preferred_unit)
         b_lezing = _lees(eenheid, 1.0, b_conv, b.preferred_unit)
-        if a_lezing == b_lezing:
-            continue
         botsingen.append(
             f"‘{eenheid}’ betekent niet hetzelfde: bij {a.display} is 1 {eenheid} "
             f"{_toon_lezing(eenheid, a_lezing)}, bij {b.display} is 1 {eenheid} "
