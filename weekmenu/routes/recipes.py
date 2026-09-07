@@ -289,11 +289,27 @@ def new_recipe():
     cookbooks = Cookbook.query.order_by(Cookbook.name).all()
 
     if request.method == 'POST':
+        from weekmenu.models import RecipeDraft
+        from weekmenu.services.images import normaliseer_orientatie
+
+        draft = None
+        draft_id = request.form.get('draft_id')
+        if draft_id:
+            try:
+                draft = db.session.get(RecipeDraft, int(draft_id))
+            except (TypeError, ValueError):
+                draft = None
+
         image = request.files.get('image')
         image_path = None
+        original_image_path = None
         if image and image.filename:
             image_data = image.read()
             ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
+            # Een telefoonfoto draagt de draai als EXIF-tag; die bakken we hier
+            # in de pixels, anders ziet PIL bij het bijsnijden een ander beeld
+            # dan de browser toonde.
+            image_data, ext = normaliseer_orientatie(image_data, ext)
             fname = hashlib.md5(image_data).hexdigest() + ext
             save_path = os.path.join(current_app.static_folder, 'uploads', fname)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -302,6 +318,13 @@ def new_recipe():
             image_path = os.path.join('static/uploads', fname)
         elif request.form.get('image_path_imported'):
             image_path = request.form.get('image_path_imported')
+            # De ongesneden pagina staat bij het concept. Nemen we hem niet
+            # over, dan snijdt een tweede poging uit de al bijgesneden versie
+            # en is de volledige pagina definitief kwijt. Alleen bij een
+            # overgenomen afbeelding: wie zelf een bestand kiest wil niet de
+            # oude pagina als origineel.
+            if draft:
+                original_image_path = draft.original_image_path
 
         cookbook_id = request.form.get('cookbook') or None
         if cookbook_id == '__new__':
@@ -337,6 +360,7 @@ def new_recipe():
             cookbook_id=cookbook_id,
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path,
+            original_image_path=original_image_path,
             url=request.form.get('url') or None,
             instructions=request.form.get('instructions') or None,
             prep_time=_minuten(request.form.get('prep_time')),
@@ -387,13 +411,9 @@ def new_recipe():
         _sync_pantry(pantry_scope, pantry_wanted)
         _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
 
-        draft_id = request.form.get('draft_id')
-        if draft_id:
-            from weekmenu.models import RecipeDraft
-            draft = db.session.get(RecipeDraft, int(draft_id))
-            if draft:
-                draft.status = 'accepted'
-                db.session.commit()
+        if draft:
+            draft.status = 'accepted'
+            db.session.commit()
 
         return redirect(url_for('recipes.receptenplanner'))
 
@@ -447,14 +467,21 @@ def edit_recipe(id):
 
         image = request.files.get('image')
         if image and image.filename:
+            from weekmenu.services.images import normaliseer_orientatie
             image_data = image.read()
             ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
+            # Zie new_recipe: de EXIF-draai hoort in de pixels te zitten voor
+            # het bijsnijden er later overheen gaat.
+            image_data, ext = normaliseer_orientatie(image_data, ext)
             fname = hashlib.md5(image_data).hexdigest() + ext
             save_path = os.path.join(current_app.static_folder, 'uploads', fname)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, 'wb') as f:
                 f.write(image_data)
             recipe.image_path = os.path.join('static/uploads', fname)
+            # Een vers bestand is zijn eigen origineel; het oude ongesneden
+            # beeld hoort er niet meer bij.
+            recipe.original_image_path = None
 
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
 

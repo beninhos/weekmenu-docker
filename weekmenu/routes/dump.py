@@ -158,8 +158,11 @@ def dump_draft_accept(id):
                        'hem aan.',
         }), 409
 
+    # Het ongesneden origineel gaat mee: zonder dat pad snijdt een tweede
+    # bijsnijding uit de al bijgesneden versie en is de volledige pagina weg.
     recipe = Recipe(name=d.name, serves=d.serves, cookbook_id=cookbook_id,
                     page=d.source_page, image_path=d.image_path,
+                    original_image_path=d.original_image_path,
                     instructions=d.instructions or None,
                     prep_time=d.prep_time)
     db.session.add(recipe)

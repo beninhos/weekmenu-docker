@@ -1,4 +1,7 @@
-const CACHE = 'weekmenu-v2';
+// v3: de service worker serveert /static/ cache-first zonder revalidatie en
+// base.html linkt zonder versie-query, dus zonder deze ophoging bereikt de
+// nieuwe crop-JS de browser van de gebruiker nooit.
+const CACHE = 'weekmenu-v3';
 const SHELL = [
   '/',
   '/static/favicon.svg',

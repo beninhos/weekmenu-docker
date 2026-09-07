@@ -624,9 +624,24 @@ def _resolve_image(job_id, photo_page, page_map):
         os.makedirs(uploads, exist_ok=True)
 
         if pdf_idx is None:
+            # De foto gaat door normaliseer_orientatie heen zodat een
+            # EXIF-draai in de pixels zelf terechtkomt. Anders toont de browser
+            # (die de tag wél leest) iets anders dan PIL bij het bijsnijden
+            # ziet, en dan landt de uitsnede naast het aangewezen stuk.
+            #
+            # De md5 gaat bewust over de GENORMALISEERDE bytes en niet meer
+            # over het bronbestand: de bestandsnaam hoort bij de inhoud die we
+            # opslaan, anders wijzen twee verschillende beelden naar één naam.
+            # Gevolg is dat dezelfde bronfoto voortaan een andere naam krijgt
+            # dan vóór deze wijziging; bestaande records blijven gewoon naar
+            # hun eigen, nog aanwezige bestand wijzen.
+            from weekmenu.services.images import normaliseer_orientatie
             with open(src, 'rb') as fh:
-                fname = hashlib.md5(fh.read()).hexdigest() + os.path.splitext(src)[1]
-            shutil.copyfile(src, os.path.join(uploads, fname))
+                data = fh.read()
+            data, ext = normaliseer_orientatie(data, os.path.splitext(src)[1] or '.jpg')
+            fname = hashlib.md5(data).hexdigest() + ext
+            with open(os.path.join(uploads, fname), 'wb') as fh:
+                fh.write(data)
             return os.path.join('static/uploads', fname)
 
         import pypdfium2 as pdfium
