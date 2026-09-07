@@ -542,6 +542,28 @@ def _migrate_v17(conn):
             pass
 
 
+def _migrate_v18(conn):
+    """'Toch apart' vasthouden.
+
+    De vraag 'Lijkt op X, die in je voorraad staat' kwam bij elke import terug,
+    ook nadat je 'Toch apart' had gekozen: er was niets dat dat besluit
+    bewaarde. Een alias naar jezelf werkt niet, want de vraag komt van de
+    gelijkende voorraadnaam en niet van de eigen naam.
+
+    Deze tabel voegt niets samen — samenvoegen blijft een klik op
+    /twijfelgevallen. Hij onthoudt alleen waar je 'nee' hebt gezegd, zodat
+    dezelfde vraag en hetzelfde voorstel niet blijven terugkomen.
+    """
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS variant_apart (
+            id INTEGER PRIMARY KEY,
+            sleutel VARCHAR(100) NOT NULL,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
+            UNIQUE(sleutel, ingredient_id)
+        )
+    '''))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -591,8 +613,10 @@ def migrate_db():
             _migrate_v16(conn)
         if current < 17:
             _migrate_v17(conn)
+        if current < 18:
+            _migrate_v18(conn)
 
-        target = 17
+        target = 18
         if current < target:
             if row:
                 conn.execute(

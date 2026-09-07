@@ -23,8 +23,70 @@
     </select>
     {% endmacro %}
 
-    <!-- ── 1. Voorraadkandidaten ──────────────────────────────────────── -->
-    <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-6 mb-1">
+    <!-- ── 1. Dubbele ingrediënten ────────────────────────────────────── -->
+    <h3 id="dubbel" class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-6 mb-1">
+        Dubbele ingrediënten <span class="font-normal normal-case">({{ dubbel | length }})</span>
+    </h3>
+    <p class="text-xs text-[#6B6B6B] mb-2">
+        Twee schrijfwijzen van hetzelfde product geven twee regels op de boodschappenlijst,
+        elk met een eigen verpakking. Kies welke naam blijft — de ander wordt een alias,
+        zodat een volgende import er meteen goed uitkomt.
+    </p>
+    {% if dubbel %}
+    <div class="space-y-2">
+        {% for paar in dubbel %}
+        <div class="dubbel-kaart bg-white border border-[#E8E4DC] rounded px-3 py-2.5"
+             data-sleutel="{{ paar.sleutel }}">
+            <div class="flex items-center gap-2 flex-wrap mb-2">
+                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded
+                             {{ 'bg-[#FAEEDA] text-[#854F0B]' if paar.reden == 'ah' else 'bg-[#F5F2ED] text-[#6B6B6B]' }}">
+                    {{ {'ah': 'AH-product', 'schrijfwijze': 'schrijfwijze', 'meervoud': 'meervoud of verkleinwoord'}[paar.reden] }}
+                </span>
+                <span class="text-xs text-[#6B6B6B]">{{ paar.bewijs }}</span>
+            </div>
+
+            <div class="grid gap-2 sm:grid-cols-2">
+                {% for ing in paar.ingredienten %}
+                {% set ander = paar.ingredienten[1] if loop.first else paar.ingredienten[0] %}
+                <div class="border border-[#E8E4DC] rounded p-2.5 flex flex-col gap-1.5">
+                    <div class="font-medium text-sm text-[#2C2C2C]">{{ ing.naam }}</div>
+                    <div class="text-xs text-[#6B6B6B] leading-relaxed">
+                        {{ ing.recepten }}× in recepten{% if ing.preferred_unit %} · per {{ ing.preferred_unit }}{% endif %}
+                        {%- if ing.in_voorraad %} · op voorraad{% endif %}
+                        {%- if ing.verpakking %} · verpakking {{ ing.verpakking }}{% endif %}
+                        {%- if ing.aliassen > 1 %} · {{ ing.aliassen }} schrijfwijzen{% endif %}
+                        {% if ing.conversies %}<br>{{ ing.conversies | join(', ') }}
+                        {% else %}<br><span class="text-[#B4B2A9]">geen omrekening</span>{% endif %}
+                    </div>
+                    <button onclick="voegSamen({{ ing.id }}, {{ ander.id }}, this)"
+                            class="mt-auto text-xs px-2.5 py-1 rounded-full border border-[#8B4513] text-[#8B4513] hover:bg-[#FAF8F5]"
+                            title="Voeg samen onder deze naam">
+                        Houd “{{ ing.naam }}”
+                    </button>
+                    <span class="text-[11px] text-[#6B6B6B]">
+                        {{ ander.recepten }}
+                        {{ 'recept gaat' if ander.recepten == 1 else 'recepten gaan' }}
+                        over naar {{ ing.naam }}, “{{ ander.naam }}” wordt een alias
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="mt-2 text-right">
+                <button onclick="houdApart({{ paar.ingredienten[0].id }}, {{ paar.ingredienten[1].id }}, this)"
+                        class="text-xs px-2 py-1 text-[#6B6B6B] hover:underline">
+                    Toch verschillend — niet meer vragen
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
+    {% endif %}
+
+    <!-- ── 2. Voorraadkandidaten ──────────────────────────────────────── -->
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-8 mb-1">
         Voorraadkandidaten <span class="font-normal normal-case">({{ lists.kandidaten | length }})</span>
     </h3>
     <p class="text-xs text-[#6B6B6B] mb-2">
@@ -49,7 +111,7 @@
     <p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
     {% endif %}
 
-    <!-- ── 2. Onbekende categorie ─────────────────────────────────────── -->
+    <!-- ── 3. Onbekende categorie ─────────────────────────────────────── -->
     <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-8 mb-1">
         Categorie onbekend <span class="font-normal normal-case">({{ lists.overig | length }})</span>
     </h3>
@@ -75,7 +137,7 @@
     <p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
     {% endif %}
 
-    <!-- ── 3. Afwijkend van de gok ────────────────────────────────────── -->
+    <!-- ── 4. Afwijkend van de gok ────────────────────────────────────── -->
     <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-8 mb-1">
         Wijkt af van de gok <span class="font-normal normal-case">({{ lists.afwijkend | length }})</span>
     </h3>
@@ -135,6 +197,62 @@ async function toPantry(id, btn) {
     const row = btn.closest('.review-row');   // vóór remove(), anders null
     btn.remove();
     flash(row, '✓ op voorraad');
+}
+
+/** Zet de kaart op klaar: knoppen weg, resultaat blijft leesbaar staan. */
+function sluitKaart(btn, tekst) {
+    const kaart = btn.closest('.dubbel-kaart');
+    if (!kaart) return;
+    kaart.querySelectorAll('button').forEach(b => b.remove());
+    kaart.classList.add('opacity-60');
+    const mark = document.createElement('p');
+    mark.className = 'text-xs text-[#3B6D11] mt-1';
+    mark.textContent = tekst;
+    kaart.appendChild(mark);
+}
+
+async function voegSamen(winnaarId, verliezerId, btn) {
+    btn.disabled = true;
+    let data;
+    try {
+        const resp = await fetch('/api/ingredienten/samenvoegen', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({winnaar_id: winnaarId, verliezer_id: verliezerId}),
+        });
+        data = await resp.json();
+    } catch (e) {
+        btn.disabled = false;    // offline: laat de knop bruikbaar
+        return;
+    }
+    // Buiten de try, anders slikt hij ook fouten in deze DOM-code op.
+    if (!data || data.status !== 'ok') {
+        btn.disabled = false;
+        return;
+    }
+    sluitKaart(btn, `✓ ${data.recepten_verplaatst} recept(en) naar ${data.winnaar}; `
+                    + `“${data.verliezer}” is nu een alias`);
+}
+
+async function houdApart(aId, bId, btn) {
+    btn.disabled = true;
+    let data;
+    try {
+        const resp = await fetch('/api/ingredienten/apart', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ingredient_id: aId, ander_id: bId}),
+        });
+        data = await resp.json();
+    } catch (e) {
+        btn.disabled = false;
+        return;
+    }
+    if (!data || data.status !== 'ok') {
+        btn.disabled = false;
+        return;
+    }
+    sluitKaart(btn, '✓ blijven apart');
 }
 
 async function setCategory(id, category, el) {

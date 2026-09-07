@@ -93,6 +93,16 @@ def _variant_key(name):
     return re.sub(r'[^a-z0-9]', '', _normalize_ingredient((name or '').lower()))
 
 
+def _apart_besluiten():
+    """Waar de gebruiker 'Toch apart' heeft gezegd: (sleutel, ingredient_id).
+
+    Zonder dit kwam de vraag elke import terug. Een alias naar jezelf helpt
+    niet: de vraag komt van de gelijkende voorraadnaam, niet van de eigen naam.
+    """
+    from weekmenu.services.ingredienten import apart_paren
+    return apart_paren()
+
+
 def _match_existing(name, alias_map, name_map):
     normalized = _normalize_ingredient((name or '').lower().strip())
     return alias_map.get(normalized) or name_map.get(normalized)
@@ -134,6 +144,7 @@ def annotate_pantry_status(ingredients):
     if pantry_ids:
         for ing in Ingredient.query.filter(Ingredient.id.in_(pantry_ids)).all():
             pantry_by_key.setdefault(_variant_key(ing.name), ing)
+    apart = _apart_besluiten()
 
     for row in ingredients:
         name = row.get('name') or ''
@@ -148,6 +159,8 @@ def annotate_pantry_status(ingredients):
             continue
 
         twin = pantry_by_key.get(_variant_key(name))
+        if twin and (_variant_key(name), twin.id) in apart:
+            twin = None
         if twin and (not match or twin.id != match.id):
             row['variant_of'] = {'id': twin.id, 'name': twin.display}
             row['pantry_hint'] = 'variant'
@@ -217,6 +230,7 @@ def hints_for_recipe_rows(recipe_ingredients):
     if pantry_ids:
         for ing in Ingredient.query.filter(Ingredient.id.in_(pantry_ids)).all():
             pantry_by_key.setdefault(_variant_key(ing.name), ing)
+    apart = _apart_besluiten()
 
     out = {}
     for ri in recipe_ingredients:
@@ -226,6 +240,8 @@ def hints_for_recipe_rows(recipe_ingredients):
             continue
 
         twin = pantry_by_key.get(_variant_key(ing.name))
+        if twin and (_variant_key(ing.name), twin.id) in apart:
+            twin = None
         if twin and twin.id != ing.id:
             out[ri.id] = {'hint': 'variant',
                           'variant_of': {'id': twin.id, 'name': twin.display}}
