@@ -45,6 +45,19 @@
                 <span class="text-xs text-[#6B6B6B]">{{ paar.bewijs }}</span>
             </div>
 
+            {% if paar.eenheidsbotsing %}
+            <div class="mb-2 rounded border border-[#E8C88A] bg-[#FDF6E7] px-2.5 py-2">
+                {% for regel in paar.eenheidsbotsing %}
+                <p class="text-xs text-[#854F0B]">⚠ {{ regel }}</p>
+                {% endfor %}
+                <p class="text-[11px] text-[#8A6A2F] mt-1">
+                    Die regels worden bij het samenvoegen omgerekend naar wat ze bij hun
+                    eigen ingrediënt betekenden. Kende de app de eenheid daar niet, dan
+                    telt hij hem één op één — kijk dus even of dat klopt.
+                </p>
+            </div>
+            {% endif %}
+
             <div class="grid gap-2 sm:grid-cols-2">
                 {% for ing in paar.ingredienten %}
                 {% set ander = paar.ingredienten[1] if loop.first else paar.ingredienten[0] %}
@@ -206,7 +219,7 @@ function sluitKaart(btn, tekst) {
     kaart.querySelectorAll('button').forEach(b => b.remove());
     kaart.classList.add('opacity-60');
     const mark = document.createElement('p');
-    mark.className = 'text-xs text-[#3B6D11] mt-1';
+    mark.className = 'text-xs text-[#3B6D11] mt-1 whitespace-pre-line';
     mark.textContent = tekst;
     kaart.appendChild(mark);
 }
@@ -230,8 +243,14 @@ async function voegSamen(winnaarId, verliezerId, btn) {
         btn.disabled = false;
         return;
     }
-    sluitKaart(btn, `✓ ${data.recepten_verplaatst} recept(en) naar ${data.winnaar}; `
-                    + `“${data.verliezer}” is nu een alias`);
+    let tekst = `✓ ${data.recepten_verplaatst} recept(en) naar ${data.winnaar}; `
+                + `“${data.verliezer}” is nu een alias`;
+    // Omgerekende regels erbij: dan zie je zwart op wit wat de botsende
+    // eenheid met je aantallen gedaan heeft.
+    if (data.omgerekend && data.omgerekend.length) {
+        tekst += `\nOmgerekend: ${data.omgerekend.join('; ')}`;
+    }
+    sluitKaart(btn, tekst);
 }
 
 async function houdApart(aId, bId, btn) {

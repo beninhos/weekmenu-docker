@@ -9,7 +9,8 @@ from weekmenu.extensions import db
 from weekmenu.models import (
     CustomShoppingIngredient, Ingredient, IngredientAlias,
     IngredientUnitConversion, MenuItem, PantryIngredient, Recipe,
-    RecipeIngredient, ShoppingListOverride, VariantApart,
+    RecipeIngredient, ShoppingCheck, ShoppingListExclusion, ShoppingListOverride,
+    VariantApart,
 )
 from weekmenu.services.ingredienten import (
     markeer_apart, markeer_paar_apart, koppel_alias, samenvoeg_kandidaten, voeg_samen,
@@ -353,6 +354,217 @@ def test_een_verpakkingsberekening_in_plaats_van_twee(app):
           if 'noflook' in r['name']]
     assert len(na) == 1
     assert na[0]['qty'] == 1
+
+
+# ── dezelfde eenheid, twee betekenissen ──────────────────────────────────
+#
+# Dit is de echte situatie in data/weekmenu.db: Knoflook (24) weet dat 1 stuks
+# twaalf tenen is, Knoflookteen (146) weet dat niet en heeft drie receptregels
+# in 'stuks' waar 'stuks' gewoon 'teen' betekent. Verhuist zo'n regel alleen op
+# ingredient_id, dan valt hij onder de conversie van de winnaar en wordt 2
+# opeens 24.
+
+def test_stuks_bij_de_verliezer_wordt_niet_ineens_een_bolletje(app):
+    winnaar, verliezer = _knoflookpaar()      # winnaar: 1 stuks = 12 teen
+    r = _recept('Soep', verliezer, 2, eenheid='stuks')   # bij hem: 1 stuks = 1 teen
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (2, 'teen')
+
+
+def test_de_lijst_telt_vier_tenen_en_niet_zesentwintig(app):
+    """Gemeten op data/weekmenu.db: recept 61 (2 stuks) + recept 33 (2 teen)."""
+    winnaar, verliezer = _knoflookpaar()
+    r1 = _recept('Pasta aglio', winnaar, 2)                  # 2 teen
+    r2 = _recept('Soep', verliezer, 2, eenheid='stuks')      # ook 2 tenen
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r1.id,
+                            week_number=week, year=jaar))
+    db.session.add(MenuItem(day_of_week=1, meal_type='avond', recipe_id=r2.id,
+                            week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    na = [r for r in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'noflook' in r['name']]
+    assert len(na) == 1
+    assert (na[0]['amount'], na[0]['unit']) == (4, 'teen')
+
+
+def test_andersom_gaat_het_net_zo_goed(app):
+    """De kant zónder conversie wint. De conversie verhuist dan mee, en mag de
+    regels van de winnaar niet alsnog maal twaalf doen."""
+    kant_met, kant_zonder = _knoflookpaar()
+    bol = _recept('Aioli', kant_met, 1, eenheid='stuks')       # 1 bolletje = 12 teen
+    teen = _recept('Soep', kant_zonder, 2, eenheid='stuks')    # 2 tenen
+    jaar, week = _week_van(VANDAAG)
+    for dag, r in ((0, bol), (1, teen)):
+        db.session.add(MenuItem(day_of_week=dag, meal_type='avond', recipe_id=r.id,
+                                week_number=week, year=jaar))
+    db.session.commit()
+
+    voeg_samen(kant_met.id, kant_zonder.id)
+
+    # De regel van de winnaar telde in tenen en houdt dat, ook nu de conversie
+    # van de verliezer op zijn ingredient staat.
+    teenregel = RecipeIngredient.query.filter_by(recipe_id=teen.id).one()
+    assert (teenregel.amount, teenregel.unit) == (2, 'teen')
+
+    na = [r for r in build_combined_shopping_list(today=VANDAAG)['open']
+          if 'noflook' in r['name']]
+    assert len(na) == 1
+    assert (na[0]['amount'], na[0]['unit']) == (14, 'teen')     # 12 + 2
+
+
+def test_een_handmatige_regel_van_de_verliezer_houdt_ook_zijn_betekenis(app):
+    winnaar, verliezer = _knoflookpaar()
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(CustomShoppingIngredient(year=jaar, week_number=week,
+                                            ingredient_id=verliezer.id,
+                                            amount=3, unit='stuks'))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    rij = CustomShoppingIngredient.query.one()
+    assert (rij.amount, rij.unit) == (3, 'teen')
+
+
+def test_een_eenheid_die_allebei_hetzelfde_lezen_blijft_staan(app):
+    """Geen conversie in het spel, dus niets om te bevriezen."""
+    winnaar = _ing('paprika', preferred_unit='stuks')
+    verliezer = _ing('paprika rood', preferred_unit='stuks')
+    r = _recept('Wok', verliezer, 2, eenheid='stuks')
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    regel = RecipeIngredient.query.filter_by(recipe_id=r.id).one()
+    assert (regel.amount, regel.unit) == (2, 'stuks')
+
+
+def test_de_kandidaat_waarschuwt_voor_de_botsende_eenheid(app):
+    winnaar, verliezer = _knoflookpaar()
+    _recept('Soep', verliezer, 2, eenheid='stuks')
+    db.session.commit()
+
+    paar = samenvoeg_kandidaten()[0]
+
+    assert paar['eenheidsbotsing']
+    tekst = ' '.join(paar['eenheidsbotsing'])
+    assert 'stuks' in tekst and '12 teen' in tekst
+
+
+def test_zonder_botsing_geen_waarschuwing(app):
+    _ing('limoen', preferred_unit='stuks')
+    _ing('limoenen', preferred_unit='stuks')
+    db.session.commit()
+
+    assert samenvoeg_kandidaten()[0]['eenheidsbotsing'] == []
+
+
+def test_het_scherm_toont_de_waarschuwing_voor_je_klikt(client, app):
+    winnaar, verliezer = _knoflookpaar()
+    _recept('Soep', verliezer, 2, eenheid='stuks')
+    db.session.commit()
+
+    body = client.get('/twijfelgevallen').get_data(as_text=True)
+
+    assert 'betekent niet hetzelfde' in body
+
+
+# ── weekbesluiten gaan over een regel, niet over een ingredient ──────────
+
+def test_een_uitsluiting_van_de_verliezer_haalt_de_regel_van_de_winnaar_niet_weg(app):
+    """Gemeten op data/weekmenu.db: 'Lente-Ui, 1 bosje' verdween uit week 2026-37
+    doordat de uitsluiting van 'Bosui' op Lente-Ui landde."""
+    winnaar = _ing('lente-ui', display_name='Lente-Ui', preferred_unit='stuks')
+    verliezer = _ing('bosui', display_name='Bosui', preferred_unit='stuks')
+    r = _recept('Wok', winnaar, 1, eenheid='bosje')
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.add(ShoppingListExclusion(year=jaar, week_number=week,
+                                         ingredient_id=verliezer.id))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    namen = [x['name'] for x in build_combined_shopping_list(today=VANDAAG)['open']]
+    assert 'Lente-Ui' in namen
+    assert ShoppingListExclusion.query.count() == 0
+
+
+def test_een_override_van_de_verliezer_verhuist_niet(app):
+    winnaar, verliezer = _knoflookpaar()
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(ShoppingListOverride(year=jaar, week_number=week,
+                                        ingredient_id=verliezer.id, qty=9))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    assert ShoppingListOverride.query.count() == 0
+
+
+def test_een_afvinkje_van_de_verliezer_verdwijnt_met_zijn_regel(app):
+    winnaar, verliezer = _knoflookpaar()
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(ShoppingCheck(year=jaar, week_number=week,
+                                 ingredient_id=verliezer.id))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    assert ShoppingCheck.query.count() == 0
+
+
+def test_afvinkjes_aan_beide_kanten_blijven_er_een(app):
+    """Allebei in de kar gelegd: het vinkje dekt de samengevoegde regel nog."""
+    winnaar, verliezer = _knoflookpaar()
+    _twee_recepten_in_het_menu(winnaar, verliezer)
+    jaar, week = _week_van(VANDAAG)
+    for ing in (winnaar, verliezer):
+        db.session.add(ShoppingCheck(year=jaar, week_number=week, ingredient_id=ing.id))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    rijen = ShoppingCheck.query.all()
+    assert len(rijen) == 1 and rijen[0].ingredient_id == winnaar.id
+
+
+def test_het_vinkje_van_de_winnaar_vervalt_als_de_verliezer_nog_open_stond(app):
+    """De regel wordt groter dan wat je afvinkte; dan mag hij niet verdwijnen."""
+    winnaar, verliezer = _knoflookpaar()
+    _twee_recepten_in_het_menu(winnaar, verliezer)
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(ShoppingCheck(year=jaar, week_number=week, ingredient_id=winnaar.id))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    assert ShoppingCheck.query.count() == 0
+    namen = [x['name'] for x in build_combined_shopping_list(today=VANDAAG)['open']]
+    assert 'Knoflook' in namen
+
+
+def test_het_vinkje_van_de_winnaar_blijft_in_een_week_zonder_de_verliezer(app):
+    winnaar, verliezer = _knoflookpaar()
+    r = _recept('Pasta aglio', winnaar, 2)
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=r.id,
+                            week_number=week, year=jaar))
+    db.session.add(ShoppingCheck(year=jaar, week_number=week, ingredient_id=winnaar.id))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    assert ShoppingCheck.query.count() == 1
 
 
 # ── 'Toch apart' echt onthouden ──────────────────────────────────────────
