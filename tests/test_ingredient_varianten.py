@@ -785,6 +785,30 @@ def test_afvinkjes_aan_beide_kanten_blijven_er_een(app):
     assert len(rijen) == 1 and rijen[0].ingredient_id == winnaar.id
 
 
+def test_het_vinkje_van_de_verliezer_blijft_als_de_winnaar_die_week_niets_had(app):
+    """De samengevoegde regel IS die van de verliezer, dus zijn vinkje dekt hem.
+
+    Gemeten op de echte data: bij alle vijf de kaarten die een vinkje wisten had
+    de winnaar die week zelf geen regel. Het vinkje weggooien haalde dus iets
+    terug op de lijst dat allang in de kar lag.
+    """
+    winnaar, verliezer = _knoflookpaar()
+    recept = _recept('Aioli', verliezer, 2)
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(MenuItem(day_of_week=0, meal_type='avond', recipe_id=recept.id,
+                            week_number=week, year=jaar))
+    db.session.add(ShoppingCheck(year=jaar, week_number=week,
+                                 ingredient_id=verliezer.id))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    rijen = ShoppingCheck.query.all()
+    assert len(rijen) == 1 and rijen[0].ingredient_id == winnaar.id
+    namen = [x['name'] for x in build_combined_shopping_list(today=VANDAAG)['open']]
+    assert 'Knoflook' not in namen        # ligt al in de kar, hoort niet terug te komen
+
+
 def test_het_vinkje_van_de_winnaar_vervalt_als_de_verliezer_nog_open_stond(app):
     """De regel wordt groter dan wat je afvinkte; dan mag hij niet verdwijnen."""
     winnaar, verliezer = _knoflookpaar()

@@ -161,6 +161,7 @@ def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
         # Eerst de weken vastleggen waarin de verliezer op de lijst stond, want
         # zodra zijn receptregels verhuisd zijn is dat niet meer te zien.
         weken_verliezer = _weken_op_de_lijst(verliezer_id)
+        weken_winnaar = _weken_op_de_lijst(winnaar_id)
 
         # Dan de betekenis van de regels vastzetten, vóór de conversietabellen
         # samengaan — anders leest de winnaar ze met zijn eigen omrekening.
@@ -178,7 +179,7 @@ def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
             _verhuis_unieke_rijen(model, sleutelvelden, verliezer_id, winnaar_id)
 
         _voorraad_volgt_de_winnaar(verliezer_id)
-        _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer)
+        _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer, weken_winnaar)
 
         # Handmatige boodschappen hebben geen UNIQUE: twee rijen voor dezelfde
         # week zouden blijven staan en dubbel meetellen. Optellen dus.
@@ -415,7 +416,7 @@ def _weken_op_de_lijst(ingredient_id):
     return weken
 
 
-def _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer):
+def _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer, weken_winnaar):
     """Weekbesluiten gaan over een regel op de lijst, niet over een ingredient.
 
     De regel van de verliezer verdwijnt met deze samenvoeging, dus verdwijnen
@@ -430,20 +431,38 @@ def _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer):
     product — precies wat je met het samenvoegen bevestigt.
 
     Afvinken ligt nét anders. Een vinkje is geen besluit over de lijst maar een
-    feit: dit ligt al in de kar. Dat feit ging over de kleinere regel van vóór
-    de samenvoeging. Stond de verliezer die week nog open op de lijst, dan dekt
-    het vinkje van de winnaar de nieuwe, grotere regel niet meer, en gaat het er
-    ook af — anders verdwijnt het deel dat je nog moet halen uit het zicht.
-    Waren ze allebei afgevinkt, dan klopt het vinkje nog en blijft het staan.
+    feit: dit ligt al in de kar. De vraag is dus niet van wie het vinkje was,
+    maar of het de regel dekt die na de samenvoeging overblijft.
+
+    Drie gevallen, en ze volgen allemaal uit die ene vraag:
+    - Allebei afgevinkt: samen dekken ze de hele regel. Eén vinkje blijft.
+    - De winnaar afgevinkt terwijl de verliezer die week nog open stond: de
+      regel wordt groter dan wat je afvinkte, dus het vinkje dekt hem niet meer
+      en gaat eraf — anders verdwijnt het deel dat je nog moet halen uit zicht.
+    - De verliezer afgevinkt terwijl de WINNAAR die week niets had: dan is de
+      samengevoegde regel letterlijk de regel van de verliezer, even groot, en
+      dekt zijn vinkje hem precies. Het verhuist mee. Gemeten op de echte data
+      ging het bij alle vijf de kaarten die een vinkje wisten om juist dit
+      geval: er kwam telkens iets terug op de lijst dat allang in de kar lag.
     """
     for model in _WEEKBESLUITEN:
         for rij in model.query.filter_by(ingredient_id=verliezer_id).all():
             db.session.delete(rij)
 
+    van_winnaar = {(r.year, r.week_number) for r
+                   in ShoppingCheck.query.filter_by(ingredient_id=winnaar_id).all()}
+
     afgevinkt = set()
     for rij in ShoppingCheck.query.filter_by(ingredient_id=verliezer_id).all():
-        afgevinkt.add((rij.year, rij.week_number))
-        db.session.delete(rij)
+        week = (rij.year, rij.week_number)
+        afgevinkt.add(week)
+        # Alleen meeverhuizen als het vinkje een regel dekt die er straks nog
+        # is: de verliezer stond die week op de lijst en de winnaar niet.
+        # Zonder regel is een vinkje een overblijfsel en gaat het gewoon weg.
+        if week in weken_verliezer and week not in weken_winnaar and week not in van_winnaar:
+            rij.ingredient_id = winnaar_id      # zelfde regel, zelfde vinkje
+        else:
+            db.session.delete(rij)
 
     for rij in ShoppingCheck.query.filter_by(ingredient_id=winnaar_id).all():
         week = (rij.year, rij.week_number)
