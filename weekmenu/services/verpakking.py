@@ -50,10 +50,18 @@ def antwoordeenheid(pkg_eenheid):
 
 
 def _getal(waarde):
+    """Tekst of getal naar float, of None als het niets bruikbaars is.
+
+    'NaN' en 'inf' komen door float() heen maar overleven daarna elke
+    vergelijking ('nan <= 0' is False, 'not nan' ook), waardoor ze ongemerkt
+    tot in de database rollen en de maat stil wissen. Alleen een echt eindig
+    getal telt.
+    """
     try:
-        return float(str(waarde).replace(',', '.'))
+        uit = float(str(waarde).replace(',', '.'))
     except (TypeError, ValueError):
         return None
+    return uit if math.isfinite(uit) else None
 
 
 def _reken_om(waarde, van, naar):

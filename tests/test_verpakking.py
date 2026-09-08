@@ -608,3 +608,13 @@ def test_het_formulier_stuurt_het_veld_zoals_het_erin_staat(app, client):
                           'maat_richting': 'per_stuk'})
     assert r.status_code == 400
     assert round(Ingredient.query.get(tomaat.id).ah_conv_factor, 4) == 0.0667
+
+
+def test_nan_en_oneindig_wissen_de_maat_niet():
+    """'NaN' komt door float() heen maar overleeft elke vergelijking, waardoor
+    het ongemerkt tot in de database rolde en de maat stil wiste."""
+    from weekmenu.services.verpakking import _getal
+    for onzin in ('NaN', 'nan', 'inf', '-inf', 'Infinity'):
+        assert _getal(onzin) is None, onzin
+    assert _getal('150') == 150.0
+    assert _getal('1,5') == 1.5
