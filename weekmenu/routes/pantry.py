@@ -4,7 +4,8 @@ from weekmenu.models import Ingredient, PantryIngredient
 from weekmenu.constants import PRODUCT_CATEGORIES
 from weekmenu.services.pantry import review_lists, set_category, set_bron
 from weekmenu.services.ingredienten import (
-    koppel_alias, markeer_apart, markeer_paar_apart, samenvoeg_kandidaten, voeg_samen,
+    koppel_alias, leg_omrekening_vast, markeer_apart, markeer_paar_apart,
+    samenvoeg_kandidaten, voeg_samen,
 )
 
 
@@ -33,11 +34,35 @@ def review():
                            categories=PRODUCT_CATEGORIES)
 
 
+@bp.route('/twijfelgevallen/dubbel')
+def review_dubbel():
+    """Alleen de kaarten met dubbele ingredienten, om ze te kunnen verversen.
+
+    Eén klik verandert ook de andere kaarten: een ingredient dat opgaat in een
+    ander staat soms nog op een tweede voorstel, en dat voorstel gaat dan over
+    een naam die niet meer bestaat. Het scherm haalt hier de bijgewerkte
+    kaarten op in plaats van de gebruiker op een dode knop te laten drukken.
+    """
+    return render_template('_dubbel_kaarten.html',
+                           dubbel=samenvoeg_kandidaten())
+
+
 @bp.route('/api/ingredienten/samenvoegen', methods=['POST'])
 def samenvoegen():
     """Twee varianten tot één ingredient. Alleen op een klik, nooit vanzelf."""
     data = request.get_json() or {}
-    payload, status = voeg_samen(data.get('verliezer_id'), data.get('winnaar_id'))
+    payload, status = voeg_samen(data.get('verliezer_id'), data.get('winnaar_id'),
+                                 ah_van_id=data.get('ah_van_id'))
+    return jsonify(payload), status
+
+
+@bp.route('/api/ingredienten/omrekening', methods=['POST'])
+def omrekening():
+    """'1 bosje = 4 stuks': de omrekening die alleen de gebruiker weet."""
+    data = request.get_json() or {}
+    payload, status = leg_omrekening_vast(
+        data.get('ingredient_id'), data.get('ander_id'),
+        data.get('van'), data.get('naar'), data.get('factor'))
     return jsonify(payload), status
 
 

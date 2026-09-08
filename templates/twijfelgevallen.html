@@ -32,79 +32,9 @@
         elk met een eigen verpakking. Kies welke naam blijft — de ander wordt een alias,
         zodat een volgende import er meteen goed uitkomt.
     </p>
-    {% if dubbel %}
-    <div class="space-y-2">
-        {% for paar in dubbel %}
-        <div class="dubbel-kaart bg-white border border-[#E8E4DC] rounded px-3 py-2.5"
-             data-sleutel="{{ paar.sleutel }}">
-            <div class="flex items-center gap-2 flex-wrap mb-2">
-                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded
-                             {{ 'bg-[#FAEEDA] text-[#854F0B]' if paar.reden == 'ah' else 'bg-[#F5F2ED] text-[#6B6B6B]' }}">
-                    {{ {'ah': 'AH-product', 'schrijfwijze': 'schrijfwijze', 'meervoud': 'meervoud of verkleinwoord'}[paar.reden] }}
-                </span>
-                <span class="text-xs text-[#6B6B6B]">{{ paar.bewijs }}</span>
-            </div>
-
-            {% if paar.eenheidsbotsing or paar.voorraadverschil %}
-            <div class="mb-2 rounded border border-[#E8C88A] bg-[#FDF6E7] px-2.5 py-2">
-                {% for regel in paar.eenheidsbotsing %}
-                <p class="text-xs text-[#854F0B]">⚠ {{ regel }}</p>
-                {% endfor %}
-                {% if paar.eenheidsbotsing %}
-                <p class="text-[11px] text-[#8A6A2F] mt-1">
-                    Die regels worden bij het samenvoegen vastgezet op wat ze bij hun eigen
-                    ingrediënt betekenden: één op één in de eenheid waarin het samengevoegde
-                    ingrediënt telt — kijk dus even of dat klopt. Rekent dat ingrediënt óók
-                    die teleenheid zelf nog om (1 stuks sjalot is 40 g), dan is er geen
-                    eenheid meer over die hij met rust laat; zo'n regel blijft staan zoals
-                    hij stond en telt voortaan zoals bij de naam die je houdt.
-                </p>
-                {% endif %}
-                {% if paar.voorraadverschil %}
-                <p class="text-xs text-[#854F0B]{{ ' mt-2' if paar.eenheidsbotsing }}">⌂ {{ paar.voorraadverschil }}</p>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            <div class="grid gap-2 sm:grid-cols-2">
-                {% for ing in paar.ingredienten %}
-                {% set ander = paar.ingredienten[1] if loop.first else paar.ingredienten[0] %}
-                <div class="border border-[#E8E4DC] rounded p-2.5 flex flex-col gap-1.5">
-                    <div class="font-medium text-sm text-[#2C2C2C]">{{ ing.naam }}</div>
-                    <div class="text-xs text-[#6B6B6B] leading-relaxed">
-                        {{ ing.recepten }}× in recepten{% if ing.preferred_unit %} · per {{ ing.preferred_unit }}{% endif %}
-                        {%- if ing.in_voorraad %} · op voorraad{% endif %}
-                        {%- if ing.verpakking %} · verpakking {{ ing.verpakking }}{% endif %}
-                        {%- if ing.aliassen > 1 %} · {{ ing.aliassen }} schrijfwijzen{% endif %}
-                        {% if ing.conversies %}<br>{{ ing.conversies | join(', ') }}
-                        {% else %}<br><span class="text-[#B4B2A9]">geen omrekening</span>{% endif %}
-                    </div>
-                    <button onclick="voegSamen({{ ing.id }}, {{ ander.id }}, this)"
-                            class="mt-auto text-xs px-2.5 py-1 rounded-full border border-[#8B4513] text-[#8B4513] hover:bg-[#FAF8F5]"
-                            title="Voeg samen onder deze naam">
-                        Houd “{{ ing.naam }}”
-                    </button>
-                    <span class="text-[11px] text-[#6B6B6B]">
-                        {{ ander.recepten }}
-                        {{ 'recept gaat' if ander.recepten == 1 else 'recepten gaan' }}
-                        over naar {{ ing.naam }}, “{{ ander.naam }}” wordt een alias
-                    </span>
-                </div>
-                {% endfor %}
-            </div>
-
-            <div class="mt-2 text-right">
-                <button onclick="houdApart({{ paar.ingredienten[0].id }}, {{ paar.ingredienten[1].id }}, this)"
-                        class="text-xs px-2 py-1 text-[#6B6B6B] hover:underline">
-                    Toch verschillend — niet meer vragen
-                </button>
-            </div>
-        </div>
-        {% endfor %}
+    <div id="dubbel-lijst">
+        {% include '_dubbel_kaarten.html' %}
     </div>
-    {% else %}
-    <p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
-    {% endif %}
 
     <!-- ── 2. Voorraadkandidaten ──────────────────────────────────────── -->
     <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mt-8 mb-1">
@@ -221,25 +151,86 @@ async function toPantry(id, btn) {
 }
 
 /** Zet de kaart op klaar: knoppen weg, resultaat blijft leesbaar staan. */
-function sluitKaart(btn, tekst) {
-    const kaart = btn.closest('.dubbel-kaart');
+function sluitKaart(kaartOfKnop, tekst, kleur) {
+    const kaart = kaartOfKnop.closest ? kaartOfKnop.closest('.dubbel-kaart') : null;
     if (!kaart) return;
-    kaart.querySelectorAll('button').forEach(b => b.remove());
-    kaart.classList.add('opacity-60');
+    kaart.querySelectorAll('button, input').forEach(b => b.remove());
+    kaart.classList.add('opacity-60', 'kaart-af');
     const mark = document.createElement('p');
-    mark.className = 'text-xs text-[#3B6D11] mt-1 whitespace-pre-line';
+    mark.className = `text-xs mt-1 whitespace-pre-line ${kleur || 'text-[#3B6D11]'}`;
     mark.textContent = tekst;
     kaart.appendChild(mark);
 }
 
+/** De twee ingredient-ids die op deze kaart staan. */
+function kaartIds(kaart) {
+    return (kaart.dataset.ids || '').split(',').map(Number).filter(Boolean);
+}
+
+/** De verse kaarten van de server, of null als die niet te halen zijn. */
+async function verseKaarten() {
+    try {
+        const resp = await fetch('/twijfelgevallen/dubbel');
+        if (!resp.ok) return null;
+        const houder = document.createElement('div');
+        houder.innerHTML = await resp.text();
+        return Array.from(houder.querySelectorAll('.dubbel-kaart'));
+    } catch (e) {
+        return null;   // offline: dan blijft staan wat er staat
+    }
+}
+
+/**
+ * Werk de kaarten bij die door deze klik veranderd zijn.
+ *
+ * Eén samenvoeging raakt meer dan één kaart: hetzelfde ingredient staat soms
+ * op twee voorstellen. Verdwijnt het, dan gaat die tweede kaart over een naam
+ * die niet meer bestaat — beide knoppen gaven daar een stille 404. We halen
+ * de bijgewerkte kaarten op en zetten ze op hun eigen plek terug, zodat de
+ * lijst niet verspringt terwijl je doorwerkt. Is er geen voorstel meer voor
+ * dat paar, dan zegt de kaart dat hij vervallen is.
+ */
+async function werkKaartenBij(verliezerId, winnaarId, verliezerNaam, winnaarNaam) {
+    const lijst = document.getElementById('dubbel-lijst');
+    if (!lijst) return;
+    const geraakt = Array.from(lijst.querySelectorAll('.dubbel-kaart')).filter(k => {
+        const ids = kaartIds(k);
+        return !k.classList.contains('kaart-af')
+               && (ids.includes(verliezerId) || ids.includes(winnaarId));
+    });
+    if (!geraakt.length) return;
+
+    const vers = await verseKaarten();
+    geraakt.forEach(kaart => {
+        const rest = kaartIds(kaart).filter(id => id !== verliezerId);
+        const nieuw = (vers || []).find(k => {
+            const ids = kaartIds(k);
+            return ids.includes(winnaarId) && rest.every(id => ids.includes(id));
+        });
+        if (nieuw) {
+            kaart.replaceWith(nieuw);
+        } else if (kaartIds(kaart).includes(verliezerId)) {
+            sluitKaart(kaart.querySelector('button') || kaart,
+                       `✗ vervallen: “${verliezerNaam}” is opgegaan in “${winnaarNaam}”`,
+                       'text-[#8A6A2F]');
+        }
+    });
+}
+
 async function voegSamen(winnaarId, verliezerId, btn) {
     btn.disabled = true;
+    const kaart = btn.closest('.dubbel-kaart');
+    // De AH-koppeling is een keuze op zich: welke naam je ook houdt, je zegt
+    // hier welk product er overblijft. Zonder keuze beslist de server zoals
+    // altijd — de koppeling van de naam die je houdt.
+    const gekozen = kaart ? kaart.querySelector('.ah-keuze input:checked') : null;
     let data;
     try {
         const resp = await fetch('/api/ingredienten/samenvoegen', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({winnaar_id: winnaarId, verliezer_id: verliezerId}),
+            body: JSON.stringify({winnaar_id: winnaarId, verliezer_id: verliezerId,
+                                  ah_van_id: gekozen ? Number(gekozen.value) : null}),
         });
         data = await resp.json();
     } catch (e) {
@@ -247,8 +238,14 @@ async function voegSamen(winnaarId, verliezerId, btn) {
         return;
     }
     // Buiten de try, anders slikt hij ook fouten in deze DOM-code op.
+    if (data && data.status === 'vervallen') {
+        // De kaart kan niet meer. Dat hoort hij te zeggen, niet stil te slikken.
+        sluitKaart(btn, `✗ ${data.message}`, 'text-[#8A6A2F]');
+        return;
+    }
     if (!data || data.status !== 'ok') {
         btn.disabled = false;
+        meldFout(btn, (data && data.message) || 'samenvoegen mislukt');
         return;
     }
     let tekst = `✓ ${data.recepten_verplaatst} recept(en) naar ${data.winnaar}; `
@@ -258,7 +255,60 @@ async function voegSamen(winnaarId, verliezerId, btn) {
     if (data.omgerekend && data.omgerekend.length) {
         tekst += `\nOmgerekend: ${data.omgerekend.join('; ')}`;
     }
+    if (data.ah_melding) {
+        tekst += `\n${data.ah_melding}`;
+    }
     sluitKaart(btn, tekst);
+    werkKaartenBij(data.verliezer_id, data.winnaar_id, data.verliezer, data.winnaar);
+}
+
+/** Een mislukking hoort op het scherm te komen, niet alleen in de console. */
+function meldFout(btn, tekst) {
+    const kaart = btn.closest('.dubbel-kaart');
+    if (!kaart) return;
+    let mark = kaart.querySelector('.kaart-fout');
+    if (!mark) {
+        mark = document.createElement('p');
+        mark.className = 'kaart-fout text-xs text-[#8B1A1A] mt-1';
+        kaart.appendChild(mark);
+    }
+    mark.textContent = `✗ ${tekst}`;
+}
+
+/** '1 bosje = 4 stuks': wat de gebruiker weet en de app niet mag verzinnen. */
+async function legOmrekeningVast(ingredientId, anderId, van, naar, btn) {
+    const vak = btn.closest('.omrekenvak');
+    const veld = vak ? vak.querySelector('input') : null;
+    if (!veld || !veld.value) return;
+    btn.disabled = true;
+    let data;
+    try {
+        const resp = await fetch('/api/ingredienten/omrekening', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ingredient_id: ingredientId, ander_id: anderId,
+                                  van: van, naar: naar, factor: veld.value}),
+        });
+        data = await resp.json();
+    } catch (e) {
+        btn.disabled = false;
+        return;
+    }
+    if (!data || data.status !== 'ok') {
+        btn.disabled = false;
+        meldFout(btn, (data && data.message) || 'omrekening niet opgeslagen');
+        return;
+    }
+    // De kaart opnieuw ophalen: de waarschuwing klopt niet meer en de
+    // omrekening hoort nu bij allebei onder 'geen omrekening' te staan.
+    const kaart = btn.closest('.dubbel-kaart');
+    const vers = await verseKaarten();
+    const nieuw = (vers || []).find(k => k.dataset.sleutel === kaart.dataset.sleutel);
+    if (nieuw) {
+        kaart.replaceWith(nieuw);
+    } else {
+        vak.remove();
+    }
 }
 
 async function houdApart(aId, bId, btn) {
@@ -275,8 +325,13 @@ async function houdApart(aId, bId, btn) {
         btn.disabled = false;
         return;
     }
+    if (data && data.status === 'vervallen') {
+        sluitKaart(btn, `✗ ${data.message}`, 'text-[#8A6A2F]');
+        return;
+    }
     if (!data || data.status !== 'ok') {
         btn.disabled = false;
+        meldFout(btn, (data && data.message) || 'niet opgeslagen');
         return;
     }
     sluitKaart(btn, '✓ blijven apart');

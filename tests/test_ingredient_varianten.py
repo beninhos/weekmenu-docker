@@ -13,7 +13,8 @@ from weekmenu.models import (
     VariantApart,
 )
 from weekmenu.services.ingredienten import (
-    markeer_apart, markeer_paar_apart, koppel_alias, samenvoeg_kandidaten, voeg_samen,
+    leg_omrekening_vast, markeer_apart, markeer_paar_apart, koppel_alias,
+    samenvoeg_kandidaten, voeg_samen,
 )
 from weekmenu.services.recipes import _resolve_or_create_ingredient
 from weekmenu.services.shopping import build_combined_shopping_list
@@ -1089,3 +1090,381 @@ def test_ah_scherm_wijst_naar_de_dubbelen(client, app):
 
     assert 'Nakijken' in body
     assert '#dubbel' in body
+
+
+# ── eenheden die de app niet kan verenigen ───────────────────────────────
+
+def _lente_ui_drietal():
+    """De echte situatie uit data/weekmenu.db, kaarten ah-6-128 en ah-6-362.
+
+    Drie schrijfwijzen aan hetzelfde AH-product, geen van drieën met een eigen
+    omrekening — en 'lente-uitjes' telt in bosjes waar de andere twee in stuks
+    tellen.
+    """
+    velden = dict(ah_product_id=169813, ah_product_name='AH Bosui',
+                  ah_pkg_qty=1.0, ah_pkg_unit='bosje', preferred_unit='stuks')
+    kop = _ing('lente-ui', display_name='Lente-Ui', **velden)
+    bosui = _ing('bosui', display_name='Bosui', **velden)
+    uitjes = _ing('lente-uitjes', display_name='lente-uitjes', **velden)
+    db.session.commit()
+    return kop, bosui, uitjes
+
+
+def _drietal_in_het_menu(kop, bosui, uitjes):
+    _in_het_menu(_recept('Wok', kop, 1, eenheid='stuks'))
+    _in_het_menu(_recept('Salade', bosui, 0.5, eenheid='stuks'))
+    _in_het_menu(_recept('Roerbak', uitjes, 1, eenheid='bosje'))
+
+
+def _uien_op_de_lijst():
+    return sorted((x['amount'], x['unit'])
+                  for x in build_combined_shopping_list(today=VANDAAG)['open']
+                  if 'ui' in x['name'].lower())
+
+
+def test_de_kandidaat_meldt_dat_bosje_en_stuks_niet_samenvallen(app):
+    """Gemeten op data/weekmenu.db: na de drie voorgestelde samenvoegingen
+    staat 'Lente-Ui' in week 37 twee keer op de lijst — 1 bosje naast 1,5
+    stuks. Precies wat deze functie belooft op te lossen, dus hoor je vóór de
+    klik te zien dat het hier niet gaat lukken."""
+    kop, bosui, uitjes = _lente_ui_drietal()
+    _drietal_in_het_menu(kop, bosui, uitjes)
+
+    paar = [p for p in samenvoeg_kandidaten()
+            if {i['naam'] for i in p['ingredienten']} == {'Lente-Ui', 'lente-uitjes'}][0]
+
+    assert paar['gespleten']
+    assert 'bosje' in paar['gespleten']['melding']
+    assert 'stuks' in paar['gespleten']['melding']
+    assert (paar['gespleten']['van'], paar['gespleten']['naar']) == ('bosje', 'stuks')
+
+
+def test_zonder_gespleten_eenheden_geen_melding(app):
+    """Allebei in stuks: die vallen na de samenvoeging gewoon samen."""
+    kop, bosui, _ = _lente_ui_drietal()
+    _in_het_menu(_recept('Wok', kop, 1, eenheid='stuks'))
+    _in_het_menu(_recept('Salade', bosui, 0.5, eenheid='stuks'))
+
+    paar = [p for p in samenvoeg_kandidaten()
+            if {i['naam'] for i in p['ingredienten']} == {'Lente-Ui', 'Bosui'}][0]
+
+    assert paar['gespleten'] is None
+
+
+def test_het_scherm_meldt_de_gespleten_eenheden_voor_je_klikt(client, app):
+    kop, bosui, uitjes = _lente_ui_drietal()
+    _drietal_in_het_menu(kop, bosui, uitjes)
+
+    body = client.get('/twijfelgevallen').get_data(as_text=True)
+
+    assert 'blijft na het samenvoegen twee regels' in body
+    assert '1 bosje =' in body
+
+
+def test_zonder_omrekening_blijven_het_twee_regels(app):
+    """De meting van vóór de fix, vastgelegd: samenvoegen alleen is hier niet
+    genoeg, want de app weet niet hoeveel stuks er in een bosje gaan."""
+    kop, bosui, uitjes = _lente_ui_drietal()
+    _drietal_in_het_menu(kop, bosui, uitjes)
+
+    voeg_samen(bosui.id, kop.id)
+    voeg_samen(uitjes.id, kop.id)
+
+    assert _uien_op_de_lijst() == [(1, 'bosje'), (1.5, 'stuks')]
+
+
+def test_een_opgegeven_omrekening_maakt_er_een_regel_van(app):
+    """De weg die de gebruiker wél heeft: hij weet wat een bosje is, de app
+    niet. Legt hij dat ter plekke vast, dan vallen de regels wél samen."""
+    kop, bosui, uitjes = _lente_ui_drietal()
+    _drietal_in_het_menu(kop, bosui, uitjes)
+
+    payload, code = leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
+
+    assert code == 200 and payload['status'] == 'ok'
+    voeg_samen(bosui.id, kop.id)
+    voeg_samen(uitjes.id, kop.id)
+    assert _uien_op_de_lijst() == [(5.5, 'stuks')]
+
+
+def test_de_omrekening_geldt_ook_als_je_de_andere_naam_houdt(app):
+    """Het is een uitspraak over het product, niet over één van de twee
+    namen: welke naam je ook houdt, een bosje blijft vier stuks."""
+    kop, bosui, uitjes = _lente_ui_drietal()
+    _drietal_in_het_menu(kop, bosui, uitjes)
+
+    leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
+
+    voeg_samen(bosui.id, kop.id)
+    voeg_samen(kop.id, uitjes.id)          # nu wint 'lente-uitjes'
+    assert _uien_op_de_lijst() == [(5.5, 'stuks')]
+
+
+def test_een_omrekening_zonder_bruikbaar_getal_wordt_geweigerd(app):
+    kop, _, uitjes = _lente_ui_drietal()
+
+    for onzin in ('', '0', 'nan', 'twee'):
+        payload, code = leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', onzin)
+        assert code == 400, onzin
+    assert IngredientUnitConversion.query.count() == 0
+
+
+def test_endpoint_legt_de_omrekening_vast(client, app):
+    kop, _, uitjes = _lente_ui_drietal()
+
+    resp = client.post('/api/ingredienten/omrekening',
+                       json={'ingredient_id': kop.id, 'ander_id': uitjes.id,
+                             'van': 'bosje', 'naar': 'stuks', 'factor': '4'})
+
+    assert resp.status_code == 200
+    rijen = {(c.ingredient_id, c.from_unit, c.to_unit, c.factor)
+             for c in IngredientUnitConversion.query.all()}
+    assert rijen == {(kop.id, 'bosje', 'stuks', 4.0),
+                     (uitjes.id, 'bosje', 'stuks', 4.0)}
+
+
+# ── een kaart die niet meer kan ──────────────────────────────────────────
+
+def test_een_achterhaalde_kaart_zegt_dat_het_voorstel_vervallen_is(app):
+    """Gemeten op data/weekmenu.db: drie ingredienten staan op twee kaarten.
+    Houd je op de eerste kaart de ándere naam, dan is het ingredient van de
+    tweede kaart weg en gaven beide knoppen daar een stille 404."""
+    kop, bosui, uitjes = _lente_ui_drietal()
+    kop_id = kop.id
+
+    voeg_samen(kop.id, bosui.id)           # 'Lente-Ui' gaat op in 'Bosui'
+    payload, code = voeg_samen(uitjes.id, kop_id)
+
+    assert code == 404
+    assert payload['status'] == 'vervallen'
+    assert 'vervallen' in payload['message']
+
+
+def test_de_kaarten_zijn_los_op_te_halen_om_ze_te_verversen(client, app):
+    kop, bosui, uitjes = _lente_ui_drietal()
+
+    voeg_samen(kop.id, bosui.id)
+    body = client.get('/twijfelgevallen/dubbel').get_data(as_text=True)
+
+    assert 'Lente-Ui' not in body               # die naam bestaat niet meer
+    assert 'Bosui' in body and 'lente-uitjes' in body
+    assert '<html' not in body                  # alleen de kaarten
+
+
+def test_de_kaart_draagt_de_ids_zodat_het_scherm_hem_kan_bijwerken(client, app):
+    kop, bosui, uitjes = _lente_ui_drietal()
+
+    body = client.get('/twijfelgevallen').get_data(as_text=True)
+
+    assert f'data-ids="{kop.id},{bosui.id}"' in body
+
+
+# ── twee verschillende AH-producten ──────────────────────────────────────
+
+def _limoenpaar():
+    """De echte situatie uit data/weekmenu.db, kaart meervoud-156-420."""
+    los = _ing('limoen', display_name='limoen', preferred_unit='stuks',
+               ah_product_id=231211, ah_product_name='AH Limoen',
+               ah_pkg_qty=1.0, ah_pkg_unit='stuks', ah_product_price='0,79')
+    netje = _ing('limoenen', display_name='limoenen', preferred_unit='stuks',
+                 ah_product_id=519646, ah_product_name='AH Limoenen',
+                 ah_pkg_qty=4.0, ah_pkg_unit='stuks', ah_product_price='1,29')
+    db.session.commit()
+    return los, netje
+
+
+def test_de_kandidaat_meldt_twee_verschillende_ah_producten(app):
+    los, netje = _limoenpaar()
+
+    paar = samenvoeg_kandidaten()[0]
+
+    assert 'AH Limoen' in paar['ah_verschil']['melding']
+    assert 'AH Limoenen' in paar['ah_verschil']['melding']
+    assert '4 stuks' in paar['ah_verschil']['melding']
+    assert paar['ah_verschil']['keuze'] == [los.id, netje.id]
+
+
+def test_zonder_verschil_in_de_ah_koppeling_geen_melding(app):
+    winnaar, verliezer = _knoflookpaar()       # allebei hetzelfde AH-product
+
+    assert samenvoeg_kandidaten()[0]['ah_verschil'] is None
+
+
+def test_de_koppeling_van_de_verliezer_kan_blijven(app):
+    """Gemeten op data/weekmenu.db: week 37 ging van 1 netje van 4 naar 2
+    losse limoenen, omdat de koppeling van de verliezer stil werd weggegooid."""
+    los, netje = _limoenpaar()
+    _in_het_menu(_recept('Ceviche', los, 2, eenheid='stuks'))
+    netje_id = netje.id
+
+    voeg_samen(netje.id, los.id, ah_van_id=netje_id)
+
+    ing = Ingredient.query.get(los.id)
+    assert (ing.ah_product_id, ing.ah_pkg_qty) == (519646, 4.0)
+    regel = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+             if 'limoen' in x['name'].lower()][0]
+    assert regel['qty'] == 1
+
+
+def test_zonder_keuze_blijft_de_koppeling_van_de_naam_die_je_houdt(app):
+    los, netje = _limoenpaar()
+
+    voeg_samen(netje.id, los.id)
+
+    assert Ingredient.query.get(los.id).ah_product_id == 231211
+
+
+def test_het_antwoord_vertelt_welke_ah_koppeling_bleef(app):
+    los, netje = _limoenpaar()
+
+    payload, _ = voeg_samen(netje.id, los.id)
+
+    assert 'AH Limoen' in payload['ah_melding']
+    assert 'AH Limoenen' in payload['ah_melding']
+
+
+def _gehakt_drieluik(nummer):
+    """De echte situatie uit data/weekmenu.db, kaarten schrijfwijze-165-189
+    en schrijfwijze-165-410: de koploper heeft geen AH-koppeling, de twee
+    anderen elk een andere."""
+    kop = _ing(f'half-om-half gehakt {nummer}', display_name=f'half-om-half gehakt {nummer}',
+               preferred_unit='g', category='Vlees, Vis & Vega')
+    klein = _ing(f'half-om-halfgehakt {nummer}', display_name=f'half-om-halfgehakt {nummer}',
+                 preferred_unit='g', category='Vlees, Vis & Vega',
+                 ah_product_id=561331, ah_product_name='AH Gemengd gehakt 300 g',
+                 ah_pkg_qty=300.0, ah_pkg_unit='g', ah_product_price='3,59')
+    groot = _ing(f'half om half gehakt {nummer}', display_name=f'Half om half gehakt {nummer}',
+                 preferred_unit='g', category='Vlees, Vis & Vega',
+                 ah_product_id=561333, ah_product_name='AH Gemengd gehakt 500 g',
+                 ah_pkg_qty=500.0, ah_pkg_unit='g', ah_product_price='2,29')
+    db.session.commit()
+    return kop, klein, groot
+
+
+def _koppeling(ing_id):
+    ing = Ingredient.query.get(ing_id)
+    return ing.ah_product_id, ing.ah_pkg_qty, ing.ah_product_price
+
+
+def test_dezelfde_keuze_geeft_in_beide_volgordes_hetzelfde_resultaat(app):
+    """Gemeten op data/weekmenu.db: dezelfde twee klikken in een andere
+    volgorde gaven een ander AH-product — onzichtbaar, want de koploper had
+    zelf geen koppeling en erfde die van wie het eerst langskwam."""
+    kop, klein, groot = _gehakt_drieluik(1)
+    voeg_samen(klein.id, kop.id, ah_van_id=klein.id)
+    voeg_samen(groot.id, kop.id, ah_van_id=groot.id)
+    eerst_klein = _koppeling(kop.id)
+
+    kop2, klein2, groot2 = _gehakt_drieluik(2)
+    voeg_samen(groot2.id, kop2.id, ah_van_id=groot2.id)
+    voeg_samen(klein2.id, kop2.id, ah_van_id=kop2.id)   # kop2 draagt nu #561333
+    andersom = _koppeling(kop2.id)
+
+    assert eerst_klein == andersom == (561333, 500.0, '2,29')
+
+
+def test_endpoint_geeft_de_ah_keuze_door(client, app):
+    los, netje = _limoenpaar()
+
+    resp = client.post('/api/ingredienten/samenvoegen',
+                       json={'winnaar_id': los.id, 'verliezer_id': netje.id,
+                             'ah_van_id': netje.id})
+
+    assert resp.status_code == 200
+    assert Ingredient.query.get(los.id).ah_product_id == 519646
+
+
+# ── weggeklikte weekregels komen terug ───────────────────────────────────
+
+def test_de_kaart_meldt_dat_weggeklikte_weekregels_terugkomen(app):
+    """De besluiten van de verliezer vervallen bij het samenvoegen (zie
+    _wis_weekbesluiten). Dat is een bewuste keuze, maar de gebruiker moet hem
+    zien aankomen: op data/weekmenu.db komen er zo zeven weggeklikte regels
+    terug op de lijst."""
+    winnaar, verliezer = _knoflookpaar()
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(ShoppingListExclusion(year=jaar, week_number=week,
+                                         ingredient_id=verliezer.id))
+    db.session.add(ShoppingListOverride(year=jaar, week_number=week,
+                                        ingredient_id=verliezer.id, qty=3))
+    db.session.commit()
+
+    paar = samenvoeg_kandidaten()[0]
+
+    assert 'Knoflookteen' in paar['weekbesluiten']
+    assert 'weggeklikt' in paar['weekbesluiten']
+
+
+def test_zonder_weekbesluiten_niets_te_melden(app):
+    _knoflookpaar()
+
+    assert samenvoeg_kandidaten()[0]['weekbesluiten'] == ''
+
+
+def test_het_scherm_meldt_de_weekbesluiten_voor_je_klikt(client, app):
+    winnaar, verliezer = _knoflookpaar()
+    jaar, week = _week_van(VANDAAG)
+    db.session.add(ShoppingListExclusion(year=jaar, week_number=week,
+                                         ingredient_id=verliezer.id))
+    db.session.commit()
+
+    body = client.get('/twijfelgevallen').get_data(as_text=True)
+
+    assert 'weggeklikt' in body
+
+
+def test_de_omrekening_is_ook_het_antwoord_op_de_maatvraag(app):
+    """Anders valt de verpakkingsberekening terug op afronden: de regels
+    vallen wel samen tot 5,5 stuks, maar de verpakking telt in bosjes en
+    bestelt er zes. Gemeten op een kopie van data/weekmenu.db: 46
+    verpakkingen werden er zo 48."""
+    kop, bosui, uitjes = _lente_ui_drietal()
+    _drietal_in_het_menu(kop, bosui, uitjes)
+
+    leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
+
+    assert (Ingredient.query.get(kop.id).ah_conv_factor,
+            Ingredient.query.get(kop.id).ah_conv_unit) == (4.0, 'stuks')
+    voeg_samen(bosui.id, kop.id)
+    voeg_samen(uitjes.id, kop.id)
+    regel = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
+             if 'ui' in x['name'].lower()][0]
+    assert (regel['amount'], regel['unit'], regel['qty']) == (5.5, 'stuks', 2)
+
+
+def test_een_bestaand_antwoord_op_de_maatvraag_blijft_staan(app):
+    """De omrekening bij het samenvoegen mag geen keuze omgooien die ergens
+    anders met opzet is gemaakt."""
+    kop, _, uitjes = _lente_ui_drietal()
+    kop.ah_conv_factor, kop.ah_conv_unit = 6.0, 'stuks'
+    db.session.commit()
+
+    leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
+
+    assert Ingredient.query.get(kop.id).ah_conv_factor == 6.0
+    assert Ingredient.query.get(uitjes.id).ah_conv_factor == 4.0
+
+
+def test_zonder_verpakking_in_die_eenheid_blijft_de_maat_leeg(app):
+    """'1 bosje = 4 stuks' zegt niets over een verpakking die in grammen
+    telt; daar hoort de maatvraag niet stilletjes op ingevuld te worden."""
+    kop, _, uitjes = _lente_ui_drietal()
+    for ing in (kop, uitjes):
+        ing.ah_pkg_qty, ing.ah_pkg_unit = 22.0, 'g'
+    db.session.commit()
+
+    leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
+
+    assert Ingredient.query.get(kop.id).ah_conv_factor is None
+
+
+def test_ook_toch_apart_zegt_dat_het_voorstel_vervallen_is(app):
+    """Alle knoppen op een achterhaalde kaart horen hetzelfde te zeggen."""
+    kop, bosui, uitjes = _lente_ui_drietal()
+    kop_id = kop.id
+
+    voeg_samen(kop.id, bosui.id)
+    payload, code = markeer_paar_apart(kop_id, uitjes.id)
+
+    assert code == 404
+    assert payload['status'] == 'vervallen'

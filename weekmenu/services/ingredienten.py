@@ -29,7 +29,7 @@ werk in deze module naartoe:
 import re
 from collections import defaultdict
 
-from weekmenu.constants import _UNIT_CONVERSIONS
+from weekmenu.constants import _MEETEENHEDEN, _UNIT_BUY_ONE, _UNIT_CONVERSIONS
 from weekmenu.extensions import db
 from weekmenu.models import (
     CustomShoppingIngredient, Ingredient, IngredientAlias,
@@ -40,6 +40,7 @@ from weekmenu.models import (
 from weekmenu.services.units import (
     _convert_unit_for_agg, _norm_unit, _normalize_ingredient,
 )
+from weekmenu.services.verpakking import _getal
 
 
 # AH-velden verhuizen als blok: een halve koppeling (id zonder verpakking) is
@@ -93,6 +94,15 @@ _WEEKBESLUITEN = (ShoppingListExclusion, ShoppingListOverride)
 # conversietabel op te vinden.
 _LEESSLEUTEL = -1
 
+# Eenheden die zelf een bundel tellingen zijn: een bosje is een handvol
+# stuks, een netje een aantal limoenen. Alleen gebruikt om de vraag '1 … is
+# hoeveel …' de goede kant op te zetten; zie _grofheid.
+_BUNDELEENHEDEN = {
+    'bos', 'bosje', 'bossen', 'bosjes', 'tros', 'krop', 'struik',
+    'netje', 'net', 'zak', 'zakje', 'doos', 'doosje', 'bakje', 'pak', 'pakje',
+    'pot', 'potje', 'blik', 'blikje', 'fles', 'rol', 'tray', 'krat',
+}
+
 # Meervoudsuitgangen die in het Nederlands niets aan het product veranderen.
 # Bewust géén bijvoeglijke naamwoorden: 'witte bonen' en 'zwarte bonen' zijn
 # echt verschillende producten en mogen nooit als kandidaat opduiken.
@@ -106,13 +116,17 @@ def variantsleutel(naam):
 
 # ── samenvoegen ──────────────────────────────────────────────────────────
 
-def voeg_samen(verliezer_id, winnaar_id):
+def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
     """Voeg de verliezer op in de winnaar. Geeft (payload, statuscode).
 
     Alles gebeurt in één transactie: gaat er onderweg iets mis, dan staat de
     database er precies zo bij als ervoor. Een half samengevoegd ingredient —
     receptregels verhuisd maar de rij nog aanwezig — zou de boodschappenlijst
     stiller kapotmaken dan het probleem dat we oplossen.
+
+    `ah_van_id` is het antwoord op de vraag welke AH-koppeling er overblijft
+    als de twee er allebei een hebben. Zonder antwoord blijft die van de naam
+    die je houdt; zie _erf_velden.
     """
     try:
         verliezer_id, winnaar_id = int(verliezer_id or 0), int(winnaar_id or 0)
@@ -122,10 +136,23 @@ def voeg_samen(verliezer_id, winnaar_id):
     if verliezer_id == winnaar_id:
         return {'status': 'error', 'message': 'een ingredient kan niet in zichzelf op'}, 400
 
+    try:
+        ah_van_id = int(ah_van_id) if ah_van_id else None
+    except (TypeError, ValueError):
+        ah_van_id = None
+    if ah_van_id not in (verliezer_id, winnaar_id):
+        ah_van_id = None
+
     verliezer = Ingredient.query.get(verliezer_id)
     winnaar = Ingredient.query.get(winnaar_id)
     if not verliezer or not winnaar:
-        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+        # De kaart is achterhaald: een eerdere klik heeft dit ingredient al
+        # opgeruimd. Een gewone foutmelding zou het scherm alleen de knop
+        # laten terugzetten; met een eigen status kan de kaart zichzelf
+        # bijwerken in plaats van stil niets te doen.
+        return {'status': 'vervallen',
+                'message': 'een van deze twee ingrediënten bestaat niet meer — '
+                           'dit voorstel is vervallen'}, 404
 
     verliezer_naam = verliezer.display
     verliezer_canoniek = verliezer.name
@@ -161,7 +188,7 @@ def voeg_samen(verliezer_id, winnaar_id):
             samenvoegen=lambda blijft, gaat: setattr(
                 blijft, 'amount', (blijft.amount or 0) + (gaat.amount or 0)))
 
-        _erf_velden(verliezer, winnaar)
+        ah_melding = _erf_velden(verliezer, winnaar, ah_van_id)
 
         # Het besluit 'deze twee zijn apart' is met deze klik achterhaald.
         _wis_apart_tussen(verliezer, winnaar)
@@ -180,9 +207,13 @@ def voeg_samen(verliezer_id, winnaar_id):
         'status': 'ok',
         'winnaar_id': winnaar.id,
         'winnaar': winnaar.display,
+        # Het id van de verliezer erbij, zodat het scherm de andere kaarten
+        # kan opzoeken die hem noemen en niet meer kunnen.
+        'verliezer_id': verliezer_id,
         'verliezer': verliezer_naam,
         'recepten_verplaatst': verplaatst,
         'omgerekend': omgerekend,
+        'ah_melding': ah_melding,
     }, 200
 
 
@@ -492,15 +523,69 @@ def _verhuis_unieke_rijen(model, sleutelvelden, verliezer_id, winnaar_id, samenv
             db.session.delete(rij)
 
 
-def _erf_velden(verliezer, winnaar):
-    """Wat de winnaar mist en de verliezer wel heeft, gaat mee."""
-    if not winnaar.ah_product_id and verliezer.ah_product_id:
+def _erf_velden(verliezer, winnaar, ah_van_id=None):
+    """Wat de winnaar mist en de verliezer wel heeft, gaat mee.
+
+    De AH-koppeling is de uitzondering waar een keuze bij hoort. 'Dit is
+    hetzelfde product' zegt niets over wélk schap je bedoelt: 'limoen' hangt
+    aan een losse limoen van € 0,79 en 'limoenen' aan een netje van vier van
+    € 1,29. Wie zomaar die van de winnaar houdt, gooit de andere weg zonder
+    het te laten zien — gemeten op data/weekmenu.db ging week 37 daarmee van
+    één netje naar twee losse limoenen, en gaven dezelfde twee klikken in een
+    andere volgorde een ander product.
+
+    Daarom vraagt de kaart het (zie _ah_verschil) en beslist `ah_van_id` het:
+    het ingredient waarvan de koppeling overblijft. Dat is een uitspraak over
+    het product, niet over een naam, dus komt er in beide volgordes hetzelfde
+    uit zolang je hetzelfde product aanwijst.
+
+    Zonder antwoord blijft de koppeling van de naam die je houdt — en heeft
+    die er geen, dan erft hij die van de verliezer: een halve koppeling
+    weggooien maakt de lijst alleen maar dommer.
+
+    Geeft terug wat er met de koppelingen gebeurd is, als tekst voor de
+    bevestiging op het scherm.
+    """
+    neem_over = (verliezer.ah_product_id
+                 and (ah_van_id == verliezer.id or not winnaar.ah_product_id))
+    melding = _ah_melding(verliezer, winnaar, neem_over)
+    if neem_over:
         for veld in _AH_VELDEN:
             setattr(winnaar, veld, getattr(verliezer, veld))
 
     for veld in ('preferred_unit', 'bron'):
         if not getattr(winnaar, veld) and getattr(verliezer, veld):
             setattr(winnaar, veld, getattr(verliezer, veld))
+    return melding
+
+
+def _ah_melding(verliezer, winnaar, neem_over):
+    """In gewone taal welke AH-koppeling er overblijft, of '' als er niets speelt."""
+    if verliezer.ah_product_id == winnaar.ah_product_id:
+        return ''
+    if neem_over and not winnaar.ah_product_id:
+        return (f'De AH-koppeling van ‘{verliezer.display}’ '
+                f'({_ah_omschrijving(verliezer)}) gaat mee naar '
+                f'‘{winnaar.display}’.')
+    blijft, vervalt = (verliezer, winnaar) if neem_over else (winnaar, verliezer)
+    if not vervalt.ah_product_id:
+        return ''
+    return (f'AH-koppeling: ‘{winnaar.display}’ krijgt '
+            f'{_ah_omschrijving(blijft)}; die van ‘{vervalt.display}’ '
+            f'({_ah_omschrijving(vervalt)}) vervalt.')
+
+
+def _ah_omschrijving(ing):
+    """'AH Limoenen (#519646, verpakking 4 stuks, € 1,29)'."""
+    if not ing.ah_product_id:
+        return 'geen AH-koppeling'
+    deel = [f'#{ing.ah_product_id}']
+    if ing.ah_pkg_qty and ing.ah_pkg_unit:
+        deel.append(f'verpakking {ing.ah_pkg_qty:g} {ing.ah_pkg_unit}')
+    if ing.ah_product_price:
+        deel.append(f'€ {ing.ah_product_price}')
+    naam = ing.ah_product_name or 'AH-product'
+    return f"{naam} ({', '.join(deel)})"
 
 
 def _wis_apart_tussen(verliezer, winnaar):
@@ -523,6 +608,80 @@ def _leg_alias_vast(tekst, ingredient_id):
         bestaand.ingredient_id = ingredient_id
     else:
         db.session.add(IngredientAlias(alias=sleutel, ingredient_id=ingredient_id))
+
+
+# ── de omrekening die de app zelf niet kan verzinnen ─────────────────────
+
+def leg_omrekening_vast(ingredient_id, ander_id, van, naar, factor):
+    """'1 bosje is vier stuks': wat jij weet en de app niet.
+
+    Zonder zo'n regel blijven twee eenheden na het samenvoegen twee regels op
+    de boodschappenlijst — precies wat het samenvoegen moest oplossen. De app
+    mag er zelf niets voor verzinnen: hoeveel bosuitjes er in een bosje gaan
+    weet alleen jij. Zie _gespleten_eenheden voor de vraag die hierbij hoort.
+
+    De regel komt bij allebei de ingredienten te staan, want het is een
+    uitspraak over het PRODUCT en niet over een van de twee namen. Zo krijg je
+    dezelfde lijst welke naam je ook houdt, en klopt hij ook als je het paar
+    daarna toch apart laat.
+    """
+    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    ander = Ingredient.query.get(ander_id) if ander_id else None
+    if not ing or not ander:
+        return {'status': 'vervallen',
+                'message': 'een van deze twee ingrediënten bestaat niet meer — '
+                           'dit voorstel is vervallen'}, 404
+
+    van, naar = _norm_unit(van), _norm_unit(naar)
+    if not van or not naar or van == naar:
+        return {'status': 'error', 'message': 'twee verschillende eenheden graag'}, 400
+    if _UNIT_CONVERSIONS.get((van, naar)):
+        return {'status': 'error',
+                'message': f'‘{van}’ en ‘{naar}’ rekent de app zelf al om'}, 400
+
+    getal = _getal(factor)
+    if getal is None or getal <= 0:
+        return {'status': 'error', 'message': 'geen bruikbaar getal'}, 400
+
+    # Eén rij per ingredient: from_unit is uniek per ingredient, en dezelfde
+    # twee ids twee keer zou de tweede rij op de database laten stuklopen.
+    betrokken = [ing] if ing.id == ander.id else [ing, ander]
+    for i in betrokken:
+        if IngredientUnitConversion.query.filter_by(
+                ingredient_id=i.id, from_unit=van).first():
+            return {'status': 'error',
+                    'message': f'er staat al een omrekening voor ‘{van}’ bij '
+                               f'‘{i.display}’ — ververs de pagina'}, 400
+
+    for i in betrokken:
+        db.session.add(IngredientUnitConversion(
+            ingredient_id=i.id, from_unit=van, to_unit=naar, factor=getal,
+            reasoning='met de hand opgegeven bij het samenvoegen'))
+        _ook_de_verpakking(i, van, naar, getal)
+    db.session.commit()
+    return {'status': 'ok', 'van': van, 'naar': naar, 'factor': getal}, 200
+
+
+def _ook_de_verpakking(ing, van, naar, factor):
+    """Is `van` de verpakkingseenheid, dan is dit ook het antwoord op de maatvraag.
+
+    Zonder deze stap gaat de boodschappenlijst er juist op achteruit. De regels
+    vallen dan wel samen — 1 bosje plus 1,5 stuks wordt 5,5 stuks — maar de
+    verpakking telt in bosjes en weet nog steeds niet hoeveel stuks daarin
+    gaan, dus valt hij terug op afronden en bestelt zes bosjes. Gemeten op een
+    kopie van data/weekmenu.db: 46 verpakkingen werden er zo 48.
+
+    'Eén bosje is vier stuks' is precies de vraag die /ah-producten stelt en in
+    ah_conv_factor bewaart. Hetzelfde antwoord, dus zetten we het daar ook neer
+    — maar alleen als de gebruiker het over déze verpakking heeft en er nog
+    geen antwoord staat: een bestaand antwoord overschrijven zou een keuze
+    ongevraagd omgooien.
+    """
+    if _norm_unit(ing.ah_pkg_unit) != van or ing.ah_conv_factor:
+        return
+    ing.ah_conv_factor, ing.ah_conv_unit = factor, naar
+    for rij in MaatOverslaan.query.filter_by(ingredient_id=ing.id, eenheid=naar).all():
+        db.session.delete(rij)
 
 
 # ── 'zelfde product' en 'toch apart' ─────────────────────────────────────
@@ -586,7 +745,11 @@ def markeer_paar_apart(a_id, b_id):
     a = Ingredient.query.get(a_id) if a_id else None
     b = Ingredient.query.get(b_id) if b_id else None
     if not a or not b:
-        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+        # Net als bij voeg_samen: de kaart is achterhaald, en dat hoort hij te
+        # zeggen in plaats van de knop stil terug te zetten.
+        return {'status': 'vervallen',
+                'message': 'een van deze twee ingrediënten bestaat niet meer — '
+                           'dit voorstel is vervallen'}, 404
     if a.id == b.id:
         return {'status': 'error', 'message': 'twee verschillende ingredienten nodig'}, 400
 
@@ -655,6 +818,15 @@ def samenvoeg_kandidaten():
     ).group_by(IngredientAlias.ingredient_id).all():
         aliassen[rij[0]] = rij[1]
 
+    # Weekbesluiten per ingredient, in één telling: de kaart moet melden dat
+    # de besluiten van de verliezer vervallen (zie _wis_weekbesluiten).
+    besluiten = defaultdict(lambda: [0, 0])
+    for stand, model in enumerate(_WEEKBESLUITEN):
+        for rij in db.session.query(
+                model.ingredient_id, db.func.count(model.id)
+        ).group_by(model.ingredient_id).all():
+            besluiten[rij[0]][stand] = rij[1]
+
     apart = apart_paren()
     gezien = set()
     paren = []
@@ -676,6 +848,9 @@ def samenvoeg_kandidaten():
                 'reden': reden,
                 'bewijs': bewijs,
                 'eenheidsbotsing': _eenheidsbotsingen(kop, ander, tabellen, gebruikt),
+                'gespleten': _gespleten_eenheden(kop, ander, tabellen, gebruikt),
+                'ah_verschil': _ah_verschil(kop, ander),
+                'weekbesluiten': _weekbesluitmelding(kop, ander, besluiten),
                 'voorraadverschil': _voorraadverschil(kop, ander, voorraad),
                 'ingredienten': [
                     _kandidaat(per_id[i.id], recepten, voorraad, conversies, aliassen)
@@ -728,6 +903,139 @@ def _eenheidsbotsingen(a, b, tabellen, gebruikt):
             f"{_toon_lezing(eenheid, a_lezing)}, bij {b.display} is 1 {eenheid} "
             f"{_toon_lezing(eenheid, b_lezing)}")
     return botsingen
+
+
+def _gespleten_eenheden(a, b, tabellen, gebruikt):
+    """Eenheden die ook ná het samenvoegen twee regels blijven.
+
+    Dit is de belofte van de hele functie, en precies waar hij het stilst
+    breekt. Gemeten op data/weekmenu.db: 'bosui', 'lente-ui' en 'lente-uitjes'
+    zijn hetzelfde product, maar de een telt in stuks en de ander in bosjes.
+    Na alle drie de voorgestelde samenvoegingen stond 'Lente-Ui' in week 37
+    alsnog twee keer op de lijst — 1 bosje naast 1,5 stuks — met twee
+    verpakkingen. _eenheidsbotsingen zag daar niets: die kijkt alleen naar
+    ingredient_unit_conversion, en die rijen zijn er bij deze drie niet.
+
+    De vraag hier is een andere: welke eenheden houdt het samengevoegde
+    ingredient straks over? We lezen elke eenheid die echt in regels staat
+    zoals de boodschappenlijst hem straks zal lezen — met de conversietabel
+    van de twee samen en de voorkeurseenheid die overblijft. Komen daar meer
+    eenheden uit, dan worden dat meer regels.
+
+    Eén uitzondering: eenheden waarvan je er altijd één koopt (gram, milliliter,
+    eetlepels) smelt de lijst zelf al samen tot één regel, zie _UNIT_BUY_ONE in
+    _build_shopping_dict. Daar valt dus niets te melden.
+
+    Verzinnen doen we niets: hoeveel bosuitjes er in een bosje gaan weet alleen
+    de gebruiker. Bij precies twee eenheden vraagt de kaart het hem, en
+    leg_omrekening_vast zet het antwoord neer.
+    """
+    samen_conv = dict(tabellen.get(b.id, {}))
+    samen_conv.update(tabellen.get(a.id, {}))
+    samen_voorkeur = a.preferred_unit or b.preferred_unit
+
+    uit = {}
+    for eenheid in sorted(gebruikt.get(a.id, set()) | gebruikt.get(b.id, set())):
+        if not eenheid:
+            continue
+        uit.setdefault(_lees(eenheid, 1.0, samen_conv, samen_voorkeur)[0], eenheid)
+
+    if len(uit) < 2 or all(e in _UNIT_BUY_ONE for e in uit):
+        return None
+
+    eenheden = sorted(uit)
+    # De vraag gaat van grof naar fijn: '1 bosje is hoeveel stuks' kan een mens
+    # beantwoorden, '1 gram is hoeveel stuks' niet. Tellen de twee even fijn
+    # ('stuks' naast 'teen'), dan wint de eenheid waarin het samengevoegde
+    # ingredient toch al telt.
+    naar = min(eenheden, key=lambda e: (_grofheid(e), e != samen_voorkeur, e))
+    van = [e for e in eenheden if e != naar]
+    melding = (f'‘{"’ en ‘".join(eenheden)}’ vallen niet samen: het blijft na '
+               f'het samenvoegen twee regels op de boodschappenlijst, elk met '
+               f'een eigen verpakking. De app weet niet hoeveel {naar} er in '
+               f'één {van[0]} gaan.')
+    if len(eenheden) > 2:
+        melding = (f'‘{"’, ‘".join(eenheden)}’ vallen niet samen: dat blijven '
+                   f'na het samenvoegen evenveel regels op de boodschappenlijst.')
+    return {'melding': melding,
+            'van': van[0] if len(eenheden) == 2 else '',
+            'naar': naar if len(eenheden) == 2 else ''}
+
+
+def _grofheid(eenheid):
+    """Hoe groot de eenheid is: 0 meten, 1 tellen, 2 een bundel van tellingen.
+
+    Alleen om de vraag de goede kant op te zetten. Gram is de fijnste maat die
+    er is, een bosje de grofste: '1 bosje is vier stuks' en '1 stuks is 150 g'
+    zijn te beantwoorden, andersom niet.
+    """
+    if eenheid in _MEETEENHEDEN:
+        return 0
+    return 2 if eenheid in _BUNDELEENHEDEN else 1
+
+
+def _ah_verschil(a, b):
+    """Hangen deze twee aan verschillende AH-producten, dan hoor je te kiezen.
+
+    'Dit is hetzelfde product' zegt niets over welk schap je bedoelt. Gemeten
+    op data/weekmenu.db: 'limoen' hangt aan een losse limoen en 'limoenen' aan
+    een netje van vier. Wie de koppeling van de verliezer stil weggooit maakt
+    van één netje twee losse limoenen — duurder, en onzichtbaar.
+
+    `keuze` bevat de twee ingredient-ids als er echt iets te kiezen valt; heeft
+    maar één kant een koppeling, dan gaat die hoe dan ook mee en is er alleen
+    iets te melden. Zie _erf_velden voor wat er met het antwoord gebeurt.
+    """
+    if a.ah_product_id == b.ah_product_id:
+        return None
+    if a.ah_product_id and b.ah_product_id:
+        return {
+            'melding': (f'Twee verschillende AH-producten: ‘{a.display}’ hangt '
+                        f'aan {_ah_omschrijving(a)}, ‘{b.display}’ aan '
+                        f'{_ah_omschrijving(b)}. Er blijft er één over — kies '
+                        f'welke, want dat bepaalt hoeveel verpakkingen de lijst '
+                        f'straks bestelt.'),
+            'keuze': [a.id, b.id],
+        }
+    heeft, mist = (a, b) if a.ah_product_id else (b, a)
+    return {
+        'melding': (f'Alleen ‘{heeft.display}’ is aan een AH-product gekoppeld '
+                    f'({_ah_omschrijving(heeft)}); ‘{mist.display}’ niet. Die '
+                    f'koppeling gaat mee, welke naam je ook houdt.'),
+        'keuze': [],
+    }
+
+
+def _weekbesluitmelding(a, b, besluiten):
+    """Wat er met 'deze week even niet' gebeurt, vóór je klikt.
+
+    De weekbesluiten van de verliezer vervallen; dat is een bewuste keuze en
+    staat uitgelegd bij _wis_weekbesluiten. Maar de gebruiker ziet hem niet
+    aankomen. Gemeten op een kopie van data/weekmenu.db: de 23 voorstellen
+    raken acht weekbesluiten van week 37, en na alle 23 samenvoegingen komen er
+    drie weggeklikte regels terug op de lijst — 'Bosui', 'magere yoghurt' en de
+    cheddar. Dat is precies het verschil dat de lijst van die week langer en
+    duurder maakt in plaats van korter.
+
+    Welke kant verliest weet de kaart nog niet, dus noemen we ze allebei.
+    """
+    delen = []
+    for ing in (a, b):
+        weg, aangepast = besluiten.get(ing.id, (0, 0))
+        stukjes = []
+        if weg:
+            stukjes.append(f'{weg} week weggeklikt' if weg == 1
+                           else f'{weg} weken weggeklikt')
+        if aangepast:
+            stukjes.append(f'{aangepast} aangepast aantal' if aangepast == 1
+                           else f'{aangepast} aangepaste aantallen')
+        if stukjes:
+            delen.append(f'‘{ing.display}’ heeft {" en ".join(stukjes)}')
+    if not delen:
+        return ''
+    return (f'{"; ".join(delen)}. Zulke besluiten gaan over één regel in één '
+            f'week, dus vervallen ze bij de naam die je niet houdt — die regels '
+            f'komen dan weer op de boodschappenlijst.')
 
 
 def _voorraadverschil(a, b, voorraad):
