@@ -307,14 +307,53 @@ def ah_refresh_ingredient(ingredient_id):
 
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/pkg-config', methods=['POST'])
 def ah_pkg_config(ingredient_id):
+    """Verpakking en maat opslaan.
+
+    De maat komt binnen als het antwoord op de vraag die het formulier stelde
+    ('1 stuks weegt 100 g'), niet als de factor: welke kant die vraag opstond
+    hangt van de verpakking af, en dat omrekenen hoort op één plek te staan.
+    De oude velden blijven werken voor wie ze rechtstreeks meestuurt.
+    """
+    from weekmenu.services.verpakking import conversie_uit_antwoord
     data = request.get_json(force=True) or {}
     ing = Ingredient.query.get_or_404(ingredient_id)
     ing.ah_pkg_qty = data.get('ah_pkg_qty') or None
     ing.ah_pkg_unit = data.get('ah_pkg_unit') or None
-    ing.ah_conv_factor = data.get('ah_conv_factor') or None
-    ing.ah_conv_unit = data.get('ah_conv_unit') or None
+
+    if 'maat_richting' in data:
+        eenheid = (data.get('maat_eenheid') or '').strip()
+        factor = conversie_uit_antwoord(data.get('maat_richting'),
+                                        data.get('maat_waarde'),
+                                        data.get('maat_antwoord_eenheid'),
+                                        ing.ah_pkg_unit)
+        ing.ah_conv_factor = factor if (factor and eenheid) else None
+        ing.ah_conv_unit = eenheid if (factor and eenheid) else None
+    else:
+        ing.ah_conv_factor = data.get('ah_conv_factor') or None
+        ing.ah_conv_unit = data.get('ah_conv_unit') or None
+
     db.session.commit()
     return jsonify({'status': 'ok'})
+
+
+@bp.route('/api/ah/ingredient/<int:ingredient_id>/maat', methods=['POST'])
+def ah_maat_bevestigen(ingredient_id):
+    """Het voorstel van het scherm bevestigen (of overschreven bevestigen)."""
+    from weekmenu.services.verpakking import bevestig_maat
+    data = request.get_json(force=True) or {}
+    payload, status = bevestig_maat(ingredient_id, data.get('eenheid'),
+                                    data.get('waarde'), data.get('richting'),
+                                    data.get('antwoord_eenheid'))
+    return jsonify(payload), status
+
+
+@bp.route('/api/ah/ingredient/<int:ingredient_id>/maat/overslaan', methods=['POST'])
+def ah_maat_overslaan(ingredient_id):
+    """'Niet vragen': het geval verdwijnt, de berekening blijft zoals hij was."""
+    from weekmenu.services.verpakking import sla_maat_over
+    data = request.get_json(force=True) or {}
+    payload, status = sla_maat_over(ingredient_id, data.get('eenheid'))
+    return jsonify(payload), status
 
 
 @bp.route('/ah-producten')
@@ -323,8 +362,16 @@ def ah_products():
 
     Twee ingrediënten aan hetzelfde AH-product koppelen is het sterkste
     signaal dat het één product is; dat zie je hier, maar je lost het op
-    /twijfelgevallen op. Alleen een telling dus, geen tweede scherm."""
+    /twijfelgevallen op. Alleen een telling dus, geen tweede scherm.
+
+    De verpakkingsgevallen staan er wél helemaal op: wat je daar bevestigt is
+    de verpakkingsinstelling van deze pagina, en na het bevestigen wil je die
+    instelling soms meteen bijschaven — dat staat dan een schermlengte lager
+    in plaats van achter een tweede pagina."""
     from weekmenu.services.ingredienten import samenvoeg_kandidaten
+    from weekmenu.services.verpakking import maatvraag, verpakkingskandidaten
     ingredients = Ingredient.query.order_by(Ingredient.name).all()
     return render_template('ah_products.html', ingredients=ingredients,
-                           dubbel_aantal=len(samenvoeg_kandidaten()))
+                           dubbel_aantal=len(samenvoeg_kandidaten()),
+                           verpakkingsgevallen=verpakkingskandidaten(),
+                           maatvragen={i.id: maatvraag(i) for i in ingredients})

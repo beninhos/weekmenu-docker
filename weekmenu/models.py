@@ -101,6 +101,26 @@ class VariantApart(db.Model):
     ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
 
 
+class MaatOverslaan(db.Model):
+    """Besluit: vraag voor dit ingredient niet meer wat één stuk is.
+
+    Het scherm op /ah-producten stelt per ingredient één vraag ("wat weegt
+    één papadum?"). Weet je het antwoord niet, of vind je vier pakken prima,
+    dan moet die vraag weggaan en niet elke week terugkomen. Deze rij verandert
+    niets aan de berekening — hij houdt alleen 'niet vragen' vast.
+
+    Per eenheid, want hetzelfde ingredient kan in 'teen' én in 'stuks' in
+    recepten staan en dat zijn twee verschillende vragen.
+    """
+    __tablename__ = 'maat_overslaan'
+    __table_args__ = (
+        db.UniqueConstraint('ingredient_id', 'eenheid', name='uq_overslaan_ingredient_eenheid'),
+    )
+    id            = db.Column(db.Integer, primary_key=True)
+    ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    eenheid       = db.Column(db.String(20), nullable=False)
+
+
 class RecipeIngredient(db.Model):
     __tablename__ = 'recipe_ingredient'
     id = db.Column(db.Integer, primary_key=True)
