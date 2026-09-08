@@ -4,7 +4,10 @@
 // v5: de maatvraag op /ah-producten noemt nu om welk van de twee stuks het
 // gaat, rekent het totaal per verpakking voor en heeft een weg terug uit
 // 'Niet vragen'.
-const CACHE = 'weekmenu-v5';
+// v6: de bereiding houdt zijn kopjes na 'Overnemen', en de bijsnijdmodal zit
+// in een eigen bestand (static/js/crop-modal.js) dat draaien niet langer als
+// een uitsnede opvat.
+const CACHE = 'weekmenu-v6';
 const SHELL = [
   '/',
   '/static/favicon.svg',

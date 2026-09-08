@@ -89,11 +89,21 @@
                      alt="{{ recipe.name }}"
                      class="w-48 h-48 object-cover rounded">
             </div>
-            <button type="button"
-                    onclick="openCropModal('{{ url_for('static', filename=(recipe.original_image_path or recipe.image_path).replace('static/', '')) }}',
-                                           '/recipe/{{ recipe.id }}/crop',
-                                           (p) => { const img = document.getElementById('recipeImagePreview'); if (img) img.src = '/' + p + '?t=' + Date.now(); })"
+            <button type="button" onclick="bijsnijdenOpenen()"
                     class="mt-1 px-3 py-1.5 border border-[#E8E4DC] rounded text-sm">✂️ Bijsnijden</button>
+            <script>
+            /* De bron staat in een variabele en niet in de knop: na een draai
+               bewaart de server een nieuw, rechtgezet origineel, en anders
+               opent een tweede klik alsnog de ongedraaide versie. */
+            let _cropBron = '{{ url_for('static', filename=(recipe.original_image_path or recipe.image_path).replace('static/', '')) }}';
+            function bijsnijdenOpenen() {
+                openCropModal(_cropBron, '/recipe/{{ recipe.id }}/crop', (pad, origineel) => {
+                    _cropBron = '/' + (origineel || pad);
+                    const img = document.getElementById('recipeImagePreview');
+                    if (img) img.src = '/' + pad + '?t=' + Date.now();
+                });
+            }
+            </script>
             {% endif %}
             <input type="file" name="image" accept="image/*"
                    class="mt-1 block w-full rounded-md border-[#D4CEC4] shadow-sm">

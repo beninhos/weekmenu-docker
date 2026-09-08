@@ -5,6 +5,7 @@ from flask import (Blueprint, current_app, jsonify, redirect, render_template,
 
 from weekmenu.extensions import db
 from weekmenu.models import Cookbook, DumpJob, Recipe, RecipeDraft, RecipeIngredient
+from weekmenu.services.bereiding import bereiding_naar_html
 from weekmenu.services.dump import retry_dump_job, start_dump_job
 from weekmenu.services.pantry import annotate_pantry_status
 from weekmenu.services.recipes import _resolve_or_create_ingredient
@@ -102,7 +103,12 @@ def dump_retry(job_id):
 def dump_draft(id):
     d = RecipeDraft.query.get_or_404(id)
     payload = serialize_draft(d)
-    payload.update({'status': 'success', 'draft_id': d.id, 'url': None})
+    # De nakijkkaart toont de bereiding als platte tekst met
+    # white-space:pre-wrap; het aanpasformulier zet hem in Quill en heeft HTML
+    # nodig. Alleen dit eindpunt levert die tweede vorm -- de dump-pagina zelf
+    # bakt alle concepten in de pagina en heeft er niets aan.
+    payload.update({'status': 'success', 'draft_id': d.id, 'url': None,
+                    'instructions_html': bereiding_naar_html(d.instructions) or ''})
     return jsonify(payload)
 
 
@@ -163,7 +169,7 @@ def dump_draft_accept(id):
     recipe = Recipe(name=d.name, serves=d.serves, cookbook_id=cookbook_id,
                     page=d.source_page, image_path=d.image_path,
                     original_image_path=d.original_image_path,
-                    instructions=d.instructions or None,
+                    instructions=bereiding_naar_html(d.instructions) or None,
                     prep_time=d.prep_time)
     db.session.add(recipe)
     db.session.flush()
@@ -197,22 +203,22 @@ def dump_draft_reject(id):
 
 @bp.route('/dump/draft/<int:id>/crop', methods=['POST'])
 def dump_draft_crop(id):
-    from weekmenu.services.images import parse_crop_body, crop_image
+    from weekmenu.services.images import parse_crop_body, bijsnijden_met_origineel
     d = RecipeDraft.query.get_or_404(id)
     coords = parse_crop_body(request.get_json(silent=True) or {})
     if coords is None:
         return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
-    src_rel = d.original_image_path or d.image_path
-    if not src_rel:
+    if not (d.original_image_path or d.image_path):
         return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
     try:
-        new_path = crop_image(src_rel, *coords)
+        d.image_path, d.original_image_path = bijsnijden_met_origineel(
+            d.image_path, d.original_image_path, *coords)
     except FileNotFoundError:
         return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
     except ValueError as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
-    if not d.original_image_path:
-        d.original_image_path = d.image_path
-    d.image_path = new_path
     db.session.commit()
-    return jsonify({'status': 'success', 'image_path': d.image_path})
+    # Zelfde reden als bij het recept: de draai zit vanaf nu in het bewaarde
+    # origineel, dus de kaart moet weten waar dat nu staat.
+    return jsonify({'status': 'success', 'image_path': d.image_path,
+                    'original_image_path': d.original_image_path})

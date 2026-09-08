@@ -582,6 +582,31 @@ def _migrate_v19(conn):
     '''))
 
 
+def _migrate_v20(conn):
+    """De bereidingen die nog platte tekst zijn omzetten naar HTML.
+
+    Vanaf nu gaat elke bereiding door bereiding_naar_html voordat hij wordt
+    opgeslagen, dus wat in recipe.instructions staat is HTML. De recepten die
+    via 'Overnemen' zijn binnengekomen voldoen daar nog niet aan: die hebben
+    platte regeleinden en tonen daardoor één aaneengesloten blok. Ze staan er
+    ook slecht voor -- wie zo'n recept één keer in Bewerken opent en opslaat,
+    laat Quill de regelindeling definitief platslaan.
+
+    De recepten die al HTML zijn blijven onaangeroerd: de omzetting laat
+    bestaande opmaak met rust, dus er komt geen dubbele witruimte bij.
+    """
+    from weekmenu.services.bereiding import bereiding_naar_html
+
+    rijen = conn.execute(
+        text('SELECT id, instructions FROM recipe WHERE instructions IS NOT NULL')
+    ).fetchall()
+    for rij_id, tekst in rijen:
+        nieuw = bereiding_naar_html(tekst)
+        if nieuw != tekst:
+            conn.execute(text('UPDATE recipe SET instructions = :t WHERE id = :i'),
+                         {'t': nieuw, 'i': rij_id})
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -635,8 +660,10 @@ def migrate_db():
             _migrate_v18(conn)
         if current < 19:
             _migrate_v19(conn)
+        if current < 20:
+            _migrate_v20(conn)
 
-        target = 19
+        target = 20
         if current < target:
             if row:
                 conn.execute(

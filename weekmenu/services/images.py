@@ -80,7 +80,44 @@ def normaliseer_orientatie(data, ext='.jpg'):
         return data, ext
 
 
-def crop_image(src_rel, x, y, w, h, rotatie=0):
+def draai_volledige_pagina(src_rel, rotatie):
+    """De hele bron in de gedraaide stand wegschrijven. Returns nieuw pad.
+
+    Zonder rotatie geeft hij het bronpad onveranderd terug: opnieuw coderen
+    kost kwaliteit en levert dan niets op.
+    """
+    if not rotatie:
+        return src_rel
+    return crop_image(src_rel, 0, 0, 1, 1, rotatie, kwaliteit=95)
+
+
+def bijsnijden_met_origineel(image_path, original_image_path, x, y, w, h, rotatie=0):
+    """Snij bij en houd de volledige pagina in dezelfde stand. Returns (nieuw, origineel).
+
+    De modal opent altijd op het bewaarde origineel -- de VOLLEDIGE pagina --
+    zodat een tweede poging niet uit je eigen uitsnede snijdt. Zolang dat
+    origineel ongedraaid bleef, gooide elke tweede bijsnijding de draai van de
+    eerste weg: je kreeg de scan terug zoals hij uit de camera kwam, en de
+    draai die je op de nakijkkaart had gemaakt overleefde het accepteren niet.
+
+    Het alternatief was de draai los onthouden in een kolom en hem bij het
+    openen opnieuw toepassen. Dat is één waarheid meer om synchroon te houden
+    (op het concept én op het recept, en mee te geven bij accepteren), terwijl
+    het beeld zelf die stand prima kan dragen. Dus draait de bewaarde pagina
+    mee: het origineel is 'de hele pagina zoals jij hem hebt rechtgezet'. Het
+    kost één extra bestand per draaiing, en draaien gebeurt hooguit een keer
+    per foto.
+    """
+    bron = original_image_path or image_path
+    nieuw = crop_image(bron, x, y, w, h, rotatie)
+    if rotatie:
+        return nieuw, draai_volledige_pagina(bron, rotatie)
+    # Zonder draai verandert er niets aan wat er bewaard wordt: de eerste
+    # bijsnijding legt de ongesneden versie vast, daarna blijft die staan.
+    return nieuw, original_image_path or image_path
+
+
+def crop_image(src_rel, x, y, w, h, rotatie=0, kwaliteit=85):
     """Crop 'static/...'-bron naar nieuw jpg in static/uploads. Returns nieuw relatief pad.
 
     De fracties horen bij het beeld ZOALS DE BROWSER HET TOONDE: met de
@@ -115,7 +152,7 @@ def crop_image(src_rel, x, y, w, h, rotatie=0):
     cropped = im.crop((left, top, right, bottom)).convert('RGB')
 
     buf = io.BytesIO()
-    cropped.save(buf, 'JPEG', quality=85, icc_profile=icc_profile)
+    cropped.save(buf, 'JPEG', quality=kwaliteit, icc_profile=icc_profile)
     data = buf.getvalue()
     fname = hashlib.md5(data).hexdigest() + '.jpg'
     uploads = os.path.join(current_app.static_folder, 'uploads')
