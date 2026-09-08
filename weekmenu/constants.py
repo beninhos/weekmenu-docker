@@ -135,11 +135,16 @@ _UNIT_NORMALIZE = {
     'blokjes': 'blokje',
 }
 
+# Beide kanten op, want de tabel wordt ook heen-en-terug gelezen: de maatvraag
+# op /ah-producten stelt de vraag over een fles van 25 cl in milliliters en
+# rekent het antwoord daarna terug naar de eenheid van de verpakking. Stond
+# alleen cl→ml erin, dan viel die terugweg stil weg en bleef de maat leeg.
 _UNIT_CONVERSIONS = {
     ('g', 'kg'): 0.001, ('kg', 'g'): 1000,
     ('ml', 'l'): 0.001, ('l', 'ml'): 1000,
     ('cl', 'l'): 0.01,  ('dl', 'l'): 0.1,
     ('cl', 'ml'): 10,   ('dl', 'ml'): 100,
+    ('ml', 'cl'): 0.1,  ('ml', 'dl'): 0.01,
 }
 
 _MEETEENHEDEN = {'g', 'kg', 'ml', 'cl', 'dl', 'l'}

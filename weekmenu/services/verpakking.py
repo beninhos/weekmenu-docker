@@ -226,64 +226,99 @@ def _zwaarste_regels():
     return zwaarste
 
 
-def verpakkingskandidaten():
-    """Waar de boodschappenlijst nu meer verpakkingen bestelt dan nodig.
+def _per_verpakking_totaal(waarde, pkg_qty, eenheid):
+    """"20 teen", het doorgerekende totaal van een verpakking — of None.
+
+    De opgeslagen factor gaat per verpakkingsEENHEID, want `_calc_ah_qty`
+    deelt daarna nóg eens door `ah_pkg_qty`. Bij een netje van twee bollen
+    staat er dus 10 teen in het veld terwijl er twintig in het netje zitten.
+    Wie die 10 als 'het hele netje' leest vult 20 in en bestelt de helft te
+    weinig, zonder dat iets dat tegenspreekt. Daarom rekent het scherm het
+    voor. Bij een verpakking van één valt het samen en zwijgt hij.
+    """
+    if not waarde or not pkg_qty or pkg_qty <= 1:
+        return None
+    return f'{format_amount(waarde * pkg_qty)} {eenheid}'
+
+
+def _kandidaat(ing, eenheid, regel):
+    """Eén geval zoals het scherm het toont: wat er nu gebeurt en wat het scheelt."""
+    voorstel = schat_maat(ing, eenheid)
+    straks = None
+    if voorstel:
+        factor = conversie_uit_antwoord(voorstel['richting'], voorstel['waarde'],
+                                        voorstel['toon_eenheid'], ing.ah_pkg_unit)
+        straks = _qty_met_conversie(ing, regel['amount'], factor)
+
+    nu = regel['qty']
+    richting = vraagrichting(ing.ah_pkg_unit)
+    return {
+        'ingredient_id': ing.id,
+        'naam': ing.display,
+        'eenheid': eenheid,
+        'vraagt': f'{format_amount(regel["amount"])} {eenheid}',
+        'recept': regel['recept'],
+        'regels': regel['regels'],
+        'product': ing.ah_product_name or '',
+        'verpakking': f'{format_amount(ing.ah_pkg_qty)} {ing.ah_pkg_unit}',
+        'pkg_eenheid': _norm_unit(ing.ah_pkg_unit),
+        'pkg_aantal': ing.ah_pkg_qty,
+        'richting': richting,
+        'toon_eenheid': (antwoordeenheid(ing.ah_pkg_unit)
+                         if richting == 'per_stuk' else eenheid),
+        'totaal': (_per_verpakking_totaal(voorstel['waarde'], ing.ah_pkg_qty, eenheid)
+                   if voorstel and richting == 'per_verpakking' else None),
+        'nu': nu,
+        'straks': straks,
+        'te_veel': nu - (straks or 1),
+        # Een ingredient houdt één maat vast. Staat er al een voor een andere
+        # eenheid, dan overschrijf je die — dat hoort op het scherm te staan
+        # en niet stil te gebeuren.
+        'vervangt': (_norm_unit(ing.ah_conv_unit)
+                     if ing.ah_conv_factor and _norm_unit(ing.ah_conv_unit) != eenheid
+                     else None),
+        'voorstel': ({'waarde': voorstel['waarde'], 'bron': voorstel['bron']}
+                     if voorstel else None),
+    }
+
+
+def alle_verpakkingsgevallen():
+    """De open gevallen én de weggeklikte, uit één ronde over de receptregels.
 
     Alleen de route 'gokken' telt mee: dáár heeft de berekening geen brug
     tussen de recepteenheid en de verpakking. Twee blikken bonen voor 800 g en
     twee netjes voor vier uien rekenen wél door en blijven dus buiten dit
     scherm — die kloppen.
 
+    De weggeklikte gevallen staan er apart bij, want 'Niet vragen' mag geen
+    eenrichtingsdeur zijn: één misklik en het geval was alleen nog terug te
+    halen door zelf een getal in te typen. Ze worden op dezelfde manier
+    opgebouwd als de open gevallen en niet uit de overslaan-tabel gelezen, dus
+    een geval dat inmiddels langs een andere weg is opgelost verdwijnt ook
+    hier — de rij blijft dan als een stille aantekening staan.
+
     Zwaarste eerst: hoeveel verpakkingen er overbodig zijn.
     """
     overgeslagen = {(m.ingredient_id, m.eenheid) for m in MaatOverslaan.query.all()}
-    kandidaten = []
+    gevallen = {'open': [], 'overgeslagen': []}
 
     for (ing_id, eenheid), regel in _zwaarste_regels().items():
         ing = regel['ingredient']
-        if (ing_id, eenheid) in overgeslagen:
-            continue
         if verpakkingsroute(ing, eenheid) != 'gokken':
             continue
-        nu = regel['qty']
-        if nu <= 1:
+        if regel['qty'] <= 1:
             continue
+        vak = 'overgeslagen' if (ing_id, eenheid) in overgeslagen else 'open'
+        gevallen[vak].append(_kandidaat(ing, eenheid, regel))
 
-        voorstel = schat_maat(ing, eenheid)
-        straks = None
-        if voorstel:
-            factor = conversie_uit_antwoord(voorstel['richting'], voorstel['waarde'],
-                                            voorstel['toon_eenheid'], ing.ah_pkg_unit)
-            straks = _qty_met_conversie(ing, regel['amount'], factor)
+    for lijst in gevallen.values():
+        lijst.sort(key=lambda k: (-k['te_veel'], -k['nu'], k['naam'].lower()))
+    return gevallen
 
-        kandidaten.append({
-            'ingredient_id': ing_id,
-            'naam': ing.display,
-            'eenheid': eenheid,
-            'vraagt': f'{format_amount(regel["amount"])} {eenheid}',
-            'recept': regel['recept'],
-            'regels': regel['regels'],
-            'product': ing.ah_product_name or '',
-            'verpakking': f'{format_amount(ing.ah_pkg_qty)} {ing.ah_pkg_unit}',
-            'pkg_eenheid': _norm_unit(ing.ah_pkg_unit),
-            'richting': vraagrichting(ing.ah_pkg_unit),
-            'toon_eenheid': (antwoordeenheid(ing.ah_pkg_unit)
-                             if vraagrichting(ing.ah_pkg_unit) == 'per_stuk' else eenheid),
-            'nu': nu,
-            'straks': straks,
-            'te_veel': nu - (straks or 1),
-            # Een ingredient houdt één maat vast. Staat er al een voor een
-            # andere eenheid, dan overschrijf je die — dat hoort op het scherm
-            # te staan en niet stil te gebeuren.
-            'vervangt': (_norm_unit(ing.ah_conv_unit)
-                         if ing.ah_conv_factor and _norm_unit(ing.ah_conv_unit) != eenheid
-                         else None),
-            'voorstel': ({'waarde': voorstel['waarde'], 'bron': voorstel['bron']}
-                         if voorstel else None),
-        })
 
-    kandidaten.sort(key=lambda k: (-k['te_veel'], -k['nu'], k['naam'].lower()))
-    return kandidaten
+def verpakkingskandidaten():
+    """Waar de boodschappenlijst nu meer verpakkingen bestelt dan nodig."""
+    return alle_verpakkingsgevallen()['open']
 
 
 def maatvraag(ing):
@@ -301,6 +336,10 @@ def maatvraag(ing):
               if ing.ah_conv_factor else None)
     return {'richting': richting, 'toon_eenheid': toon,
             'pkg_eenheid': _norm_unit(ing.ah_pkg_unit),
+            'pkg_aantal': ing.ah_pkg_qty,
+            'verpakking': f'{format_amount(ing.ah_pkg_qty)} {_norm_unit(ing.ah_pkg_unit)}',
+            'totaal': (_per_verpakking_totaal(waarde, ing.ah_pkg_qty, ing.ah_conv_unit)
+                       if richting == 'per_verpakking' else None),
             'eenheid': ing.ah_conv_unit or '', 'waarde': waarde}
 
 
@@ -346,4 +385,24 @@ def sla_maat_over(ingredient_id, eenheid):
     if not MaatOverslaan.query.filter_by(ingredient_id=ing.id, eenheid=norm).first():
         db.session.add(MaatOverslaan(ingredient_id=ing.id, eenheid=norm))
         db.session.commit()
+    return {'status': 'ok'}, 200
+
+
+def vraag_maat_toch(ingredient_id, eenheid):
+    """De weg terug uit 'Niet vragen'.
+
+    Eén misklik naast Bevestig haalde de kaart weg langs het enige pad dat
+    hem ook weer weghaalt; wat overbleef was zelf een getal verzinnen in
+    'Verpakking instellen'. Dit zet het geval gewoon terug tussen de open
+    vragen.
+    """
+    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    if not ing:
+        return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
+    norm = _norm_unit(eenheid)
+    if not norm:
+        return {'status': 'error', 'message': 'geen recepteenheid opgegeven'}, 400
+    for rij in MaatOverslaan.query.filter_by(ingredient_id=ing.id, eenheid=norm).all():
+        db.session.delete(rij)
+    db.session.commit()
     return {'status': 'ok'}, 200

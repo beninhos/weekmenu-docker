@@ -313,6 +313,13 @@ def ah_pkg_config(ingredient_id):
     ('1 stuks weegt 100 g'), niet als de factor: welke kant die vraag opstond
     hangt van de verpakking af, en dat omrekenen hoort op één plek te staan.
     De oude velden blijven werken voor wie ze rechtstreeks meestuurt.
+
+    Een leeg veld wist de maat — dat is het antwoord 'ik weet het niet'. Maar
+    een getal dat niets oplevert (min honderdvijftig, nul, een fles waarvan
+    de eenheid niet terugrekent) is géén antwoord, en dat wist hier niets
+    meer: dan komt dezelfde 400 terug als bij de Bevestig-knop, in dezelfde
+    woorden, en blijft ook de verpakking staan zoals hij stond. Stil wissen
+    met 'Opgeslagen!' eronder is de ene fout die je niet ziet gebeuren.
     """
     from weekmenu.services.verpakking import conversie_uit_antwoord
     data = request.get_json(force=True) or {}
@@ -322,12 +329,19 @@ def ah_pkg_config(ingredient_id):
 
     if 'maat_richting' in data:
         eenheid = (data.get('maat_eenheid') or '').strip()
-        factor = conversie_uit_antwoord(data.get('maat_richting'),
-                                        data.get('maat_waarde'),
-                                        data.get('maat_antwoord_eenheid'),
-                                        ing.ah_pkg_unit)
-        ing.ah_conv_factor = factor if (factor and eenheid) else None
-        ing.ah_conv_unit = eenheid if (factor and eenheid) else None
+        waarde = data.get('maat_waarde')
+        if waarde is None or str(waarde).strip() == '':
+            ing.ah_conv_factor = ing.ah_conv_unit = None
+        else:
+            factor = conversie_uit_antwoord(data.get('maat_richting'), waarde,
+                                            data.get('maat_antwoord_eenheid'),
+                                            ing.ah_pkg_unit)
+            fout = ('geen recepteenheid opgegeven' if not eenheid
+                    else 'geen bruikbaar getal' if not factor else None)
+            if fout:
+                db.session.rollback()
+                return jsonify({'status': 'error', 'message': fout}), 400
+            ing.ah_conv_factor, ing.ah_conv_unit = factor, eenheid
     else:
         ing.ah_conv_factor = data.get('ah_conv_factor') or None
         ing.ah_conv_unit = data.get('ah_conv_unit') or None
@@ -356,6 +370,15 @@ def ah_maat_overslaan(ingredient_id):
     return jsonify(payload), status
 
 
+@bp.route('/api/ah/ingredient/<int:ingredient_id>/maat/terug', methods=['POST'])
+def ah_maat_terug(ingredient_id):
+    """'Toch vragen': een weggeklikt geval terug tussen de open vragen."""
+    from weekmenu.services.verpakking import vraag_maat_toch
+    data = request.get_json(force=True) or {}
+    payload, status = vraag_maat_toch(ingredient_id, data.get('eenheid'))
+    return jsonify(payload), status
+
+
 @bp.route('/ah-producten')
 def ah_products():
     """Koppelscherm, met een verwijzing naar de dubbelen die hier ontstaan.
@@ -369,9 +392,11 @@ def ah_products():
     instelling soms meteen bijschaven — dat staat dan een schermlengte lager
     in plaats van achter een tweede pagina."""
     from weekmenu.services.ingredienten import samenvoeg_kandidaten
-    from weekmenu.services.verpakking import maatvraag, verpakkingskandidaten
+    from weekmenu.services.verpakking import alle_verpakkingsgevallen, maatvraag
     ingredients = Ingredient.query.order_by(Ingredient.name).all()
+    gevallen = alle_verpakkingsgevallen()
     return render_template('ah_products.html', ingredients=ingredients,
                            dubbel_aantal=len(samenvoeg_kandidaten()),
-                           verpakkingsgevallen=verpakkingskandidaten(),
+                           verpakkingsgevallen=gevallen['open'],
+                           overgeslagen=gevallen['overgeslagen'],
                            maatvragen={i.id: maatvraag(i) for i in ingredients})

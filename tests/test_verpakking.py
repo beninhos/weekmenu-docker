@@ -12,8 +12,9 @@ from weekmenu.extensions import db
 from weekmenu.models import Ingredient, MaatOverslaan, Recipe, RecipeIngredient
 from weekmenu.services.units import _calc_ah_qty, verpakkingsroute
 from weekmenu.services.verpakking import (
-    antwoord_uit_conversie, bevestig_maat, conversie_uit_antwoord, schat_maat,
-    sla_maat_over, verpakkingskandidaten, vraagrichting,
+    alle_verpakkingsgevallen, antwoord_uit_conversie, bevestig_maat,
+    conversie_uit_antwoord, maatvraag, schat_maat, sla_maat_over,
+    verpakkingskandidaten, vraagrichting,
 )
 
 VANDAAG = date(2026, 7, 11)
@@ -394,3 +395,216 @@ def test_een_leeg_antwoord_wist_de_conversie(app, client):
     assert r.status_code == 200
     ing = Ingredient.query.get(tomaat.id)
     assert ing.ah_conv_factor is None and ing.ah_conv_unit is None
+
+
+# ── een onbruikbaar getal wist de maat niet stil ─────────────────────────
+
+def test_een_negatief_getal_wist_de_conversie_niet(app, client):
+    """Dezelfde weigering als de Bevestig-knop, en niets half opgeslagen."""
+    tomaat = _kerstomaatjes()
+    tomaat.ah_conv_factor, tomaat.ah_conv_unit = 0.01, 'stuks'
+    db.session.commit()
+
+    r = client.post(f'/api/ah/ingredient/{tomaat.id}/pkg-config',
+                    json={'ah_pkg_qty': 999, 'ah_pkg_unit': 'kg',
+                          'maat_eenheid': 'stuks', 'maat_waarde': -150,
+                          'maat_richting': 'per_stuk'})
+
+    assert r.status_code == 400
+    assert 'bruikbaar getal' in r.get_json()['message']
+    ing = Ingredient.query.get(tomaat.id)
+    assert (ing.ah_conv_factor, ing.ah_conv_unit) == (0.01, 'stuks')
+    assert (ing.ah_pkg_qty, ing.ah_pkg_unit) == (380.0, 'g')
+
+
+def test_een_nul_via_het_formulier_wist_de_conversie_ook_niet(app, client):
+    tomaat = _kerstomaatjes()
+    tomaat.ah_conv_factor, tomaat.ah_conv_unit = 0.01, 'stuks'
+    db.session.commit()
+
+    r = client.post(f'/api/ah/ingredient/{tomaat.id}/pkg-config',
+                    json={'ah_pkg_qty': 380, 'ah_pkg_unit': 'g',
+                          'maat_eenheid': 'stuks', 'maat_waarde': 0,
+                          'maat_richting': 'per_stuk'})
+
+    assert r.status_code == 400
+    assert Ingredient.query.get(tomaat.id).ah_conv_factor == 0.01
+
+
+def test_een_getal_zonder_recepteenheid_wist_de_conversie_ook_niet(app, client):
+    tomaat = _kerstomaatjes()
+    tomaat.ah_conv_factor, tomaat.ah_conv_unit = 0.01, 'stuks'
+    db.session.commit()
+
+    r = client.post(f'/api/ah/ingredient/{tomaat.id}/pkg-config',
+                    json={'ah_pkg_qty': 380, 'ah_pkg_unit': 'g',
+                          'maat_eenheid': '', 'maat_waarde': 150,
+                          'maat_richting': 'per_stuk'})
+
+    assert r.status_code == 400
+    assert Ingredient.query.get(tomaat.id).ah_conv_factor == 0.01
+
+
+def test_het_formulier_zegt_hetzelfde_als_de_bevestig_knop(app, client):
+    """Twee wegen naar dezelfde maat, dus ook dezelfde weigering."""
+    tomaat = _kerstomaatjes()
+    _recept('Pasta', tomaat, 10, 'stuks')
+    db.session.commit()
+
+    via_knop = client.post(f'/api/ah/ingredient/{tomaat.id}/maat',
+                           json={'eenheid': 'stuks', 'waarde': -150,
+                                 'richting': 'per_stuk'})
+    via_formulier = client.post(f'/api/ah/ingredient/{tomaat.id}/pkg-config',
+                                json={'ah_pkg_qty': 380, 'ah_pkg_unit': 'g',
+                                      'maat_eenheid': 'stuks', 'maat_waarde': -150,
+                                      'maat_richting': 'per_stuk'})
+
+    assert via_knop.status_code == via_formulier.status_code == 400
+    assert via_knop.get_json()['message'] == via_formulier.get_json()['message']
+
+
+# ── een fles in centiliters ──────────────────────────────────────────────
+
+def _slagroom():
+    return _ing('slagroom', display_name='Slagroom', category='Zuivel & Eieren',
+                ah_product_id=10, ah_product_name='AH Slagroom',
+                ah_product_size='25 cl', ah_pkg_qty=25.0, ah_pkg_unit='cl',
+                ah_conv_factor=0.5, ah_conv_unit='scheutje')
+
+
+def test_milliliters_rekenen_terug_naar_de_fles(app):
+    """De vraag staat in ml, de verpakking in cl: die weg moet twee kanten op."""
+    assert conversie_uit_antwoord('per_stuk', 20, 'ml', 'cl') == 0.5
+    assert conversie_uit_antwoord('per_stuk', 200, 'ml', 'dl') == 0.5
+
+
+def test_een_verpakking_in_centiliters_houdt_zijn_maat(app, client):
+    slagroom = _slagroom()
+    db.session.commit()
+
+    vraag = maatvraag(slagroom)
+    assert (vraag['richting'], vraag['toon_eenheid'], vraag['waarde']) == \
+           ('per_stuk', 'ml', 20)
+
+    r = client.post(f'/api/ah/ingredient/{slagroom.id}/pkg-config',
+                    json={'ah_pkg_qty': 25, 'ah_pkg_unit': 'cl',
+                          'maat_eenheid': 'scheutje', 'maat_waarde': 20,
+                          'maat_richting': 'per_stuk',
+                          'maat_antwoord_eenheid': 'ml'})
+
+    assert r.status_code == 200
+    ing = Ingredient.query.get(slagroom.id)
+    assert (ing.ah_conv_unit, ing.ah_conv_factor) == ('scheutje', 0.5)
+
+
+def test_een_recept_in_milliliters_rekent_door_op_een_fles_in_centiliters(app):
+    ing = _ing('bier', display_name='Bier', category='Overig',
+               ah_product_id=11, ah_product_name='AH Pilsener',
+               ah_product_size='33 cl', ah_pkg_qty=33.0, ah_pkg_unit='cl')
+
+    assert verpakkingsroute(ing, 'ml') == 'maattabel'
+    assert _calc_ah_qty(ing, 500, 'ml') == 2
+
+
+# ── de vraag bij een verpakking van meer dan één stuk ────────────────────
+
+def test_de_vraag_noemt_om_welk_van_de_twee_stuks_het_gaat(app, client):
+    """'1 stuks bevat 10 teen' laat zich lezen als 'één netje van twee'."""
+    knof = _knoflook()                       # netje van 2 bollen
+    _recept('Soep', knof, 5, 'teen')
+    db.session.commit()
+
+    html = _pagina(app)
+    assert '1 van de 2 stuks bevat' in html
+    assert '20 teen per verpakking' in html          # het doorgerekende totaal
+
+
+def test_bij_een_verpakking_van_een_blijft_de_vraag_kort(app, client):
+    bosui = _ing('bosui', display_name='Bosui',
+                 ah_product_id=12, ah_product_name='AH Bosui',
+                 ah_product_size='1 bosje', ah_pkg_qty=1.0, ah_pkg_unit='bosje')
+    _recept('Salade', bosui, 4, 'stuks')
+    db.session.commit()
+
+    html = _pagina(app)
+    assert '1 bosje bevat' in html
+    assert 'van de 1' not in html
+
+
+# ── een weg terug uit 'Niet vragen' ──────────────────────────────────────
+
+def _papadum():
+    return _ing('papadum', display_name='Papadum', category='Overig',
+                ah_product_id=7, ah_product_name="Patak's Pappadums naturel",
+                ah_product_size='64 g', ah_pkg_qty=64.0, ah_pkg_unit='g')
+
+
+def test_de_overgeslagen_gevallen_blijven_op_te_vragen(app):
+    ing = _papadum()
+    _recept('Curry', ing, 4, 'stuks')
+    db.session.commit()
+    sla_maat_over(ing.id, 'stuks')
+
+    gevallen = alle_verpakkingsgevallen()
+    assert gevallen['open'] == []
+    assert [g['naam'] for g in gevallen['overgeslagen']] == ['Papadum']
+
+
+def test_het_scherm_biedt_de_overgeslagen_gevallen_aan(app, client):
+    ing = _papadum()
+    _recept('Curry', ing, 4, 'stuks')
+    db.session.commit()
+    sla_maat_over(ing.id, 'stuks')
+
+    html = client.get('/ah-producten').get_data(as_text=True)
+    assert '1 overgeslagen' in html
+    assert 'Papadum' in html
+
+
+def test_toch_vragen_zet_het_geval_terug(app, client):
+    ing = _papadum()
+    _recept('Curry', ing, 4, 'stuks')
+    db.session.commit()
+    sla_maat_over(ing.id, 'stuks')
+
+    r = client.post(f'/api/ah/ingredient/{ing.id}/maat/terug',
+                    json={'eenheid': 'stuks'})
+
+    assert r.status_code == 200
+    assert MaatOverslaan.query.count() == 0
+    assert [k['naam'] for k in verpakkingskandidaten()] == ['Papadum']
+
+
+def test_een_overgeslagen_geval_dat_al_opgelost_is_staat_er_niet_meer_bij(app):
+    """Wie in 'Verpakking instellen' zelf een getal typt, lost het geval op."""
+    ing = _papadum()
+    _recept('Curry', ing, 4, 'stuks')
+    db.session.commit()
+    sla_maat_over(ing.id, 'stuks')
+
+    ing.ah_conv_factor, ing.ah_conv_unit = 0.05, 'stuks'
+    db.session.commit()
+
+    gevallen = alle_verpakkingsgevallen()
+    assert gevallen['open'] == [] and gevallen['overgeslagen'] == []
+
+
+def test_het_formulier_stuurt_het_veld_zoals_het_erin_staat(app, client):
+    """De browser stuurt de tekst uit het veld; de server maakt er het getal van."""
+    tomaat = _kerstomaatjes()
+    db.session.commit()
+
+    r = client.post(f'/api/ah/ingredient/{tomaat.id}/pkg-config',
+                    json={'ah_pkg_qty': 380, 'ah_pkg_unit': 'g',
+                          'maat_eenheid': 'stuks', 'maat_waarde': '15',
+                          'maat_richting': 'per_stuk'})
+    assert r.status_code == 200
+    assert round(Ingredient.query.get(tomaat.id).ah_conv_factor, 4) == 0.0667
+
+    # Een nul uit datzelfde veld is geen antwoord en wist de maat dus niet.
+    r = client.post(f'/api/ah/ingredient/{tomaat.id}/pkg-config',
+                    json={'ah_pkg_qty': 380, 'ah_pkg_unit': 'g',
+                          'maat_eenheid': 'stuks', 'maat_waarde': '0',
+                          'maat_richting': 'per_stuk'})
+    assert r.status_code == 400
+    assert round(Ingredient.query.get(tomaat.id).ah_conv_factor, 4) == 0.0667
