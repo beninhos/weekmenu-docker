@@ -1,0 +1,132 @@
+{# De kaarten met dubbele ingredienten. Apart van de pagina omdat het scherm ze
+   na elke geslaagde klik opnieuw ophaalt: één samenvoeging kan een ander
+   voorstel over een naam laten gaan die niet meer bestaat. #}
+{% if dubbel %}
+<div class="space-y-2">
+    {% for paar in dubbel %}
+    <div class="dubbel-kaart bg-white border border-[#E8E4DC] rounded px-3 py-2.5"
+         data-sleutel="{{ paar.sleutel }}"
+         data-ids="{{ paar.ingredienten[0].id }},{{ paar.ingredienten[1].id }}">
+        <div class="flex items-center gap-2 flex-wrap mb-2">
+            <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded
+                         {{ 'bg-[#FAEEDA] text-[#854F0B]' if paar.reden == 'ah' else 'bg-[#F5F2ED] text-[#6B6B6B]' }}">
+                {{ {'ah': 'AH-product', 'schrijfwijze': 'schrijfwijze', 'meervoud': 'meervoud of verkleinwoord'}[paar.reden] }}
+            </span>
+            <span class="text-xs text-[#6B6B6B]">{{ paar.bewijs }}</span>
+        </div>
+
+        {% if paar.eenheidsbotsing or paar.gespleten or paar.ah_verschil
+              or paar.weekbesluiten or paar.voorraadverschil %}
+        <div class="mb-2 rounded border border-[#E8C88A] bg-[#FDF6E7] px-2.5 py-2 space-y-2">
+            {% if paar.eenheidsbotsing %}
+            <div>
+                {% for regel in paar.eenheidsbotsing %}
+                <p class="text-xs text-[#854F0B]">⚠ {{ regel }}</p>
+                {% endfor %}
+                <p class="text-[11px] text-[#8A6A2F] mt-1">
+                    Die regels worden bij het samenvoegen vastgezet op wat ze bij hun eigen
+                    ingrediënt betekenden: één op één in de eenheid waarin het samengevoegde
+                    ingrediënt telt — kijk dus even of dat klopt. Rekent dat ingrediënt óók
+                    die teleenheid zelf nog om (1 stuks sjalot is 40 g), dan is er geen
+                    eenheid meer over die hij met rust laat; zo'n regel blijft staan zoals
+                    hij stond en telt voortaan zoals bij de naam die je houdt.
+                </p>
+            </div>
+            {% endif %}
+
+            {# Twee eenheden die de app niet kan verenigen: dan lost het
+               samenvoegen niets op, tenzij de gebruiker zegt wat een bosje is. #}
+            {% if paar.gespleten %}
+            <div class="omrekenvak">
+                <p class="text-xs text-[#854F0B]">⚠ {{ paar.gespleten.melding }}</p>
+                {% if paar.gespleten.van %}
+                <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
+                    <span class="text-[11px] text-[#8A6A2F]">1 {{ paar.gespleten.van }} =</span>
+                    <input type="number" step="any" min="0" inputmode="decimal"
+                           class="w-16 rounded-md border-[#D4CEC4] shadow-sm text-xs py-0.5"
+                           placeholder="?">
+                    <span class="text-[11px] text-[#8A6A2F]">{{ paar.gespleten.naar }}</span>
+                    <button onclick="legOmrekeningVast({{ paar.ingredienten[0].id }}, {{ paar.ingredienten[1].id }},
+                                                       '{{ paar.gespleten.van | e }}', '{{ paar.gespleten.naar | e }}', this)"
+                            class="text-xs px-2 py-0.5 rounded-full border border-[#8B4513] text-[#8B4513] hover:bg-[#FAF8F5]">
+                        Vastleggen
+                    </button>
+                    <span class="text-[11px] text-[#8A6A2F]">
+                        (alleen als je het zeker weet — de app verzint er niets bij)
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# Twee verschillende AH-producten: welke koppeling blijft er over? #}
+            {% if paar.ah_verschil %}
+            <div class="ah-keuze">
+                <p class="text-xs text-[#854F0B]">🛒 {{ paar.ah_verschil.melding }}</p>
+                {% if paar.ah_verschil.keuze %}
+                <div class="flex items-center gap-3 flex-wrap mt-1.5">
+                    <span class="text-[11px] text-[#8A6A2F]">Houd de koppeling van:</span>
+                    {% for ing in paar.ingredienten %}
+                    <label class="text-[11px] text-[#8A6A2F] flex items-center gap-1">
+                        <input type="radio" name="ah-{{ paar.sleutel }}" value="{{ ing.id }}"
+                               class="text-[#8B4513]">
+                        {{ ing.naam }}{% if ing.verpakking %} ({{ ing.verpakking }}){% endif %}
+                    </label>
+                    {% endfor %}
+                    <span class="text-[11px] text-[#8A6A2F]">
+                        kies je niets, dan blijft de koppeling van de naam die je houdt
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if paar.weekbesluiten %}
+            <p class="text-xs text-[#854F0B]">↺ {{ paar.weekbesluiten }}</p>
+            {% endif %}
+
+            {% if paar.voorraadverschil %}
+            <p class="text-xs text-[#854F0B]">⌂ {{ paar.voorraadverschil }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="grid gap-2 sm:grid-cols-2">
+            {% for ing in paar.ingredienten %}
+            {% set ander = paar.ingredienten[1] if loop.first else paar.ingredienten[0] %}
+            <div class="border border-[#E8E4DC] rounded p-2.5 flex flex-col gap-1.5">
+                <div class="font-medium text-sm text-[#2C2C2C]">{{ ing.naam }}</div>
+                <div class="text-xs text-[#6B6B6B] leading-relaxed">
+                    {{ ing.recepten }}× in recepten{% if ing.preferred_unit %} · per {{ ing.preferred_unit }}{% endif %}
+                    {%- if ing.in_voorraad %} · op voorraad{% endif %}
+                    {%- if ing.verpakking %} · verpakking {{ ing.verpakking }}{% endif %}
+                    {%- if ing.aliassen > 1 %} · {{ ing.aliassen }} schrijfwijzen{% endif %}
+                    {% if ing.conversies %}<br>{{ ing.conversies | join(', ') }}
+                    {% else %}<br><span class="text-[#B4B2A9]">geen omrekening</span>{% endif %}
+                </div>
+                <button onclick="voegSamen({{ ing.id }}, {{ ander.id }}, this)"
+                        class="mt-auto text-xs px-2.5 py-1 rounded-full border border-[#8B4513] text-[#8B4513] hover:bg-[#FAF8F5]"
+                        title="Voeg samen onder deze naam">
+                    Houd “{{ ing.naam }}”
+                </button>
+                <span class="text-[11px] text-[#6B6B6B]">
+                    {{ ander.recepten }}
+                    {{ 'recept gaat' if ander.recepten == 1 else 'recepten gaan' }}
+                    over naar {{ ing.naam }}, “{{ ander.naam }}” wordt een alias
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-2 text-right">
+            <button onclick="houdApart({{ paar.ingredienten[0].id }}, {{ paar.ingredienten[1].id }}, this)"
+                    class="text-xs px-2 py-1 text-[#6B6B6B] hover:underline">
+                Toch verschillend — niet meer vragen
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-sm text-[#6B6B6B]">Niets te doen.</p>
+{% endif %}
