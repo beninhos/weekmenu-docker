@@ -135,12 +135,90 @@ _UNIT_NORMALIZE = {
     'blokjes': 'blokje',
 }
 
+# Beide kanten op, want de tabel wordt ook heen-en-terug gelezen: de maatvraag
+# op /ah-producten stelt de vraag over een fles van 25 cl in milliliters en
+# rekent het antwoord daarna terug naar de eenheid van de verpakking. Stond
+# alleen cl→ml erin, dan viel die terugweg stil weg en bleef de maat leeg.
 _UNIT_CONVERSIONS = {
     ('g', 'kg'): 0.001, ('kg', 'g'): 1000,
     ('ml', 'l'): 0.001, ('l', 'ml'): 1000,
     ('cl', 'l'): 0.01,  ('dl', 'l'): 0.1,
     ('cl', 'ml'): 10,   ('dl', 'ml'): 100,
+    ('ml', 'cl'): 0.1,  ('ml', 'dl'): 0.01,
 }
+
+_MEETEENHEDEN = {'g', 'kg', 'ml', 'cl', 'dl', 'l'}
+"""Eenheden waarin je meet in plaats van telt. Bij zo'n verpakking gaat de
+vraag 'wat weegt er één' de goede kant op; bij een telbare verpakking
+(stuks, bosje, blik) vraag je hoeveel er in één verpakking gaan."""
+
+# ── Keukenmaten: een stuk in de eenheid van de verpakking ────────────────
+#
+# Wat een middelgroot exemplaar uit de supermarkt ongeveer weegt, of hoeveel
+# er in één geheel gaan. Bewust afgeronde keukenwaarden — 150 g voor een ui,
+# niet 147 g — want dit is alleen een voorstel dat je op /ah-producten kunt
+# overschrijven, geen meting. Staat er niets, dan doet de app geen voorstel;
+# dat is beter dan een verzonnen getal.
+#
+# Leesregel per rij: (trefwoord, van_eenheid, waarde, naar_eenheid) betekent
+# "1 <van_eenheid> van dit ingredient is ongeveer <waarde> <naar_eenheid>".
+# De rij is dus in de richting geschreven die je hardop zou zeggen; de code
+# draait hem om als de verpakking het andersom vraagt.
+#
+# De eerste rij die op de naam past wint, dus specifiek staat boven algemeen
+# ('kerstomaat' vóór 'tomat', 'sinaasappel' vóór 'appel'). Trefwoorden van
+# meer dan drie letters matchen als deel van het woord ('tomat' vindt ook
+# 'trostomaten'); korte trefwoorden alleen als heel woord, anders zou 'ui'
+# ook in 'bouillon' zitten.
+_KEUKENMATEN = [
+    ('kerstomaat',    'stuks', 15,  'g'),
+    ('cherrytomaat',  'stuks', 15,  'g'),
+    ('pomodori',      'stuks', 70,  'g'),
+    ('pruimtomaat',   'stuks', 70,  'g'),
+    ('trostomaat',    'stuks', 100, 'g'),
+    ('tomaat',        'stuks', 100, 'g'),
+    ('tomat',         'stuks', 100, 'g'),   # 'tomaten' is geen 'tomaat'
+    ('sjalot',        'stuks', 30,  'g'),
+    ('lente-ui',      'bosje', 6,   'stuks'),
+    ('bosui',         'bosje', 6,   'stuks'),
+    ('uien',          'stuks', 150, 'g'),
+    ('ui',            'stuks', 150, 'g'),
+    ('knoflook',      'stuks', 10,  'teen'),
+    ('knoflook',      'teen',  5,   'g'),
+    ('puntpaprika',   'stuks', 100, 'g'),
+    ('paprika',       'stuks', 150, 'g'),
+    ('spaanse peper', 'stuks', 15,  'g'),
+    ('chilipeper',    'stuks', 15,  'g'),
+    ('courgette',     'stuks', 250, 'g'),
+    ('aubergine',     'stuks', 300, 'g'),
+    ('komkommer',     'stuks', 400, 'g'),
+    ('winterpeen',    'stuks', 150, 'g'),
+    ('wortel',        'stuks', 80,  'g'),
+    ('aardappel',     'stuks', 100, 'g'),
+    ('citroen',       'stuks', 100, 'g'),
+    ('limoen',        'stuks', 70,  'g'),
+    ('sinaasappel',   'stuks', 200, 'g'),
+    ('banaan',        'stuks', 120, 'g'),
+    ('banan',         'stuks', 120, 'g'),   # 'bananen'
+    ('appel',         'stuks', 150, 'g'),
+    ('eieren',        'stuks', 60,  'g'),
+    ('ei',            'stuks', 60,  'g'),
+    ('kipfilet',      'stuks', 150, 'g'),
+    ('kippendij',     'stuks', 80,  'g'),
+    ('mozzarella',    'bol',   125, 'g'),
+    ('pancetta',      'plak',  10,  'g'),
+    ('bacon',         'plak',  10,  'g'),
+    ('spek',          'plak',  10,  'g'),
+    ('ham',           'plak',  15,  'g'),
+    ('ansjovis',      'stuks', 4,   'g'),
+    ('bouillonblokje', 'stuks', 10, 'g'),
+    ('bouillon',      'stuks', 10,  'g'),   # in stuks geteld is het een blokje
+    ('kardemom',      'stuks', 0.2, 'g'),
+    ('kruidnagel',    'stuks', 0.1, 'g'),
+    ('koriander',     'stuks', 1,   'bosje'),
+    ('peterselie',    'stuks', 1,   'bosje'),
+    ('basilicum',     'stuks', 1,   'bosje'),
+]
 
 _UNIT_BUY_ONE = {
     'g', 'gr', 'gram',

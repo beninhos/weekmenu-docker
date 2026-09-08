@@ -159,32 +159,50 @@ def _convert_unit_for_agg(ing_id, norm, amount, conversions, preferred_units):
     return norm, amount
 
 
+def verpakkingsroute(ing, unit):
+    """Langs welke weg deze eenheid bij een verpakking uitkomt.
+
+      geen-verpakking  we weten niet wat er in een pak zit
+      conversie        het ingredient weet zelf wat 1 verpakkingseenheid is
+      zelfde-eenheid   recept en verpakking tellen in dezelfde eenheid
+      maattabel        allebei gewicht of allebei volume, dus omrekenbaar
+      gokken           een telbare receptmaat tegenover een verpakking die
+                       weegt (of andersom): daar is geen brug, dus valt de
+                       berekening terug op "rond het aantal maar af"
+
+    Apart benoemd omdat het scherm op /ah-producten precies de laatste route
+    zoekt: dáár bestelt de lijst tien pakken tomaat voor tien tomaatjes.
+    """
+    if not ing or not ing.ah_pkg_qty or not ing.ah_pkg_unit or ing.ah_pkg_qty <= 0:
+        return 'geen-verpakking'
+
+    norm_recipe = _norm_unit(unit)
+    norm_pkg    = _norm_unit(ing.ah_pkg_unit)
+
+    if (ing.ah_conv_factor and ing.ah_conv_factor > 0 and ing.ah_conv_unit
+            and norm_recipe == _norm_unit(ing.ah_conv_unit)):
+        return 'conversie'
+    if norm_recipe == norm_pkg:
+        return 'zelfde-eenheid'
+    if _UNIT_CONVERSIONS.get((norm_recipe, norm_pkg)):
+        return 'maattabel'
+    return 'gokken'
+
+
 def _calc_ah_qty(ing, amount, unit):
     """Bereken AH qty op basis van verpakkingsinhoud."""
-    if not ing or not ing.ah_pkg_qty or not ing.ah_pkg_unit:
+    route = verpakkingsroute(ing, unit)
+    if route in ('geen-verpakking', 'gokken'):
         return _calc_default_qty(amount, unit)
 
     pkg_qty = ing.ah_pkg_qty
-    if pkg_qty <= 0:
-        return _calc_default_qty(amount, unit)
-
-    norm_recipe = _UNIT_NORMALIZE.get((unit or '').lower().strip(), (unit or '').lower().strip())
-    norm_pkg    = _UNIT_NORMALIZE.get(ing.ah_pkg_unit.lower().strip(), ing.ah_pkg_unit.lower().strip())
-
-    if ing.ah_conv_factor and ing.ah_conv_factor > 0 and ing.ah_conv_unit:
-        norm_conv = _UNIT_NORMALIZE.get(ing.ah_conv_unit.lower().strip(), ing.ah_conv_unit.lower().strip())
-        if norm_recipe == norm_conv:
-            amount_in_pkg_unit = amount / ing.ah_conv_factor
-            return max(1, math.ceil(amount_in_pkg_unit / pkg_qty))
-
-    if norm_recipe == norm_pkg:
+    if route == 'conversie':
+        return max(1, math.ceil(amount / ing.ah_conv_factor / pkg_qty))
+    if route == 'zelfde-eenheid':
         return max(1, math.ceil(amount / pkg_qty))
 
-    factor = _UNIT_CONVERSIONS.get((norm_recipe, norm_pkg))
-    if factor:
-        return max(1, math.ceil(amount * factor / pkg_qty))
-
-    return _calc_default_qty(amount, unit)
+    factor = _UNIT_CONVERSIONS[(_norm_unit(unit), _norm_unit(ing.ah_pkg_unit))]
+    return max(1, math.ceil(amount * factor / pkg_qty))
 
 
 def _calc_default_qty(amount, unit):

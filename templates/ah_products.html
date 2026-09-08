@@ -32,6 +32,122 @@
     </div>
     {% endif %}
 
+    <!-- Scheve verpakkingen: telbare receptmaat tegenover een pak dat weegt.
+
+         Eén kaart voor twee lijsten: de open vragen en de weggeklikte. Ze
+         verschillen alleen in de knop rechts, en die staan er allebei zodat
+         'Niet vragen' een kaart kan verplaatsen zonder de pagina te herladen. -->
+    {% macro maatkaart(g, weggeklikt=False) %}
+            <div class="maat-kaart bg-white border border-[#E8E4DC] rounded px-3 py-2.5"
+                 data-id="{{ g.ingredient_id }}"
+                 data-eenheid="{{ g.eenheid }}"
+                 data-richting="{{ g.richting }}"
+                 data-antwoord-eenheid="{{ g.toon_eenheid }}"
+                 data-pkg-aantal="{{ g.pkg_aantal }}">
+
+                <div class="flex items-baseline gap-2 flex-wrap">
+                    <span class="font-medium text-sm text-[#2C2C2C]">{{ g.naam }}</span>
+                    <span class="text-xs text-[#6B6B6B]">
+                        recept vraagt {{ g.vraagt }} — {{ g.recept }}
+                        {%- if g.regels > 1 %} en {{ g.regels - 1 }} ander{{ 'e' if g.regels > 2 }} recept{{ 'en' if g.regels > 2 }}{% endif %}
+                    </span>
+                </div>
+                <div class="text-xs text-[#6B6B6B] mt-0.5">
+                    {% if g.product %}{{ g.product }} · {% endif %}verpakking {{ g.verpakking }}
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap mt-2">
+                    <span class="text-xs px-2 py-0.5 rounded bg-[#FAEEDA] text-[#854F0B]">
+                        nu {{ g.nu }} × {{ g.verpakking }}
+                    </span>
+                    {% if g.straks %}
+                    <span class="text-xs text-[#6B6B6B]">→</span>
+                    <span class="text-xs px-2 py-0.5 rounded bg-[#EDF3E9] text-[#3F7D3F]">
+                        met het voorstel {{ g.straks }} × {{ g.verpakking }}
+                    </span>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap mt-2 text-sm">
+                    {% if g.richting == 'per_stuk' %}
+                    <span class="text-[#6B6B6B] shrink-0">1 {{ g.eenheid }} weegt</span>
+                    <input type="number" step="any" min="0" class="maat-waarde w-20 text-sm border-[#D4CEC4] rounded"
+                           value="{{ g.voorstel.waarde if g.voorstel else '' }}"
+                           placeholder="?">
+                    <span class="text-[#6B6B6B] shrink-0">{{ g.toon_eenheid }}</span>
+                    {% else %}
+                    <!-- De factor gaat per verpakkingsEENHEID: bij een netje van twee
+                         bollen is dit één bol, niet het netje. -->
+                    <span class="text-[#6B6B6B] shrink-0">
+                        {%- if g.pkg_aantal and g.pkg_aantal > 1 %}1 van de {{ g.verpakking }} bevat
+                        {%- else %}1 {{ g.pkg_eenheid }} bevat{% endif %}</span>
+                    <input type="number" step="any" min="0" class="maat-waarde w-20 text-sm border-[#D4CEC4] rounded"
+                           value="{{ g.voorstel.waarde if g.voorstel else '' }}"
+                           placeholder="?" oninput="maatTotaalBij(this.closest('.maat-kaart'))">
+                    <span class="text-[#6B6B6B] shrink-0">{{ g.eenheid }}</span>
+                    <span class="maat-totaal text-xs text-[#6B6B6B]">{% if g.totaal %}samen {{ g.totaal }} per verpakking{% endif %}</span>
+                    {% endif %}
+                    <button onclick="bevestigMaat(this)"
+                            class="text-xs px-2.5 py-1 rounded-full border border-[#8B4513] text-[#8B4513] hover:bg-[#FAF8F5]">
+                        Bevestig
+                    </button>
+                    <button onclick="slaMaatOver(this)"
+                            class="maat-knop-over text-xs px-2 py-1 text-[#6B6B6B] hover:underline{{ ' hidden' if weggeklikt }}">
+                        Niet vragen
+                    </button>
+                    <button onclick="vraagMaatToch(this)"
+                            class="maat-knop-terug text-xs px-2 py-1 text-[#6B6B6B] hover:underline{{ '' if weggeklikt else ' hidden' }}">
+                        Toch vragen
+                    </button>
+                </div>
+
+                {% if g.vervangt %}
+                <p class="text-[11px] text-[#854F0B] mt-1">
+                    ⚠ Dit ingrediënt houdt één maat vast —
+                    bevestigen vervangt de maat voor {{ g.vervangt }}.
+                </p>
+                {% endif %}
+
+                <p class="text-[11px] text-[#A89F92] mt-1">
+                    {% if g.voorstel %}{{ g.voorstel.bron }}
+                    {% else %}geen voorstel — de app weet niet wat één {{ g.eenheid }} is; vul het zelf in of laat het staan
+                    {% endif %}
+                </p>
+            </div>
+    {% endmacro %}
+
+    {% if verpakkingsgevallen or overgeslagen %}
+    <div id="maatBlok" class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-4">
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B]">
+            Verpakkingen die niet kloppen
+            <span class="font-normal normal-case">(<span id="maatTeller">{{ verpakkingsgevallen|length }}</span>)</span>
+        </h3>
+        <p class="text-xs text-[#6B6B6B] mt-1 mb-3">
+            Het recept telt in stuks, de verpakking weegt — dan heeft de berekening geen
+            brug tussen die twee en bestelt hij één verpakking per stuk. Eén getal lost dat
+            op: wat één stuk is. Het voorstel staat er met de bron erbij; niets verandert
+            tot je bevestigt.
+        </p>
+        <div class="space-y-2" id="maatLijst">
+            {% for g in verpakkingsgevallen %}{{ maatkaart(g) }}{% endfor %}
+        </div>
+
+        <!-- De weg terug uit 'Niet vragen': één misklik hoort geen eindstation
+             te zijn. -->
+        <div id="maatOverBlok" class="mt-3{{ '' if overgeslagen else ' hidden' }}">
+            <button onclick="toonOvergeslagen()"
+                    class="text-xs text-[#6B6B6B] hover:text-[#8B4513]">
+                <span id="maatOverPijl">▸</span>
+                <span id="maatOverTeller">{{ overgeslagen|length }} overgeslagen</span> —
+                <span id="maatOverActie">tonen</span>
+            </button>
+            <div id="maatOverLijst" class="hidden space-y-2 mt-2">
+                {% for g in overgeslagen %}{{ maatkaart(g, True) }}{% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Zoekfilter -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] px-4 py-3">
         <input type="text" id="filterInput" placeholder="Filter ingrediënten..."
@@ -122,23 +238,56 @@
                         class="text-xs text-[#6B6B6B] hover:text-[#8B4513]">
                     ▸ Verpakking instellen
                 </button>
+                {% set vraag = maatvragen.get(ing.id) %}
                 <div id="pkg-{{ ing.id }}" class="hidden mt-3 space-y-2">
                     <div class="flex items-center gap-2 text-sm">
                         <span class="text-[#6B6B6B] shrink-0">Pak bevat:</span>
-                        <input type="number" step="0.1" value="{{ ing.ah_pkg_qty or '' }}"
-                               id="pkgQty-{{ ing.id }}" class="w-20 text-sm border-[#D4CEC4] rounded">
+                        <input type="number" step="0.1" min="0" value="{{ ing.ah_pkg_qty or '' }}"
+                               id="pkgQty-{{ ing.id }}" class="w-20 text-sm border-[#D4CEC4] rounded"
+                               oninput="zetMaatRichting({{ ing.id }})">
                         <input type="text" value="{{ ing.ah_pkg_unit or '' }}"
                                id="pkgUnit-{{ ing.id }}" class="w-24 text-sm border-[#D4CEC4] rounded"
-                               placeholder="eenheid">
+                               placeholder="eenheid" oninput="zetMaatRichting({{ ing.id }})">
                     </div>
-                    <div class="flex items-center gap-2 text-sm">
-                        <span class="text-[#6B6B6B] shrink-0">Conversie: 1 {{ ing.ah_pkg_unit or 'pak' }} =</span>
-                        <input type="number" step="0.1" value="{{ ing.ah_conv_factor or '' }}"
-                               id="convFactor-{{ ing.id }}" class="w-20 text-sm border-[#D4CEC4] rounded">
-                        <input type="text" value="{{ ing.ah_conv_unit or '' }}"
-                               id="convUnit-{{ ing.id }}" class="w-24 text-sm border-[#D4CEC4] rounded"
-                               placeholder="recept-eenheid">
+
+                    <!-- De maatvraag staat in de richting die bij de verpakking past:
+                         bij een pak dat weegt vraag je wat één stuk weegt, bij een
+                         telbaar pak wat er in één verpakking gaat. -->
+                    <div id="maatStuk-{{ ing.id }}"
+                         class="flex items-center gap-2 text-sm flex-wrap{{ '' if vraag and vraag.richting == 'per_stuk' else ' hidden' }}">
+                        <span class="text-[#6B6B6B] shrink-0">1</span>
+                        <input type="text" id="maatStukEenheid-{{ ing.id }}"
+                               value="{{ vraag.eenheid if vraag and vraag.richting == 'per_stuk' else '' }}"
+                               class="w-24 text-sm border-[#D4CEC4] rounded" placeholder="recept-eenheid">
+                        <span class="text-[#6B6B6B] shrink-0">weegt</span>
+                        <input type="number" step="any" min="0" id="maatStukWaarde-{{ ing.id }}"
+                               value="{{ vraag.waarde if vraag and vraag.richting == 'per_stuk' and vraag.waarde else '' }}"
+                               class="w-20 text-sm border-[#D4CEC4] rounded">
+                        <span class="text-[#6B6B6B] shrink-0" id="maatStukEen-{{ ing.id }}">{{ vraag.toon_eenheid if vraag else 'g' }}</span>
                     </div>
+                    <div id="maatPak-{{ ing.id }}"
+                         class="flex items-center gap-2 text-sm flex-wrap{{ '' if vraag and vraag.richting == 'per_verpakking' else ' hidden' }}">
+                        <!-- 'van de 2' erbij zodra er meer dan één in een verpakking gaat:
+                             het getal hieronder is er één van, niet de hele verpakking. -->
+                        <span class="text-[#6B6B6B] shrink-0" id="maatPakVraag-{{ ing.id }}">
+                            {%- if vraag and vraag.pkg_aantal and vraag.pkg_aantal > 1 %}1 van de {{ vraag.verpakking }} bevat
+                            {%- else %}1 {{ vraag.pkg_eenheid if vraag else 'pak' }} bevat{% endif %}</span>
+                        <input type="number" step="any" min="0" id="maatPakWaarde-{{ ing.id }}"
+                               value="{{ vraag.waarde if vraag and vraag.richting == 'per_verpakking' and vraag.waarde else '' }}"
+                               class="w-20 text-sm border-[#D4CEC4] rounded"
+                               oninput="zetMaatTotaal({{ ing.id }})">
+                        <input type="text" id="maatPakEenheid-{{ ing.id }}"
+                               value="{{ vraag.eenheid if vraag and vraag.richting == 'per_verpakking' else '' }}"
+                               class="w-24 text-sm border-[#D4CEC4] rounded" placeholder="recept-eenheid"
+                               oninput="zetMaatTotaal({{ ing.id }})">
+                        <span class="text-xs text-[#6B6B6B]" id="maatPakTotaal-{{ ing.id }}">{% if vraag and vraag.totaal %}samen {{ vraag.totaal }} per verpakking{% endif %}</span>
+                    </div>
+                    <p class="text-[11px] text-[#A89F92]">
+                        Dit is de brug tussen wat het recept telt en wat er in een pak zit —
+                        zonder dat bestelt de lijst tien pakken voor tien tomaatjes.
+                        Laat leeg als je het niet weet.
+                    </p>
+
                     <button onclick="savePkg({{ ing.id }}, event)"
                             class="text-xs bg-[#2C2C2C] text-white px-3 py-1 rounded hover:bg-[#1a1a1a]">Opslaan</button>
                 </div>
@@ -349,21 +498,196 @@ function togglePkg(id) {
     btn.textContent = wasHidden ? '▾ Verpakking instellen' : '▸ Verpakking instellen';
 }
 
+// Eenheden waarin je meet in plaats van telt — spiegelt _MEETEENHEDEN in
+// weekmenu/constants.py. Alleen om de vraag meteen mee te draaien als je de
+// verpakkingseenheid aanpast; wat er wordt opgeslagen rekent de server uit.
+const MAAT_MEETEENHEDEN = ['g', 'gr', 'gram', 'kg', 'kilo', 'kilogram',
+                           'ml', 'cl', 'dl', 'l', 'liter'];
+const MAAT_ANTWOORDEENHEID = {kg: 'g', kilo: 'g', kilogram: 'g',
+                              l: 'ml', liter: 'ml', cl: 'ml', dl: 'ml'};
+
+function zetMaatRichting(id) {
+    const eenheid = (document.getElementById('pkgUnit-' + id).value || '').trim().toLowerCase();
+    const aantal = parseFloat(document.getElementById('pkgQty-' + id).value);
+    const perStuk = MAAT_MEETEENHEDEN.includes(eenheid);
+    document.getElementById('maatStuk-' + id).classList.toggle('hidden', !perStuk);
+    document.getElementById('maatPak-' + id).classList.toggle('hidden', perStuk);
+    document.getElementById('maatStukEen-' + id).textContent =
+        MAAT_ANTWOORDEENHEID[eenheid] || eenheid || 'g';
+    // Gaat er meer dan één in een verpakking, dan zeggen we erbij om welke het
+    // gaat: het veld vraagt naar één stuk, niet naar het hele netje.
+    document.getElementById('maatPakVraag-' + id).textContent = (aantal > 1)
+        ? `1 van de ${maatGetal(aantal)} ${eenheid || 'pak'} bevat`
+        : `1 ${eenheid || 'pak'} bevat`;
+    zetMaatTotaal(id);
+}
+
+// Getallen net zo opschrijven als de server: hoogstens twee decimalen en geen
+// nullen die niets zeggen.
+function maatGetal(getal) {
+    return String(Math.round(getal * 100) / 100);
+}
+
+// Het doorgerekende totaal van één verpakking, zodat je kunt zien of je het
+// veld goed leest: 10 teen per bol is 20 teen per netje van twee.
+function zetMaatTotaal(id) {
+    const doel = document.getElementById('maatPakTotaal-' + id);
+    if (!doel) return;
+    const aantal = parseFloat(document.getElementById('pkgQty-' + id).value);
+    const waarde = parseFloat(document.getElementById('maatPakWaarde-' + id).value);
+    const eenheid = document.getElementById('maatPakEenheid-' + id).value.trim();
+    doel.textContent = (aantal > 1 && waarde > 0 && eenheid)
+        ? `samen ${maatGetal(waarde * aantal)} ${eenheid} per verpakking` : '';
+}
+
+// Hetzelfde totaal op de kaarten in het blok hierboven.
+function maatTotaalBij(kaart) {
+    const doel = kaart.querySelector('.maat-totaal');
+    if (!doel) return;
+    const aantal = parseFloat(kaart.dataset.pkgAantal);
+    const waarde = parseFloat(kaart.querySelector('.maat-waarde').value);
+    doel.textContent = (aantal > 1 && waarde > 0)
+        ? `samen ${maatGetal(waarde * aantal)} ${kaart.dataset.eenheid} per verpakking` : '';
+}
+
 async function savePkg(id, event) {
     const btn = event.target;
+    const perStuk = !document.getElementById('maatStuk-' + id).classList.contains('hidden');
+    const eenheidEl = document.getElementById((perStuk ? 'maatStukEenheid-' : 'maatPakEenheid-') + id);
+    const waardeEl  = document.getElementById((perStuk ? 'maatStukWaarde-' : 'maatPakWaarde-') + id);
     const data = {
-        ah_pkg_qty:     parseFloat(document.getElementById('pkgQty-' + id).value) || null,
-        ah_pkg_unit:    document.getElementById('pkgUnit-' + id).value.trim() || null,
-        ah_conv_factor: parseFloat(document.getElementById('convFactor-' + id).value) || null,
-        ah_conv_unit:   document.getElementById('convUnit-' + id).value.trim() || null,
+        ah_pkg_qty:  parseFloat(document.getElementById('pkgQty-' + id).value) || null,
+        ah_pkg_unit: document.getElementById('pkgUnit-' + id).value.trim() || null,
+        // Het antwoord op de gestelde vraag, niet de factor: welke kant die
+        // vraag opstond weet de server ook, en daar hoort het omrekenen.
+        maat_richting: perStuk ? 'per_stuk' : 'per_verpakking',
+        maat_eenheid:  eenheidEl.value.trim(),
+        // Rauw doorgeven: een leeg veld wist de maat, en over een getal dat
+        // niets oplevert (nul, negatief) beslist de server — niet parseFloat,
+        // die van 0 stilletjes 'leeg' maakt.
+        maat_waarde:   waardeEl.value.trim() || null,
+        maat_antwoord_eenheid: perStuk
+            ? document.getElementById('maatStukEen-' + id).textContent.trim() : null,
     };
-    await fetch(`/api/ah/ingredient/${id}/pkg-config`, {
+    const resp = await fetch(`/api/ah/ingredient/${id}/pkg-config`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data),
     });
+    // Een weigering mag niet als 'Opgeslagen' voorbijkomen: dan denk je dat de
+    // maat staat terwijl de server hem juist niet aannam.
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+        alert(d.message || 'Opslaan mislukt');
+        return;
+    }
     btn.textContent = '✓ Opgeslagen';
     setTimeout(() => btn.textContent = 'Opslaan', 1500);
+}
+
+// ── Het blok met de scheve verpakkingen ──────────────────────────────────
+
+function maatKaartWeg(kaart) {
+    kaart.remove();
+    maatTellersBij();
+}
+
+// De twee tellers in het blok, en het blok zelf: dat verdwijnt pas als er ook
+// geen overgeslagen geval meer onder staat — anders was de weg terug weg.
+function maatTellersBij() {
+    const open = document.querySelectorAll('#maatLijst .maat-kaart').length;
+    const over = document.querySelectorAll('#maatOverLijst .maat-kaart').length;
+    document.getElementById('maatTeller').textContent = open;
+    document.getElementById('maatOverTeller').textContent = `${over} overgeslagen`;
+    document.getElementById('maatOverBlok').classList.toggle('hidden', !over);
+    if (!open && !over) document.getElementById('maatBlok').remove();
+}
+
+function toonOvergeslagen() {
+    const lijst = document.getElementById('maatOverLijst');
+    const verborgen = lijst.classList.contains('hidden');
+    lijst.classList.toggle('hidden');
+    document.getElementById('maatOverPijl').textContent = verborgen ? '▾' : '▸';
+    document.getElementById('maatOverActie').textContent = verborgen ? 'verbergen' : 'tonen';
+}
+
+async function bevestigMaat(btn) {
+    const kaart = btn.closest('.maat-kaart');
+    const waarde = parseFloat(kaart.querySelector('.maat-waarde').value);
+    if (!waarde || waarde <= 0) {
+        alert('Vul eerst in wat één stuk is.');
+        return;
+    }
+    btn.disabled = true;
+    const id = kaart.dataset.id;
+    const resp = await fetch(`/api/ah/ingredient/${id}/maat`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            eenheid: kaart.dataset.eenheid,
+            waarde: waarde,
+            richting: kaart.dataset.richting,
+            antwoord_eenheid: kaart.dataset.antwoordEenheid,
+        }),
+    });
+    const d = await resp.json();
+    if (d.status !== 'ok') {
+        btn.disabled = false;
+        alert(d.message || 'Opslaan mislukt');
+        return;
+    }
+    // De ingrediëntkaart verderop toont dezelfde instelling; die bijwerken is
+    // goedkoper dan de hele pagina opnieuw ophalen.
+    const perStuk = kaart.dataset.richting === 'per_stuk';
+    const eenheidEl = document.getElementById((perStuk ? 'maatStukEenheid-' : 'maatPakEenheid-') + id);
+    const waardeEl  = document.getElementById((perStuk ? 'maatStukWaarde-' : 'maatPakWaarde-') + id);
+    if (eenheidEl) eenheidEl.value = kaart.dataset.eenheid;
+    if (waardeEl) waardeEl.value = waarde;
+    maatKaartWeg(kaart);
+}
+
+async function slaMaatOver(btn) {
+    const kaart = btn.closest('.maat-kaart');
+    btn.disabled = true;
+    const resp = await fetch(`/api/ah/ingredient/${kaart.dataset.id}/maat/overslaan`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({eenheid: kaart.dataset.eenheid}),
+    });
+    const d = await resp.json();
+    if (d.status !== 'ok') {
+        btn.disabled = false;
+        alert(d.message || 'Opslaan mislukt');
+        return;
+    }
+    // Niet weggooien maar verplaatsen: onder het blok blijft hij bereikbaar,
+    // zodat één misklik geen eindstation is.
+    kaart.querySelector('.maat-knop-over').classList.add('hidden');
+    kaart.querySelector('.maat-knop-terug').classList.remove('hidden');
+    btn.disabled = false;
+    document.getElementById('maatOverLijst').appendChild(kaart);
+    maatTellersBij();
+}
+
+async function vraagMaatToch(btn) {
+    const kaart = btn.closest('.maat-kaart');
+    btn.disabled = true;
+    const resp = await fetch(`/api/ah/ingredient/${kaart.dataset.id}/maat/terug`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({eenheid: kaart.dataset.eenheid}),
+    });
+    const d = await resp.json();
+    if (d.status !== 'ok') {
+        btn.disabled = false;
+        alert(d.message || 'Terugzetten mislukt');
+        return;
+    }
+    kaart.querySelector('.maat-knop-terug').classList.add('hidden');
+    kaart.querySelector('.maat-knop-over').classList.remove('hidden');
+    btn.disabled = false;
+    document.getElementById('maatLijst').appendChild(kaart);
+    maatTellersBij();
 }
 
 async function refreshIngredient(ingId, event) {

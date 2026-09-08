@@ -8,7 +8,7 @@ from datetime import date
 from weekmenu.extensions import db
 from weekmenu.models import (
     CustomShoppingIngredient, Ingredient, IngredientAlias,
-    IngredientUnitConversion, MenuItem, PantryIngredient, Recipe,
+    IngredientUnitConversion, MaatOverslaan, MenuItem, PantryIngredient, Recipe,
     RecipeIngredient, ShoppingCheck, ShoppingListExclusion, ShoppingListOverride,
     VariantApart,
 )
@@ -891,6 +891,68 @@ def test_het_scherm_meldt_het_voorraadverschil_voor_je_klikt(client, app):
     body = client.get('/twijfelgevallen').get_data(as_text=True)
 
     assert 'staat in de voorraadkast' in body
+
+
+# ── 'Niet vragen' gaat over het product, dus verhuist het mee ────────────
+
+def _knoflook_met_overslaan():
+    """Het knoflookpaar waarbij 'teen' bij de verliezer is weggeklikt."""
+    winnaar, verliezer = _knoflookpaar()
+    db.session.add(MaatOverslaan(ingredient_id=verliezer.id, eenheid='teen'))
+    db.session.commit()
+    return winnaar, verliezer
+
+
+def test_niet_vragen_verhuist_naar_de_winnaar(app):
+    winnaar, verliezer = _knoflook_met_overslaan()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    rijen = [(r.ingredient_id, r.eenheid) for r in MaatOverslaan.query.all()]
+    assert rijen == [(winnaar.id, 'teen')]
+
+
+def test_niet_vragen_aan_beide_kanten_blijft_een_rij(app):
+    winnaar, verliezer = _knoflook_met_overslaan()
+    db.session.add(MaatOverslaan(ingredient_id=winnaar.id, eenheid='teen'))
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    rijen = [(r.ingredient_id, r.eenheid) for r in MaatOverslaan.query.all()]
+    assert rijen == [(winnaar.id, 'teen')]
+
+
+def test_de_weggeklikte_vraag_komt_niet_terug_op_de_winnaar(app):
+    """Het scherm mag na de samenvoeging niet opnieuw beginnen te vragen."""
+    from weekmenu.services.verpakking import verpakkingskandidaten
+
+    winnaar, verliezer = _knoflook_met_overslaan()
+    _recept('Soep', verliezer, 5, eenheid='teen')
+    db.session.commit()
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    assert verpakkingskandidaten() == []
+
+
+def test_een_nieuw_ingredient_erft_het_overslaan_niet(app):
+    """SQLite geeft het vrijgekomen id aan de volgende rij.
+
+    De verliezer is meestal juist de nieuwste rij uit een verse import, dus
+    zijn id is het hoogste. Blijft er een weesrij achter, dan erft het
+    eerstvolgende nieuwe ingredient een besluit over een ander product.
+    """
+    winnaar, verliezer = _knoflook_met_overslaan()
+    weg = verliezer.id
+    assert weg > winnaar.id
+
+    voeg_samen(verliezer.id, winnaar.id)
+
+    nieuw = _ing('papadum', category='Overig')
+    db.session.commit()
+    assert nieuw.id == weg                       # het id is hergebruikt
+    assert MaatOverslaan.query.filter_by(ingredient_id=nieuw.id).count() == 0
 
 
 # ── 'Toch apart' echt onthouden ──────────────────────────────────────────

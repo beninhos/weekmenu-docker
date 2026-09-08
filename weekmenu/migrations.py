@@ -564,6 +564,24 @@ def _migrate_v18(conn):
     '''))
 
 
+def _migrate_v19(conn):
+    """'Niet vragen' vasthouden bij de verpakkingsmaat.
+
+    Het scherm op /ah-producten vraagt wat één stuk is zodra een telbare
+    receptmaat tegenover een verpakking staat die weegt. Zonder deze tabel
+    zou dezelfde vraag elke week terugkomen voor ingredienten waarvan je het
+    antwoord niet weet. Hij verandert niets aan de berekening.
+    """
+    conn.execute(text('''
+        CREATE TABLE IF NOT EXISTS maat_overslaan (
+            id INTEGER PRIMARY KEY,
+            ingredient_id INTEGER NOT NULL REFERENCES ingredient(id),
+            eenheid VARCHAR(20) NOT NULL,
+            UNIQUE(ingredient_id, eenheid)
+        )
+    '''))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -615,8 +633,10 @@ def migrate_db():
             _migrate_v17(conn)
         if current < 18:
             _migrate_v18(conn)
+        if current < 19:
+            _migrate_v19(conn)
 
-        target = 18
+        target = 19
         if current < target:
             if row:
                 conn.execute(

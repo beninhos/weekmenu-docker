@@ -33,8 +33,8 @@ from weekmenu.constants import _UNIT_CONVERSIONS
 from weekmenu.extensions import db
 from weekmenu.models import (
     CustomShoppingIngredient, Ingredient, IngredientAlias,
-    IngredientUnitConversion, MenuItem, PantryIngredient, QuickAddItem,
-    RecipeIngredient, ShoppingCheck, ShoppingListExclusion,
+    IngredientUnitConversion, MaatOverslaan, MenuItem, PantryIngredient,
+    QuickAddItem, RecipeIngredient, ShoppingCheck, ShoppingListExclusion,
     ShoppingListOverride, VariantApart,
 )
 from weekmenu.services.units import (
@@ -66,9 +66,23 @@ _AH_VELDEN = (
 # ingredient_unit_conversion heeft in de database UNIQUE(ingredient_id,
 # from_unit) staan, en _convert_unit_for_agg zoekt ook alleen op from_unit.
 # Daarom is from_unit de sleutel en niet (from_unit, to_unit).
+#
+# maat_overslaan staat er ook in, en dat is bewust de andere kant op dan bij
+# de weekbesluiten hieronder. 'Vraag niet meer wat één teen is' gaat over dít
+# product en déze eenheid, niet over één regel in één week — en de
+# receptregels die de vraag oproepen verhuizen mee naar de winnaar. Weggooien
+# zou dus exact dezelfde vraag over exact dezelfde regels opnieuw stellen.
+#
+# De afweging van _voorraad_volgt_de_winnaar geldt hier niet: die rij kon
+# stil iets van élke boodschappenlijst laten verdwijnen, deze verandert geen
+# enkele berekening (zie het model) en houdt alleen een vraag tegen. Blijft
+# hij daarentegen achter bij een verwijderd ingredient, dan gaat het wél mis:
+# SQLite geeft dat vrijgekomen id aan het eerstvolgende nieuwe ingredient, en
+# dat erft dan een besluit over een heel ander product.
 _UNIEKE_TABELLEN = (
     (IngredientUnitConversion, ('from_unit',)),
     (VariantApart, ('sleutel',)),
+    (MaatOverslaan, ('eenheid',)),
 )
 
 # Rijen die niet over het product gaan maar over één REGEL op de lijst van één

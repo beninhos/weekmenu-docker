@@ -1,7 +1,10 @@
 // v3: de service worker serveert /static/ cache-first zonder revalidatie en
 // base.html linkt zonder versie-query, dus zonder deze ophoging bereikt de
 // nieuwe crop-JS de browser van de gebruiker nooit.
-const CACHE = 'weekmenu-v3';
+// v5: de maatvraag op /ah-producten noemt nu om welk van de twee stuks het
+// gaat, rekent het totaal per verpakking voor en heeft een weg terug uit
+// 'Niet vragen'.
+const CACHE = 'weekmenu-v5';
 const SHELL = [
   '/',
   '/static/favicon.svg',
