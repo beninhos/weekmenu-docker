@@ -16,6 +16,7 @@ from weekmenu.constants import PRODUCT_CATEGORIES, RECIPE_MEAL_TYPES
 from weekmenu.services.units import (
     _normalize_ingredient, _guess_ingredient_category, _normalize_ri_unit,
 )
+from weekmenu.services.bereiding import bereiding_naar_html
 from weekmenu.services.recipes import (
     _resolve_or_create_ingredient, _download_site_logo,
 )
@@ -369,7 +370,7 @@ def new_recipe():
             image_path=image_path,
             original_image_path=original_image_path,
             url=request.form.get('url') or None,
-            instructions=request.form.get('instructions') or None,
+            instructions=bereiding_naar_html(request.form.get('instructions')) or None,
             prep_time=_minuten(request.form.get('prep_time')),
         )
         db.session.add(recipe)
@@ -470,7 +471,7 @@ def edit_recipe(id):
         recipe.cookbook_id = cookbook_id
         recipe.page = request.form['page'] if request.form['page'] else None
         recipe.url = request.form.get('url') or None
-        recipe.instructions = request.form.get('instructions') or None
+        recipe.instructions = bereiding_naar_html(request.form.get('instructions')) or None
 
         image = request.files.get('image')
         if image and image.filename:
@@ -571,25 +572,25 @@ def toggle_favorite(id):
 
 @bp.route('/recipe/<int:id>/crop', methods=['POST'])
 def recipe_crop(id):
-    from weekmenu.services.images import parse_crop_body, crop_image
+    from weekmenu.services.images import parse_crop_body, bijsnijden_met_origineel
     recipe = Recipe.query.get_or_404(id)
     coords = parse_crop_body(request.get_json(silent=True) or {})
     if coords is None:
         return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
-    src_rel = recipe.original_image_path or recipe.image_path
-    if not src_rel:
+    if not (recipe.original_image_path or recipe.image_path):
         return jsonify({'status': 'error', 'message': 'Geen afbeelding om bij te snijden'}), 400
     try:
-        new_path = crop_image(src_rel, *coords)
+        recipe.image_path, recipe.original_image_path = bijsnijden_met_origineel(
+            recipe.image_path, recipe.original_image_path, *coords)
     except FileNotFoundError:
         return jsonify({'status': 'error', 'message': 'Bronafbeelding niet gevonden'}), 404
     except ValueError as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
-    if not recipe.original_image_path:
-        recipe.original_image_path = recipe.image_path
-    recipe.image_path = new_path
     db.session.commit()
-    return jsonify({'status': 'success', 'image_path': recipe.image_path})
+    # Het origineel gaat mee terug: heeft de gebruiker gedraaid, dan wijst de
+    # bijsnijdknop op de pagina nog naar de vorige, ongedraaide versie.
+    return jsonify({'status': 'success', 'image_path': recipe.image_path,
+                    'original_image_path': recipe.original_image_path})
 
 
 @bp.route('/api/ingredients/search')
@@ -733,6 +734,10 @@ def scrape_recipe():
     payload, status = scrape_recipe_from_url(url)
     if status == 200:
         annotate_pantry_status(payload.get('ingredients') or [])
+        # De scraper levert platte tekst met regeleinden; het formulier zet
+        # dit in Quill. Zonder omzetting loopt de bereiding daar aan elkaar
+        # en schrijft 'Opslaan' die ene lap naar de database.
+        payload['instructions_html'] = bereiding_naar_html(payload.get('instructions')) or ''
     if status != 200:
         current_app.logger.warning('Recept-import mislukt voor %r: %s',
                                    url, payload.get('message'))
@@ -746,6 +751,7 @@ def recipe_from_photo():
     payload, status = recipe_from_photos(request.files.getlist('photos'))
     if status == 200:
         annotate_pantry_status(payload.get('ingredients') or [])
+        payload['instructions_html'] = bereiding_naar_html(payload.get('instructions')) or ''
     return jsonify(payload), status
 
 

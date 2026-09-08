@@ -8,6 +8,7 @@ from flask import Blueprint, request, jsonify, send_file, current_app
 
 from weekmenu.extensions import db
 from weekmenu.models import Cookbook, Recipe, RecipeIngredient, Ingredient
+from weekmenu.services.bereiding import bereiding_naar_html
 from weekmenu.services.recipes import _resolve_or_create_ingredient
 from weekmenu.services.units import _normalize_ri_unit
 
@@ -87,7 +88,7 @@ def import_data():
                 page=r_data.get('page'),
                 is_favorite=r_data.get('is_favorite', False),
                 url=r_data.get('url'),
-                instructions=r_data.get('instructions')
+                instructions=bereiding_naar_html(r_data.get('instructions')),
             )
             db.session.add(recipe)
             db.session.flush()
@@ -255,7 +256,7 @@ def import_zip():
                     page=r_data.get('page'),
                     is_favorite=r_data.get('is_favorite', False),
                     url=r_data.get('url'),
-                    instructions=r_data.get('instructions'),
+                    instructions=bereiding_naar_html(r_data.get('instructions')),
                     image_path=image_path,
                 )
                 db.session.add(recipe)

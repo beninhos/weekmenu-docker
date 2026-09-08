@@ -383,3 +383,112 @@ def test_het_origineel_zelf_opslaan_houdt_het_origineel_bij_het_recept(app, clie
     })
     recipe = Recipe.query.filter_by(name='Hele pagina').first()
     assert recipe.original_image_path == 'static/uploads/boekpagina.jpg'
+
+
+# --- een tweede bijsnijding begint in de stand die je koos -----------------
+
+
+def _maat(app, rel_pad):
+    with _open(app, rel_pad) as im:
+        return im.size
+
+
+def test_tweede_bijsnijding_houdt_de_eerder_opgeslagen_draai(app, client):
+    """De modal opent altijd op het bewaarde origineel: de VOLLEDIGE pagina.
+
+    Dat is met opzet -- anders snijd je de tweede keer uit je eigen uitsnede.
+    Maar zolang dat origineel ongedraaid bleef, gooide elke tweede bijsnijding
+    de draai van de eerste weg: het beeld stond weer zoals het uit de camera
+    kwam. Het bewaarde origineel draait daarom mee.
+    """
+    src = _schrijf_vlakkenfoto(app, 'tweede_ronde.jpg')          # 80x40 liggend
+    recipe = Recipe(name='Twee keer', image_path=src)
+    db.session.add(recipe)
+    db.session.commit()
+
+    # eerst alleen rechtzetten: hele beeld, kwartslag met de klok mee
+    resp = client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0, 'y': 0, 'width': 1, 'height': 1, 'rotate': 90})
+    assert resp.status_code == 200
+    r = db.session.get(Recipe, recipe.id)
+    assert _maat(app, r.image_path) == (40, 80)
+    # en het origineel staat in dezelfde stand, nog steeds de hele pagina
+    assert _maat(app, r.original_image_path) == (40, 80)
+
+    # dan de rechterbovenhoek van wat je ziet: dat was rood
+    resp = client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0.5, 'y': 0, 'width': 0.5, 'height': 0.5, 'rotate': 0})
+    assert resp.status_code == 200
+    uit = _open(app, resp.get_json()['image_path'])
+    assert uit.size == (20, 40), 'de tweede uitsnede kwam uit het ongedraaide beeld'
+    assert _lijkt_op(_midden(uit), ROOD), _midden(uit)
+
+
+def test_tweede_bijsnijding_van_een_concept_houdt_de_draai_ook(app, client):
+    """Op de nakijkkaart draait de gebruiker de scan recht; die draai hoort te
+
+    blijven staan, ook als hij daarna nog eens bijsnijdt.
+    """
+    src = _schrijf_vlakkenfoto(app, 'concept_tweede_ronde.jpg')
+    draft = _concept(name='Concept twee keer', image_path=src)
+
+    resp = client.post(f'/dump/draft/{draft.id}/crop',
+                       json={'x': 0, 'y': 0, 'width': 1, 'height': 1, 'rotate': 90})
+    assert resp.status_code == 200
+    d = db.session.get(RecipeDraft, draft.id)
+    assert _maat(app, d.original_image_path) == (40, 80)
+
+    resp = client.post(f'/dump/draft/{draft.id}/crop',
+                       json={'x': 0.5, 'y': 0, 'width': 0.5, 'height': 0.5, 'rotate': 0})
+    uit = _open(app, resp.get_json()['image_path'])
+    assert uit.size == (20, 40) and _lijkt_op(_midden(uit), ROOD), uit.size
+
+
+def test_de_draai_van_de_nakijkkaart_overleeft_het_overnemen(app, client):
+    """De hele keten: draaien op de kaart, overnemen, daarna nog eens snijden."""
+    src = _schrijf_vlakkenfoto(app, 'keten.jpg')
+    draft = _concept(name='Keten', instructions='Roeren.',
+                     ingredients_json='[{"name": "ui", "amount": 1, "unit": "st"}]',
+                     image_path=src)
+    client.post(f'/dump/draft/{draft.id}/crop',
+                json={'x': 0, 'y': 0, 'width': 1, 'height': 1, 'rotate': 90})
+
+    resp = client.post(f'/dump/draft/{draft.id}/accept', json={})
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    recipe = db.session.get(Recipe, resp.get_json()['recipe_id'])
+    assert _maat(app, recipe.original_image_path) == (40, 80)
+
+    resp = client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0.5, 'y': 0, 'width': 0.5, 'height': 0.5, 'rotate': 0})
+    uit = _open(app, resp.get_json()['image_path'])
+    assert uit.size == (20, 40) and _lijkt_op(_midden(uit), ROOD), uit.size
+
+
+def test_bijsnijden_zonder_draai_bewaart_de_volledige_pagina_zoals_altijd(app, client):
+    """Zonder draai verandert er niets aan wat er bewaard wordt."""
+    src = _schrijf_vlakkenfoto(app, 'geen_draai.jpg')
+    recipe = Recipe(name='Alleen snijden', image_path=src)
+    db.session.add(recipe)
+    db.session.commit()
+    client.post(f'/recipe/{recipe.id}/crop',
+                json={'x': 0, 'y': 0, 'width': 0.5, 'height': 0.5})
+    r = db.session.get(Recipe, recipe.id)
+    assert r.original_image_path == src
+    assert _maat(app, r.image_path) == (40, 20)
+
+
+def test_het_antwoord_noemt_het_nieuwe_origineel(app, client):
+    """Het formulier moet zijn bijsnijdknop kunnen bijwerken zonder herladen.
+
+    Zonder dit pad in het antwoord opent een tweede klik op 'Bijsnijden' in
+    dezelfde pagina alsnog het oude, ongedraaide origineel.
+    """
+    src = _schrijf_vlakkenfoto(app, 'antwoordpad.jpg')
+    recipe = Recipe(name='Antwoord', image_path=src)
+    db.session.add(recipe)
+    db.session.commit()
+    data = client.post(f'/recipe/{recipe.id}/crop',
+                       json={'x': 0, 'y': 0, 'width': 1, 'height': 1,
+                             'rotate': 90}).get_json()
+    assert data['original_image_path'] == db.session.get(Recipe, recipe.id).original_image_path
+    assert _maat(app, data['original_image_path']) == (40, 80)

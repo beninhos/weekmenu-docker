@@ -389,7 +389,7 @@ async function importFromPhoto() {
         if (data.name) document.getElementById('fieldName').value = data.name;
         if (data.serves) document.getElementById('fieldServes').value = data.serves;
         if (data.prep_time) document.getElementById('fieldPrepTime').value = data.prep_time;
-        if (data.instructions) quill.root.innerHTML = data.instructions;
+        if (data.instructions_html) quill.root.innerHTML = data.instructions_html;
 
         const preview = document.getElementById('importedImagePreview');
         const pathField = document.getElementById('fieldImagePath');
@@ -467,7 +467,7 @@ async function importFromUrl() {
         if (data.serves)       document.getElementById('fieldServes').value = data.serves;
         if (data.prep_time)    document.getElementById('fieldPrepTime').value = data.prep_time;
         if (data.url)          document.getElementById('fieldUrl').value = data.url;
-        if (data.instructions) quill.root.innerHTML = data.instructions;
+        if (data.instructions_html) quill.root.innerHTML = data.instructions_html;
 
         if (data.cookbook_exists && data.cookbook_id) {
             const sel = document.getElementById('fieldCookbook');
@@ -525,7 +525,14 @@ function verbergConceptfoto() {
 }
 function cropImportedImage() {
     if (!_draftCrop) return;
-    openCropModal('/' + _draftCrop.source, `/dump/draft/${_draftCrop.id}/crop`, (newPath) => {
+    openCropModal('/' + _draftCrop.source, `/dump/draft/${_draftCrop.id}/crop`, (newPath, origineel) => {
+        // Na een draai is het bewaarde origineel een ander bestand; zonder dit
+        // opent een tweede keer bijsnijden weer de ongedraaide pagina.
+        if (origineel) {
+            _draftCrop.source = origineel;
+            const orig = document.getElementById('importedOriginalLink');
+            if (orig) orig.href = '/' + origineel;
+        }
         document.getElementById('fieldImagePath').value = newPath;
         document.getElementById('importedImagePreview').src = '/' + newPath + '?t=' + Date.now();
     });
@@ -549,7 +556,9 @@ function cropImportedImage() {
         if (data.source_page) document.getElementById('fieldPage').value = data.source_page;
         const cookbook = new URLSearchParams(location.search).get('cookbook');
         if (cookbook) document.getElementById('fieldCookbook').value = cookbook;
-        if (data.instructions) quill.root.innerHTML = data.instructions.replace(/\n/g, '<br>');
+        // instructions_html komt van de server: dezelfde omzetting als bij
+        // 'Overnemen', zodat beide wegen dezelfde alinea's opleveren.
+        if (data.instructions_html) quill.root.innerHTML = data.instructions_html;
         if (data.image_path) {
             document.getElementById('fieldImagePath').value = data.image_path;
             const preview = document.getElementById('importedImagePreview');
