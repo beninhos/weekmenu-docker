@@ -246,26 +246,29 @@
     }
 
     /* ── Halve-A4 modus (compact) ─────────────────────────────────────── */
-    body.mode-half .sheet { padding: 10mm 12mm; }
+    body.mode-half .sheet { padding: 7mm 10mm; }
     body.mode-half .sheet-header {
-        padding-bottom: 4mm;
-        margin-bottom: 4mm;
+        padding-bottom: 2.5mm;
+        margin-bottom: 2.5mm;
     }
-    body.mode-half .sheet-header .title    { font-size: 18pt; }
-    body.mode-half .sheet-header .subtitle { font-size: 10pt; margin-top: 1mm; }
-    body.mode-half .sheet-header .weeknr   { font-size: 20pt; }
+    body.mode-half .sheet-header .title    { font-size: 15pt; }
+    body.mode-half .sheet-header .subtitle { font-size: 9pt; margin-top: 0.5mm; }
+    body.mode-half .sheet-header .weeknr   { font-size: 17pt; }
+    body.mode-half .sheet-header .weeknr small { font-size: 7pt; margin-bottom: 0.5mm; }
     body.mode-half .week-table th,
-    body.mode-half .week-table td { padding: 2mm 2.5mm; }
-    body.mode-half .day-name  { font-size: 11pt; }
-    body.mode-half .day-date  { font-size: 7.5pt; }
-    body.mode-half .meal-name { font-size: 9pt; line-height: 1.2; }
-    body.mode-half .meal-meta { font-size: 7pt; margin-top: 0.5mm; }
-    body.mode-half .cookbook-chip { font-size: 7pt; padding: 0.2mm 1.2mm; }
+    body.mode-half .week-table td { padding: 1.4mm 2mm; }
+    body.mode-half .day-name  { font-size: 10pt; }
+    body.mode-half .day-date  { font-size: 7pt; margin-top: 0; }
+    body.mode-half .meal-name { font-size: 8.5pt; line-height: 1.15; }
+    body.mode-half .meal-meta { font-size: 6.5pt; margin-top: 0.3mm; gap: 1mm; }
+    body.mode-half .cookbook-chip { font-size: 6.5pt; padding: 0.15mm 1mm; }
+    body.mode-half .personen::before { font-size: 7pt; }
+    body.mode-half .empty-cell { font-size: 7.5pt; }
 
-    /* Cel-hoogte: bij "alleen diner" moet elke rij wat lucht hebben,
-       zodat de 7 rijen alsnog netjes over de bovenhelft verdeeld staan. */
+    /* Bij "alleen diner": één regel geeft ruimte over — vul die met wat lucht
+       zodat de 7 rijen netjes over de bovenhelft verdeeld staan. */
     body.meals-1.mode-half .week-table td,
-    body.meals-1.mode-half .week-table th.day-cell { padding-top: 3mm; padding-bottom: 3mm; }
+    body.meals-1.mode-half .week-table th.day-cell { padding-top: 2.5mm; padding-bottom: 2.5mm; }
 
     /* ── Volle A4 modus (uitgebreid) ──────────────────────────────────── */
     body.mode-full .sheet { padding: 15mm 15mm; }
@@ -288,7 +291,7 @@
     /* ── Print ───────────────────────────────────────────────────────── */
     @page {
         size: A4 portrait;
-        margin: 10mm 12mm;
+        margin: 8mm 10mm;
     }
     @media print {
         /* Verberg alles behalve het blad */
@@ -297,7 +300,7 @@
         #saveStatus,
         .no-print { display: none !important; }
 
-        body {
+        html, body {
             background: white !important;
             margin: 0 !important;
             padding: 0 !important;
@@ -316,11 +319,10 @@
             min-height: 0 !important;
         }
 
-        /* Halve A4: content moet in de bovenste helft passen */
-        body.mode-half .sheet { max-height: 128.5mm; overflow: hidden; }
-
-        /* Zorg dat rijen niet over pagina-einden breken */
-        .week-table, .week-table tr { break-inside: avoid; page-break-inside: avoid; }
+        /* Voorkom dat de zondag-rij op een tweede pagina afbreekt */
+        .week-table, .week-table tr,
+        .week-table thead, .week-table tbody { break-inside: avoid; page-break-inside: avoid; }
+        .sheet { break-inside: avoid; page-break-inside: avoid; }
 
         /* Dunnere lijnen op papier */
         .week-table th,
