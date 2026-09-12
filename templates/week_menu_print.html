@@ -1,0 +1,505 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    /* ── Toolbar (alleen op scherm) ────────────────────────────────────── */
+    .print-toolbar {
+        max-width: 210mm;
+        margin: 0 auto 1.5rem auto;
+        padding: 1rem 1.25rem;
+        background: var(--color-paper);
+        border: 0.5px solid var(--color-border);
+        border-radius: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1rem 1.5rem;
+    }
+    .print-toolbar .group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .print-toolbar .group-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-pencil);
+        font-weight: 600;
+    }
+    .print-toolbar .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.375rem 0.75rem;
+        border: 1px solid var(--color-linen);
+        border-radius: 999px;
+        font-size: 0.875rem;
+        cursor: pointer;
+        background: transparent;
+        color: var(--color-ink);
+        user-select: none;
+        transition: all 0.15s;
+    }
+    .print-toolbar .pill:hover { background: var(--color-card); }
+    .print-toolbar .pill input {
+        margin: 0;
+        padding: 0;
+        width: auto;
+        height: auto;
+        appearance: none;
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        border: 1px solid var(--color-linen);
+        border-radius: 50%;
+        background: white;
+        cursor: pointer;
+        vertical-align: middle;
+    }
+    .print-toolbar .pill input[type="checkbox"] { border-radius: 3px; }
+    .print-toolbar .pill.active {
+        background: var(--color-sepia-bg);
+        border-color: var(--color-sepia-light);
+        color: var(--color-sepia);
+    }
+    .print-toolbar .pill.active input {
+        border-color: var(--color-sepia);
+        background: var(--color-sepia);
+        box-shadow: inset 0 0 0 2px white;
+    }
+    .print-toolbar .spacer { flex: 1; }
+    .print-toolbar .btn-print {
+        background: var(--color-sepia);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .print-toolbar .btn-print:hover { background: #6d3610; }
+    .print-toolbar .btn-back {
+        color: var(--color-pencil);
+        font-size: 0.875rem;
+        text-decoration: none;
+    }
+    .print-toolbar .btn-back:hover { color: var(--color-ink); }
+
+    /* ── Blad ─────────────────────────────────────────────────────────── */
+    .sheet {
+        max-width: 210mm;
+        margin: 0 auto;
+        background: white;
+        padding: 12mm;
+        box-shadow: 0 2px 12px rgba(44,44,44,0.08);
+        border: 0.5px solid var(--color-border);
+        color: var(--color-ink);
+        font-family: var(--font-sans);
+    }
+    body.mode-half .sheet { min-height: 148.5mm; }
+    body.mode-full .sheet { min-height: 297mm; }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    .sheet-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--color-linen);
+        padding-bottom: 6mm;
+        margin-bottom: 6mm;
+    }
+    .sheet-header .title {
+        font-family: var(--font-serif);
+        font-size: 22pt;
+        font-weight: 400;
+        letter-spacing: -0.02em;
+        color: var(--color-ink);
+        line-height: 1;
+    }
+    .sheet-header .subtitle {
+        font-family: var(--font-serif);
+        font-style: italic;
+        font-size: 11pt;
+        color: var(--color-pencil);
+        margin-top: 2mm;
+    }
+    .sheet-header .weeknr {
+        font-family: var(--font-serif);
+        font-size: 24pt;
+        color: var(--color-sepia);
+        letter-spacing: -0.02em;
+        line-height: 1;
+        text-align: right;
+    }
+    .sheet-header .weeknr small {
+        display: block;
+        font-family: var(--font-sans);
+        font-style: normal;
+        font-size: 8pt;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        color: var(--color-pencil);
+        margin-bottom: 1mm;
+    }
+
+    /* ── Weektabel ────────────────────────────────────────────────────── */
+    .week-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    .week-table th,
+    .week-table td {
+        padding: 3mm 3mm;
+        vertical-align: top;
+        text-align: left;
+        border-bottom: 1px dashed var(--color-linen);
+    }
+    .week-table thead th {
+        font-family: var(--font-sans);
+        font-size: 8pt;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-weight: 600;
+        color: var(--color-sepia);
+        border-bottom: 1px solid var(--color-sepia-light);
+        padding-bottom: 2mm;
+    }
+    .week-table tbody tr:last-child td,
+    .week-table tbody tr:last-child th { border-bottom: none; }
+
+    .col-day    { width: 22%; }
+    .col-meal   { width: 26%; }
+
+    /* Aantal maaltijd-kolommen bepaalt de breedtes */
+    body.meals-3 .col-meal { width: 26%; }
+    body.meals-2 .col-meal { width: 39%; }
+    body.meals-1 .col-meal { width: 78%; }
+
+    /* Dag-kolom */
+    .day-cell {
+        border-right: 1px solid var(--color-linen);
+    }
+    .day-name {
+        font-family: var(--font-serif);
+        font-size: 12pt;
+        font-weight: 700;
+        color: var(--color-ink);
+        line-height: 1.1;
+    }
+    .day-date {
+        font-family: var(--font-sans);
+        font-size: 8pt;
+        color: var(--color-pencil);
+        margin-top: 0.5mm;
+    }
+
+    /* Maaltijd-cel */
+    .meal-cell { position: relative; }
+    .meal-name {
+        font-size: 10pt;
+        font-weight: 500;
+        color: var(--color-ink);
+        line-height: 1.25;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    .meal-meta {
+        margin-top: 1mm;
+        font-size: 7.5pt;
+        color: var(--color-pencil);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5mm;
+        align-items: center;
+    }
+    .cookbook-chip {
+        display: inline-block;
+        padding: 0.4mm 1.5mm;
+        border-radius: 2px;
+        background: var(--color-sepia-bg);
+        color: var(--color-sepia);
+        font-weight: 500;
+        font-size: 7.5pt;
+        letter-spacing: 0.02em;
+    }
+    .personen {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.8mm;
+        color: var(--color-pencil);
+    }
+    .personen::before {
+        content: "\1F464"; /* bust in silhouette */
+        font-size: 8pt;
+        line-height: 1;
+    }
+    .empty-cell {
+        color: #C9C4BC;
+        font-style: italic;
+        font-size: 8.5pt;
+    }
+
+    /* ── Halve-A4 modus (compact) ─────────────────────────────────────── */
+    body.mode-half .sheet { padding: 10mm 12mm; }
+    body.mode-half .sheet-header {
+        padding-bottom: 4mm;
+        margin-bottom: 4mm;
+    }
+    body.mode-half .sheet-header .title    { font-size: 18pt; }
+    body.mode-half .sheet-header .subtitle { font-size: 10pt; margin-top: 1mm; }
+    body.mode-half .sheet-header .weeknr   { font-size: 20pt; }
+    body.mode-half .week-table th,
+    body.mode-half .week-table td { padding: 2mm 2.5mm; }
+    body.mode-half .day-name  { font-size: 11pt; }
+    body.mode-half .day-date  { font-size: 7.5pt; }
+    body.mode-half .meal-name { font-size: 9pt; line-height: 1.2; }
+    body.mode-half .meal-meta { font-size: 7pt; margin-top: 0.5mm; }
+    body.mode-half .cookbook-chip { font-size: 7pt; padding: 0.2mm 1.2mm; }
+
+    /* Cel-hoogte: bij "alleen diner" moet elke rij wat lucht hebben,
+       zodat de 7 rijen alsnog netjes over de bovenhelft verdeeld staan. */
+    body.meals-1.mode-half .week-table td,
+    body.meals-1.mode-half .week-table th.day-cell { padding-top: 3mm; padding-bottom: 3mm; }
+
+    /* ── Volle A4 modus (uitgebreid) ──────────────────────────────────── */
+    body.mode-full .sheet { padding: 15mm 15mm; }
+    body.mode-full .week-table th,
+    body.mode-full .week-table td { padding: 5mm 4mm; }
+    body.mode-full .day-name  { font-size: 14pt; }
+    body.mode-full .day-date  { font-size: 9pt; margin-top: 1mm; }
+    body.mode-full .meal-name { font-size: 12pt; line-height: 1.3; }
+    body.mode-full .meal-meta { font-size: 9pt; margin-top: 1.5mm; gap: 2.5mm; }
+    body.mode-full .cookbook-chip { font-size: 9pt; padding: 0.5mm 2mm; }
+    body.mode-full .sheet-header .title    { font-size: 26pt; }
+    body.mode-full .sheet-header .subtitle { font-size: 13pt; }
+    body.mode-full .sheet-header .weeknr   { font-size: 28pt; }
+
+    /* ── Verbergen van kolommen op basis van maaltijdselectie ─────────── */
+    body:not(.show-ontbijt) [data-meal="ontbijt"] { display: none; }
+    body:not(.show-lunch)   [data-meal="lunch"]   { display: none; }
+    body:not(.show-diner)   [data-meal="diner"]   { display: none; }
+
+    /* ── Print ───────────────────────────────────────────────────────── */
+    @page {
+        size: A4 portrait;
+        margin: 10mm 12mm;
+    }
+    @media print {
+        /* Verberg alles behalve het blad */
+        nav, header, footer,
+        .print-toolbar,
+        #saveStatus,
+        .no-print { display: none !important; }
+
+        body {
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        main.container {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: none !important;
+        }
+        .sheet {
+            box-shadow: none !important;
+            border: none !important;
+            margin: 0 !important;
+            max-width: none !important;
+            padding: 0 !important;
+            min-height: 0 !important;
+        }
+
+        /* Halve A4: content moet in de bovenste helft passen */
+        body.mode-half .sheet { max-height: 128.5mm; overflow: hidden; }
+
+        /* Zorg dat rijen niet over pagina-einden breken */
+        .week-table, .week-table tr { break-inside: avoid; page-break-inside: avoid; }
+
+        /* Dunnere lijnen op papier */
+        .week-table th,
+        .week-table td { border-bottom: 0.3pt dashed #C9A882; }
+        .week-table thead th { border-bottom: 0.5pt solid #8B4513; }
+        .day-cell { border-right: 0.3pt solid #C9A882; }
+        .sheet-header { border-bottom: 0.5pt solid #8B4513; }
+    }
+</style>
+
+<!-- Toolbar (alleen op scherm) -->
+<div class="print-toolbar no-print">
+    <div class="group">
+        <span class="group-label">Maaltijden</span>
+        <label class="pill" data-toggle="ontbijt">
+            <input type="checkbox" id="chk-ontbijt" checked>
+            <span>Ontbijt</span>
+        </label>
+        <label class="pill" data-toggle="lunch">
+            <input type="checkbox" id="chk-lunch" checked>
+            <span>Lunch</span>
+        </label>
+        <label class="pill" data-toggle="diner">
+            <input type="checkbox" id="chk-diner" checked>
+            <span>Diner</span>
+        </label>
+    </div>
+    <div class="group">
+        <span class="group-label">Formaat</span>
+        <label class="pill" data-mode="half">
+            <input type="radio" name="mode" value="half" checked>
+            <span>Halve A4</span>
+        </label>
+        <label class="pill" data-mode="full">
+            <input type="radio" name="mode" value="full">
+            <span>Hele A4</span>
+        </label>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn-back" href="{{ url_for('menu.week_menu', year=year, week=week) }}">← Terug naar weekmenu</a>
+    <button type="button" class="btn-print" onclick="window.print()">
+        <span style="font-size:1.1em;">&#128424;</span> Printen
+    </button>
+</div>
+
+<!-- Het printbare blad -->
+<div class="sheet">
+    <div class="sheet-header">
+        <div>
+            <div class="title">Weekmenu</div>
+            <div class="subtitle">{{ week_range_long }}</div>
+        </div>
+        <div class="weeknr">
+            <small>Week</small>
+            {{ week }}
+        </div>
+    </div>
+
+    <table class="week-table">
+        <thead>
+            <tr>
+                <th class="col-day"></th>
+                {% for meal_code, meal_name in meal_types %}
+                <th class="col-meal" data-meal="{{ meal_code }}">{{ meal_name }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in day_dates %}
+            <tr>
+                <th class="day-cell col-day">
+                    <div class="day-name">{{ d.name }}</div>
+                    <div class="day-date">{{ d.day }} {{ d.month_short }}</div>
+                </th>
+                {% for meal_code, meal_name in meal_types %}
+                {% set item = planned.get((d.index, meal_code)) %}
+                <td class="meal-cell col-meal" data-meal="{{ meal_code }}">
+                    {% if item and item.recipe_id and recipes_by_id.get(item.recipe_id) %}
+                        {% set recipe = recipes_by_id[item.recipe_id] %}
+                        <div class="meal-name">{{ recipe.name }}</div>
+                        <div class="meal-meta">
+                            {% if recipe.cookbook %}
+                            <span class="cookbook-chip">{{ recipe.cookbook.abbreviation or recipe.cookbook.name[:3] }}{% if recipe.page %} p.{{ recipe.page }}{% endif %}</span>
+                            {% endif %}
+                            {% if item.people_count %}
+                            <span class="personen">{{ item.people_count }}p</span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <span class="empty-cell">—</span>
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+(function() {
+    const body = document.body;
+    const STORAGE_KEY = 'weekmenu_print_prefs_v1';
+
+    const state = {
+        meals: { ontbijt: true, lunch: true, diner: true },
+        mode: 'half',
+    };
+
+    // Laden vanuit localStorage
+    try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        if (saved) {
+            if (saved.meals) Object.assign(state.meals, saved.meals);
+            if (saved.mode === 'half' || saved.mode === 'full') state.mode = saved.mode;
+        }
+    } catch (_) { /* ignore */ }
+
+    const persist = () => {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+        catch (_) { /* ignore */ }
+    };
+
+    const apply = () => {
+        // Maaltijden: body-classes voor kolom-zichtbaarheid
+        body.classList.toggle('show-ontbijt', state.meals.ontbijt);
+        body.classList.toggle('show-lunch',   state.meals.lunch);
+        body.classList.toggle('show-diner',   state.meals.diner);
+
+        // Aantal actieve maaltijd-kolommen (voor kolombreedtes)
+        const shown = ['ontbijt','lunch','diner'].filter(m => state.meals[m]).length || 1;
+        body.classList.remove('meals-1','meals-2','meals-3');
+        body.classList.add('meals-' + shown);
+
+        // Formaat
+        body.classList.toggle('mode-half', state.mode === 'half');
+        body.classList.toggle('mode-full', state.mode === 'full');
+
+        // Pill-styling
+        document.querySelectorAll('.pill[data-toggle]').forEach(pill => {
+            const key = pill.dataset.toggle;
+            pill.classList.toggle('active', !!state.meals[key]);
+            const input = pill.querySelector('input');
+            if (input) input.checked = !!state.meals[key];
+        });
+        document.querySelectorAll('.pill[data-mode]').forEach(pill => {
+            const active = pill.dataset.mode === state.mode;
+            pill.classList.toggle('active', active);
+            const input = pill.querySelector('input');
+            if (input) input.checked = active;
+        });
+    };
+
+    // Event handlers
+    document.querySelectorAll('.pill[data-toggle] input').forEach(input => {
+        input.addEventListener('change', () => {
+            const key = input.closest('.pill').dataset.toggle;
+            // Voorkom dat álle maaltijden uitgevinkt worden
+            const others = ['ontbijt','lunch','diner'].filter(m => m !== key);
+            const anyOtherOn = others.some(m => state.meals[m]);
+            if (!input.checked && !anyOtherOn) {
+                input.checked = true;
+                return;
+            }
+            state.meals[key] = input.checked;
+            persist();
+            apply();
+        });
+    });
+    document.querySelectorAll('.pill[data-mode] input').forEach(input => {
+        input.addEventListener('change', () => {
+            if (!input.checked) return;
+            state.mode = input.closest('.pill').dataset.mode;
+            persist();
+            apply();
+        });
+    });
+
+    apply();
+})();
+</script>
+{% endblock %}

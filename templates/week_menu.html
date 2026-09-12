@@ -14,6 +14,11 @@
             <h1 class="page-title">Weekmenu</h1>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
+            <a href="{{ url_for('menu.week_menu_print', year=year, week=week) }}"
+               class="btn-secondary inline-flex items-center gap-1.5 text-sm"
+               style="text-decoration:none;">
+                &#128424; Printen
+            </a>
             <button onclick="clearWeek()"
                     class="btn-secondary inline-flex items-center gap-1.5 text-sm"
                     style="color: #b91c1c;">

@@ -55,6 +55,54 @@ def week_menu(year, week):
     return resp
 
 
+@bp.route('/week/<int:year>/<int:week>/print')
+def week_menu_print(year, week):
+    try:
+        monday = date.fromisocalendar(year, week, 1)
+    except ValueError:
+        iso = date.today().isocalendar()
+        return redirect(url_for('menu.week_menu_print', year=iso[0], week=iso[1]))
+
+    menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
+    recipes_by_id = {r.id: r for r in Recipe.query.all()}
+
+    MAANDEN_KORT = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun',
+                    'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
+    MAANDEN_LANG = ['januari', 'februari', 'maart', 'april', 'mei', 'juni',
+                    'juli', 'augustus', 'september', 'oktober', 'november', 'december']
+
+    day_dates = []
+    for i in range(7):
+        d = monday + timedelta(days=i)
+        day_dates.append({
+            'index': i,
+            'name': DAYS[i][1],
+            'short': DAYS[i][1][:2],
+            'day': d.day,
+            'month_short': MAANDEN_KORT[d.month - 1],
+        })
+
+    sunday = monday + timedelta(days=6)
+    if monday.month == sunday.month:
+        week_range_long = f'{monday.day} – {sunday.day} {MAANDEN_LANG[monday.month-1]} {monday.year}'
+    else:
+        week_range_long = (f'{monday.day} {MAANDEN_LANG[monday.month-1]} – '
+                           f'{sunday.day} {MAANDEN_LANG[sunday.month-1]} {sunday.year}')
+
+    planned = {(m.day_of_week, m.meal_type): m for m in menu_items}
+
+    return render_template(
+        'week_menu_print.html',
+        week=week,
+        year=year,
+        day_dates=day_dates,
+        meal_types=MEAL_TYPES,
+        planned=planned,
+        recipes_by_id=recipes_by_id,
+        week_range_long=week_range_long,
+    )
+
+
 @bp.route('/update_menu', methods=['POST'])
 def update_menu():
     try:
