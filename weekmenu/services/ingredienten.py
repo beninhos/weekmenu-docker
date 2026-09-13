@@ -38,9 +38,8 @@ from weekmenu.models import (
     ShoppingListOverride, VariantApart,
 )
 from weekmenu.services.units import (
-    _convert_unit_for_agg, _norm_unit, _normalize_ingredient,
+    _convert_unit_for_agg, _getal, _norm_unit, _normalize_ingredient,
 )
-from weekmenu.services.verpakking import _getal
 
 
 # AH-velden verhuizen als blok: een halve koppeling (id zonder verpakking) is

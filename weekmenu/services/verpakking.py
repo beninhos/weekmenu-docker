@@ -21,7 +21,8 @@ from weekmenu.constants import _KEUKENMATEN, _MEETEENHEDEN, _UNIT_CONVERSIONS
 from weekmenu.extensions import db
 from weekmenu.models import Ingredient, MaatOverslaan, Recipe, RecipeIngredient
 from weekmenu.services.units import (
-    _calc_ah_qty, _norm_unit, _normalize_ingredient, format_amount, verpakkingsroute,
+    _calc_ah_qty, _getal, _norm_unit, _normalize_ingredient, format_amount,
+    verpakkingsroute,
 )
 
 # Waarin je het antwoord opschrijft als de verpakking in kilo's of liters staat:
@@ -47,21 +48,6 @@ def antwoordeenheid(pkg_eenheid):
     """De eenheid waarin het antwoord op de per-stuk-vraag wordt opgeschreven."""
     norm = _norm_unit(pkg_eenheid)
     return _ANTWOORDEENHEID.get(norm, norm)
-
-
-def _getal(waarde):
-    """Tekst of getal naar float, of None als het niets bruikbaars is.
-
-    'NaN' en 'inf' komen door float() heen maar overleven daarna elke
-    vergelijking ('nan <= 0' is False, 'not nan' ook), waardoor ze ongemerkt
-    tot in de database rollen en de maat stil wissen. Alleen een echt eindig
-    getal telt.
-    """
-    try:
-        uit = float(str(waarde).replace(',', '.'))
-    except (TypeError, ValueError):
-        return None
-    return uit if math.isfinite(uit) else None
 
 
 def _reken_om(waarde, van, naar):

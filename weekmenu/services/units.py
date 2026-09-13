@@ -7,6 +7,21 @@ from weekmenu.constants import (
 )
 
 
+def _getal(waarde):
+    """Tekst of getal naar float, of None als het niets bruikbaars is.
+
+    'NaN' en 'inf' komen door float() heen maar overleven daarna elke
+    vergelijking ('nan <= 0' is False, 'not nan' ook), waardoor ze ongemerkt
+    tot in de database rollen en de maat stil wissen. Alleen een echt eindig
+    getal telt.
+    """
+    try:
+        uit = float(str(waarde).replace(',', '.'))
+    except (TypeError, ValueError):
+        return None
+    return uit if math.isfinite(uit) else None
+
+
 def format_amount(amount):
     """Format numbers smart: integers without decimals, decimals when needed."""
     rounded = round(amount, 2)
