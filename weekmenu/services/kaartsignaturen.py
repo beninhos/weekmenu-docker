@@ -78,3 +78,30 @@ def bereidingstijd(tekst):
             if treffer:
                 return int(treffer.group(1))
     return None
+
+
+# Zoveel regels staan er hooguit onder de kop 'Benodigdheden'; wat daarna komt
+# is geen gereedschap meer.
+_BENODIGDHEDEN_REGELS = 4
+
+
+def benodigdheden(tekst):
+    """De regels onder de kop 'Benodigdheden', letterlijk, tot de tabelkop
+    ('Ingrediënten voor 2 personen'), een voorraadkop of een lege regel, en
+    hooguit vier regels. None zonder kop.
+
+    Er wordt niet meer gestopt op een regel die niet op een komma eindigt:
+    op kaart 4 breekt de opsomming midden in een stuk gereedschap af
+    ('... hapjespan met' / 'deksel'), en dan viel dat laatste woord weg.
+    """
+    regels = (tekst or '').split('\n')
+    for i, regel in enumerate(regels):
+        if is_benodigdheden_kop(regel):
+            uit = []
+            for volgende in regels[i + 1:i + 1 + _BENODIGDHEDEN_REGELS]:
+                volgende = volgende.strip()
+                if not volgende or 'personen' in volgende.lower() or is_voorraadkop(volgende):
+                    break
+                uit.append(volgende)
+            return ' '.join(uit) or None
+    return None

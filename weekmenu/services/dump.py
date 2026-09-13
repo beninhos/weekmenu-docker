@@ -16,9 +16,9 @@ from weekmenu.services.gemini import (
 )
 from weekmenu.services.ankers import knip_stappen, normaliseer
 from weekmenu.services.images import normaliseer_orientatie
-from weekmenu.services.kaart import (benodigdheden, controleer_tegen_tabel, kaart_invoer,
+from weekmenu.services.kaart import (controleer_tegen_tabel, kaart_invoer,
                                      paren, zonder_tabelregels)
-from weekmenu.services.kaartsignaturen import bereidingstijd, is_voorkant, zonder_logo
+from weekmenu.services.kaartsignaturen import benodigdheden, bereidingstijd, is_voorkant, zonder_logo
 from weekmenu.services.ocr import (_clean_ocr_text, lees_paginas, lees_paginas_met_annotaties,
                                    pages_as_labelled_text)
 

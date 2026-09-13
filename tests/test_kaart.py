@@ -1,8 +1,9 @@
 """Receptkaart: paren, modelinvoer, controle tegen de tabel."""
 from unittest.mock import patch
 
-from weekmenu.services.kaart import (benodigdheden, controleer_tegen_tabel, kaart_invoer, paren,
+from weekmenu.services.kaart import (controleer_tegen_tabel, kaart_invoer, paren,
                                       zonder_tabelregels)
+from weekmenu.services.kaartsignaturen import benodigdheden
 
 RIJEN = [{'naam': 'Ui', 'hoeveelheid': '1 st', 'blok': 'kaart', 'y': 1},
          {'naam': 'Prei', 'hoeveelheid': '2 st', 'blok': 'kaart', 'y': 2},
