@@ -47,7 +47,7 @@ def test_achteraf_taggen_via_de_api(client, app):
     r = _recipe()
     resp = client.post(f'/api/recipe/{r.id}/meal-types',
                        json={'meal_types': ['ontbijt', 'tussendoor']})
-    assert resp.get_json() == {'status': 'ok', 'meal_types': ['ontbijt', 'tussendoor']}
+    assert resp.get_json() == {'status': 'success', 'meal_types': ['ontbijt', 'tussendoor']}
     resp = client.post(f'/api/recipe/{r.id}/meal-types', json={'meal_types': []})
     assert resp.get_json()['meal_types'] == []
 

@@ -350,7 +350,7 @@ async function geminiSaveKey() {
             body: JSON.stringify({key})
         });
         const data = await resp.json();
-        if (data.status === 'ok') {
+        if (data.status === 'success') {
             document.getElementById('geminiKeyInput').value = '';
             geminiRefreshStatus();
         } else {
@@ -412,7 +412,7 @@ async function visionSaveKey(button) {
             body: JSON.stringify({key})
         });
         const data = await resp.json().catch(() => ({}));
-        if (resp.ok && data.status === 'ok') {
+        if (resp.ok && data.status === 'success') {
             document.getElementById('visionKeyInput').value = '';
             // Eerst verversen (dat wist de melding), dan pas waarschuwen.
             await visionRefreshStatus();
@@ -447,7 +447,7 @@ async function ahStartLogin() {
     try {
         const resp = await fetch('/api/ah/start-login', {method: 'POST'});
         const data = await resp.json();
-        if (!data.ok) {
+        if (data.status !== 'success') {
             errDiv.textContent = data.reason || 'Kon de koppelaar niet starten';
             errDiv.classList.remove('hidden');
             btn.disabled = false;
@@ -491,7 +491,7 @@ async function ahVerify() {
     try {
         const resp = await fetch('/api/ah/verify');
         const data = await resp.json();
-        if (data.ok) {
+        if (data.status === 'success') {
             div.textContent = data.name ? `✓ Werkt — hallo ${data.name}!` : '✓ Verbinding werkt';
             div.className = 'mt-2 text-sm text-[#8B4513]';
         } else {
@@ -513,7 +513,7 @@ async function ahSaveToken() {
         body: JSON.stringify({code: token}),
     });
     const data = await resp.json();
-    if (data.status === 'ok') location.reload();
+    if (data.status === 'success') location.reload();
     else alert('Opslaan mislukt: ' + data.message);
 }
 

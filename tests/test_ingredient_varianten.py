@@ -1070,7 +1070,7 @@ def test_endpoint_voegt_samen(client, app):
                        json={'winnaar_id': winnaar.id, 'verliezer_id': verliezer_id})
 
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'ok'
+    assert resp.get_json()['status'] == 'success'
     assert db.session.get(Ingredient, verliezer_id) is None
 
 
@@ -1205,7 +1205,7 @@ def test_een_opgegeven_omrekening_maakt_er_een_regel_van(app):
 
     payload, code = leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
 
-    assert code == 200 and payload['status'] == 'ok'
+    assert code == 200 and payload['status'] == 'success'
     voeg_samen(bosui.id, kop.id)
     voeg_samen(uitjes.id, kop.id)
     assert _uien_op_de_lijst() == [(5.5, 'stuks')]

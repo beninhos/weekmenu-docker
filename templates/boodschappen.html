@@ -338,7 +338,7 @@ async function sendToAh() {
     });
     const data = await resp.json();
     alert(data.message || (resp.ok ? 'Verstuurd' : 'Mislukt'));
-    if (resp.ok && data.status === 'ok') location.reload(); else btn.disabled = false;
+    if (resp.ok && data.status === 'success') location.reload(); else btn.disabled = false;
 }
 
 async function excludeItem(ingredientId) {
@@ -454,7 +454,7 @@ async function addLosItem() {
             body: JSON.stringify({ ingredient_id: parseInt(ingredientId), amount, unit }),
         });
         const data = await resp.json();
-        if (data.status === 'ok') {
+        if (data.status === 'success') {
             location.reload();
         } else {
             alert(data.message || 'Item toevoegen mislukt');
@@ -472,7 +472,7 @@ async function setBron(ingredientId, bron, el) {
             body: JSON.stringify({bron}),
         });
         const data = await resp.json();
-        if (data.status !== 'ok') return;
+        if (data.status !== 'success') return;
         window.location.reload();   // item springt naar het juiste blok
     } catch (e) { /* offline: keuze blijft staan tot de volgende keer */ }
 }

@@ -241,7 +241,7 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
                  'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}, 401, [])
 
     if not shopping_dict:
-        return ({'status': 'ok', 'sent': 0, 'not_linked': [],
+        return ({'status': 'success', 'sent': 0, 'not_linked': [],
                  'message': 'Boodschappenlijst is leeg'}, 200, [])
 
     headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}',
@@ -264,7 +264,7 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
         sent_ingredient_ids.append(ing_id)
 
     if not merged:
-        return ({'status': 'ok', 'sent': 0, 'not_linked': not_linked,
+        return ({'status': 'success', 'sent': 0, 'not_linked': not_linked,
                  'message': 'Geen gekoppelde AH-producten in de lijst. '
                             'Koppel ze eerst via AH-producten.'}, 200, [])
 
@@ -307,5 +307,5 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
     msg = f'{sent} product{"en" if sent != 1 else ""} toegevoegd aan je AH-{target}'
     if not_linked:
         msg += f'. {len(not_linked)} nog niet gekoppeld (overgeslagen): {", ".join(not_linked[:5])}'
-    return ({'status': 'ok', 'sent': sent, 'not_linked': not_linked,
+    return ({'status': 'success', 'sent': sent, 'not_linked': not_linked,
              'message': msg}, 200, sent_ingredient_ids)

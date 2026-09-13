@@ -631,7 +631,7 @@ async function bevestigMaat(btn) {
         }),
     });
     const d = await resp.json();
-    if (d.status !== 'ok') {
+    if (d.status !== 'success') {
         btn.disabled = false;
         alert(d.message || 'Opslaan mislukt');
         return;
@@ -655,7 +655,7 @@ async function slaMaatOver(btn) {
         body: JSON.stringify({eenheid: kaart.dataset.eenheid}),
     });
     const d = await resp.json();
-    if (d.status !== 'ok') {
+    if (d.status !== 'success') {
         btn.disabled = false;
         alert(d.message || 'Opslaan mislukt');
         return;
@@ -678,7 +678,7 @@ async function vraagMaatToch(btn) {
         body: JSON.stringify({eenheid: kaart.dataset.eenheid}),
     });
     const d = await resp.json();
-    if (d.status !== 'ok') {
+    if (d.status !== 'success') {
         btn.disabled = false;
         alert(d.message || 'Terugzetten mislukt');
         return;
@@ -696,7 +696,7 @@ async function refreshIngredient(ingId, event) {
     btn.disabled = true;
     const resp = await fetch(`/api/ah/ingredient/${ingId}/refresh`, {method: 'POST'});
     const data = await resp.json();
-    if (data.status === 'ok') {
+    if (data.status === 'success') {
         location.reload();
     } else {
         btn.textContent = '🔄';

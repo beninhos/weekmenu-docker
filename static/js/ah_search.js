@@ -151,7 +151,7 @@ async function linkProduct(row, product) {
             body:    JSON.stringify(product),
         });
         const data = await resp.json();
-        if (data.ok || data.status === 'ok') {
+        if (data.status === 'success') {
             location.reload();
         } else {
             alert(data.message || 'Koppelen mislukt');

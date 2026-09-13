@@ -31,7 +31,7 @@ def geen_echte_aanroep(monkeypatch):
 def test_geldige_sleutel_wordt_bewaard(client, geen_echte_aanroep):
     resp = client.post('/api/vision/key', json={'key': 'AIzaGoed'})
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'ok'
+    assert resp.get_json()['status'] == 'success'
     assert Settings.query.filter_by(key='vision_api_key').first().value == 'AIzaGoed'
 
 
@@ -68,7 +68,7 @@ def test_onbereikbare_api_bewaart_toch_met_waarschuwing(client, monkeypatch):
     resp = client.post('/api/vision/key', json={'key': 'AIzaOnbekend'})
     assert resp.status_code == 200
     data = resp.get_json()
-    assert data['status'] == 'ok'
+    assert data['status'] == 'success'
     assert 'niet kunnen controleren' in data['warning']
     assert Settings.query.filter_by(key='vision_api_key').first().value == 'AIzaOnbekend'
 

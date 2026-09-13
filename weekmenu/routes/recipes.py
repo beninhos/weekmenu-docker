@@ -641,7 +641,7 @@ def set_recipe_meal_types(id):
     if not isinstance(codes, list):
         return jsonify({'status': 'error', 'message': 'meal_types (lijst) verplicht'}), 400
     _sync_meal_types(recipe, codes)
-    return jsonify({'status': 'ok',
+    return jsonify({'status': 'success',
                     'meal_types': sorted(m.meal_type for m in recipe.meal_types)})
 
 

@@ -292,7 +292,7 @@ async function confirmDraft() {
             body: JSON.stringify({ items }),
         });
         const data = await resp.json();
-        if (data.status !== 'ok') throw new Error(data.message || 'Bevestigen mislukt');
+        if (data.status !== 'success') throw new Error(data.message || 'Bevestigen mislukt');
     } catch (e) {
         document.getElementById('orderDetail').style.opacity = '';
         if (btn) { btn.disabled = false; }

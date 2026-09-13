@@ -29,7 +29,7 @@ def add_to_pantry(ingredient_id):
     db.session.add(p)
     db.session.commit()
     return {
-        'status': 'ok',
+        'status': 'success',
         'id': p.id,
         'ingredient_id': p.ingredient_id,
         'name': p.ingredient.display,
@@ -42,7 +42,7 @@ def remove_from_pantry(ingredient_id):
     if p:
         db.session.delete(p)
         db.session.commit()
-    return {'status': 'ok'}
+    return {'status': 'success'}
 
 
 # ── Voorraadstatus voor geïmporteerde receptregels ───────────────────────
@@ -319,7 +319,7 @@ def set_category(ingredient_id, category):
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
     ing.category = category
     db.session.commit()
-    return {'status': 'ok', 'id': ing.id, 'category': ing.category}, 200
+    return {'status': 'success', 'id': ing.id, 'category': ing.category}, 200
 
 
 def set_bron(ingredient_id, bron):
@@ -333,4 +333,4 @@ def set_bron(ingredient_id, bron):
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
     ing.bron = (bron or None) if bron != 'ah' else None
     db.session.commit()
-    return {'status': 'ok', 'id': ing.id, 'bron': ing.bron or 'ah'}, 200
+    return {'status': 'success', 'id': ing.id, 'bron': ing.bron or 'ah'}, 200

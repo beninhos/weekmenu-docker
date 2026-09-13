@@ -133,7 +133,7 @@ def boodschappen_send_to_ah():
             continue
         open_dict[(row['ingredient_id'], row['unit'])] = row['amount']
     payload, status, sent_ids = send_dict_to_ah(open_dict, qty_overrides)
-    if status == 200 and payload.get('status') == 'ok' and sent_ids:
+    if status == 200 and payload.get('status') == 'success' and sent_ids:
         for ing_id in sent_ids:
             _set_checks(ing_id, True, via_ah=True)
     return jsonify(payload), status
@@ -196,7 +196,7 @@ def update_shopping_qty(year, week, ingredient_id):
         if override:
             db.session.delete(override)
             db.session.commit()
-        return jsonify({'ok': True, 'qty': new_qty, 'is_default': True})
+        return jsonify({'status': 'success', 'qty': new_qty, 'is_default': True})
 
     if override:
         override.qty = new_qty
@@ -206,7 +206,7 @@ def update_shopping_qty(year, week, ingredient_id):
             ingredient_id=ingredient_id, qty=new_qty
         ))
     db.session.commit()
-    return jsonify({'ok': True, 'qty': new_qty})
+    return jsonify({'status': 'success', 'qty': new_qty})
 
 
 @bp.route('/api/shopping-list/<int:year>/<int:week>/item/<int:ingredient_id>/exclude',
@@ -220,7 +220,7 @@ def exclude_shopping_item(year, week, ingredient_id):
             year=year, week_number=week, ingredient_id=ingredient_id
         ))
         db.session.commit()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/shopping-list/<int:year>/<int:week>/add-item', methods=['POST'])
@@ -256,7 +256,7 @@ def add_shopping_item(year, week):
     db.session.commit()
 
     return jsonify({
-        'status': 'ok',
+        'status': 'success',
         'item': {
             'ingredient_id': ing.id,
             'name': ing.display,

@@ -153,7 +153,7 @@ def test_send_dict_to_ah_returns_sent_ids(app, monkeypatch):
     from weekmenu.services.shopping import _build_shopping_dict, send_dict_to_ah
     payload, status, sent_ids = send_dict_to_ah(_build_shopping_dict(2026, 28), {})
     assert status == 200
-    assert payload['status'] == 'ok'
+    assert payload['status'] == 'success'
     assert ing.id in sent_ids
     assert ing2.id not in sent_ids
     assert 'ongekoppeld-ding' in ' '.join(payload['not_linked'])
@@ -204,7 +204,7 @@ def test_add_item_current_week_appears_open(app, client):
     resp = client.post(f'/api/shopping-list/{iso[0]}/{iso[1]}/add-item',
                        json={'ingredient_id': ing.id, 'amount': 1, 'unit': 'bosje'})
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'ok'
+    assert resp.get_json()['status'] == 'success'
 
     result = build_combined_shopping_list()
     rows = [x for x in result['open'] if x['ingredient_id'] == ing.id]

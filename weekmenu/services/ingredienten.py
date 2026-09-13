@@ -209,7 +209,7 @@ def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
         return {'status': 'error', 'message': f'samenvoegen mislukt: {fout}'}, 500
 
     return {
-        'status': 'ok',
+        'status': 'success',
         'winnaar_id': winnaar.id,
         'winnaar': winnaar.display,
         # Het id van de verliezer erbij, zodat het scherm de andere kaarten
@@ -682,7 +682,7 @@ def leg_omrekening_vast(ingredient_id, ander_id, van, naar, factor):
             reasoning='met de hand opgegeven bij het samenvoegen'))
         _ook_de_verpakking(i, van, naar, getal)
     db.session.commit()
-    return {'status': 'ok', 'van': van, 'naar': naar, 'factor': getal}, 200
+    return {'status': 'success', 'van': van, 'naar': naar, 'factor': getal}, 200
 
 
 def _ook_de_verpakking(ing, van, naar, factor):
@@ -738,7 +738,7 @@ def koppel_alias(naam, ingredient_id):
         db.session.rollback()
         return {'status': 'error', 'message': f'vastleggen mislukt: {fout}'}, 500
 
-    return {'status': 'ok', 'samengevoegd': False,
+    return {'status': 'success', 'samengevoegd': False,
             'ingredient_id': ing.id, 'naam': ing.display}, 200
 
 
@@ -756,7 +756,7 @@ def markeer_apart(naam, ingredient_id):
     if not bestaand:
         db.session.add(VariantApart(sleutel=sleutel, ingredient_id=ing.id))
         db.session.commit()
-    return {'status': 'ok'}, 200
+    return {'status': 'success'}, 200
 
 
 def markeer_paar_apart(a_id, b_id):
@@ -783,7 +783,7 @@ def markeer_paar_apart(a_id, b_id):
         if not VariantApart.query.filter_by(sleutel=sleutel, ingredient_id=doel.id).first():
             db.session.add(VariantApart(sleutel=sleutel, ingredient_id=doel.id))
     db.session.commit()
-    return {'status': 'ok'}, 200
+    return {'status': 'success'}, 200
 
 
 def apart_paren():

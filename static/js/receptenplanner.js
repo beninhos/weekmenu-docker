@@ -103,7 +103,7 @@ async function toggleMealType(recipeId, code, btn) {
       body: JSON.stringify({ meal_types: [...tags] }),
     });
     const data = await resp.json();
-    if (data.status !== 'ok') return;
+    if (data.status !== 'success') return;
     r.meal_types = data.meal_types;
     // Knop ter plekke bijwerken; de rij blijft staan tot de volgende filteractie,
     // zodat je bij 'Zonder type' rustig kunt doorklikken zonder verspringende lijst.

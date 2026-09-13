@@ -37,7 +37,7 @@ def ah_connect():
         _ah_setting('ah_refresh_token', data['refresh_token'])
         expires_at = int(time.time()) + data.get('expires_in', 604798)
         _ah_setting('ah_token_expires', str(expires_at))
-        return jsonify({'status': 'ok', 'expires_at': expires_at})
+        return jsonify({'status': 'success', 'expires_at': expires_at})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Koppelen mislukt: {e}'}), 400
 
@@ -58,7 +58,7 @@ def ah_status():
 @bp.route('/api/ah/disconnect', methods=['POST'])
 def ah_disconnect():
     _ah_clear_tokens()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/ah/start-login', methods=['POST'])
@@ -66,7 +66,7 @@ def ah_start_login():
     token_file = '/tmp/appie-tokens.json'
     if os.path.exists(token_file):
         os.remove(token_file)
-    return jsonify({'ok': True})
+    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/ah/poll-token')
@@ -106,7 +106,7 @@ def ah_login_password():
         _ah_setting('ah_access_token', access)
         _ah_setting('ah_refresh_token', refresh)
         _ah_setting('ah_token_expires', str(expires))
-        return jsonify({'status': 'ok'})
+        return jsonify({'status': 'success'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 401
 
@@ -141,7 +141,7 @@ def ah_verify():
         if not member.get('emailAddress'):
             return jsonify({'ok': False, 'reason': 'Niet ingelogd (anoniem token)'})
         name = (member.get('name') or {}).get('first') or ''
-        return jsonify({'ok': True, 'name': name})
+        return jsonify({'status': 'success', 'name': name})
     except Exception as e:
         return jsonify({'ok': False, 'reason': str(e)})
 
@@ -236,7 +236,7 @@ def ah_order_apply(order_id):
         ah_add_to_open_order(order_id, items)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 502
-    return jsonify({'status': 'ok', 'order': ah_get_order(order_id)})
+    return jsonify({'status': 'success', 'order': ah_get_order(order_id)})
 
 
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/link', methods=['POST'])
@@ -266,7 +266,7 @@ def ah_link_ingredient(ingredient_id):
         ing.ah_conv_factor = None
         ing.ah_conv_unit = None
     db.session.commit()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/refresh', methods=['POST'])
@@ -292,7 +292,7 @@ def ah_refresh_ingredient(ingredient_id):
     if parsed:
         ing.ah_pkg_qty, ing.ah_pkg_unit = parsed
     db.session.commit()
-    return jsonify({'status': 'ok', 'product': p})
+    return jsonify({'status': 'success', 'product': p})
 
 
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/pkg-config', methods=['POST'])
@@ -337,7 +337,7 @@ def ah_pkg_config(ingredient_id):
         ing.ah_conv_unit = data.get('ah_conv_unit') or None
 
     db.session.commit()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/maat', methods=['POST'])

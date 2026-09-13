@@ -141,7 +141,7 @@ async function toPantry(id, btn) {
         return;
     }
     // Buiten de try: anders slikt hij ook fouten in deze DOM-code op.
-    if (!data || (data.status !== 'ok' && data.status !== 'exists')) {
+    if (!data || (data.status !== 'success' && data.status !== 'exists')) {
         btn.disabled = false;
         return;
     }
@@ -243,7 +243,7 @@ async function voegSamen(winnaarId, verliezerId, btn) {
         sluitKaart(btn, `✗ ${data.message}`, 'text-[#8A6A2F]');
         return;
     }
-    if (!data || data.status !== 'ok') {
+    if (!data || data.status !== 'success') {
         btn.disabled = false;
         meldFout(btn, (data && data.message) || 'samenvoegen mislukt');
         return;
@@ -294,7 +294,7 @@ async function legOmrekeningVast(ingredientId, anderId, van, naar, btn) {
         btn.disabled = false;
         return;
     }
-    if (!data || data.status !== 'ok') {
+    if (!data || data.status !== 'success') {
         btn.disabled = false;
         meldFout(btn, (data && data.message) || 'omrekening niet opgeslagen');
         return;
@@ -329,7 +329,7 @@ async function houdApart(aId, bId, btn) {
         sluitKaart(btn, `✗ ${data.message}`, 'text-[#8A6A2F]');
         return;
     }
-    if (!data || data.status !== 'ok') {
+    if (!data || data.status !== 'success') {
         btn.disabled = false;
         meldFout(btn, (data && data.message) || 'niet opgeslagen');
         return;
@@ -351,7 +351,7 @@ async function setCategory(id, category, el) {
         return;   // offline: laat de rij staan zoals hij staat
     }
     // Buiten de try, anders slikt hij ook programmeerfouten in deze DOM-code.
-    if (!data || data.status !== 'ok') return;
+    if (!data || data.status !== 'success') return;
     const sel = row.querySelector('select');
     if (sel && sel.value !== data.category) sel.value = data.category;
     const knop = row.querySelector('button');

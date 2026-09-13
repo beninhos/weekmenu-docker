@@ -92,7 +92,7 @@
                     body: JSON.stringify({ingredient_id: parseInt(id)})
                 });
                 const data = await resp.json();
-                if ((data.status === 'ok' || data.status === 'exists') && !document.querySelector(`#pantryTable .pantry-row[data-id="${id}"]`)) {
+                if ((data.status === 'success' || data.status === 'exists') && !document.querySelector(`#pantryTable .pantry-row[data-id="${id}"]`)) {
                     const div = document.createElement('div');
                     div.className = 'pantry-row flex items-center justify-between bg-white border border-[#E8E4DC] rounded px-3 py-1.5 text-sm';
                     div.dataset.id = id;

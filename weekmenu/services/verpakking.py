@@ -365,7 +365,7 @@ def bevestig_maat(ingredient_id, eenheid, waarde, richting, antwoord_eenheid=Non
 
     regel = _zwaarste_regels().get((ing.id, norm))
     qty = _calc_ah_qty(ing, regel['amount'], norm) if regel else None
-    return {'status': 'ok', 'factor': factor, 'qty': qty}, 200
+    return {'status': 'success', 'factor': factor, 'qty': qty}, 200
 
 
 def sla_maat_over(ingredient_id, eenheid):
@@ -379,7 +379,7 @@ def sla_maat_over(ingredient_id, eenheid):
     if not MaatOverslaan.query.filter_by(ingredient_id=ing.id, eenheid=norm).first():
         db.session.add(MaatOverslaan(ingredient_id=ing.id, eenheid=norm))
         db.session.commit()
-    return {'status': 'ok'}, 200
+    return {'status': 'success'}, 200
 
 
 def vraag_maat_toch(ingredient_id, eenheid):
@@ -399,4 +399,4 @@ def vraag_maat_toch(ingredient_id, eenheid):
     for rij in MaatOverslaan.query.filter_by(ingredient_id=ing.id, eenheid=norm).all():
         db.session.delete(rij)
     db.session.commit()
-    return {'status': 'ok'}, 200
+    return {'status': 'success'}, 200

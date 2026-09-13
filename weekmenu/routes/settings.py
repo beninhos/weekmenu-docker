@@ -55,7 +55,7 @@ def gemini_key():
         if setting:
             db.session.delete(setting)
             db.session.commit()
-        return jsonify({'status': 'ok'})
+        return jsonify({'status': 'success'})
 
     data = request.get_json() or {}
     api_key = data.get('key', '').strip()
@@ -69,7 +69,7 @@ def gemini_key():
         setting = Settings(key='gemini_api_key', value=api_key)
         db.session.add(setting)
     db.session.commit()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/gemini/status')
@@ -85,7 +85,7 @@ def vision_key():
         if setting:
             db.session.delete(setting)
             db.session.commit()
-        return jsonify({'status': 'ok'})
+        return jsonify({'status': 'success'})
 
     data = request.get_json() or {}
     api_key = data.get('key', '').strip()
@@ -108,9 +108,9 @@ def vision_key():
         db.session.add(setting)
     db.session.commit()
     if werkt is None:
-        return jsonify({'status': 'ok', 'warning':
+        return jsonify({'status': 'success', 'warning':
                         f'Sleutel opgeslagen, maar niet kunnen controleren: {reden}'})
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/vision/status')
