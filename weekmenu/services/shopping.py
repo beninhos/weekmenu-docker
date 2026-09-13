@@ -37,10 +37,9 @@ def _build_shopping_dict(year, week, with_sources=False):
     shopping_dict = {}
     sources = defaultdict(set)
 
-    # 1. Recepten uit weekmenu
-    for item in MenuItem.query.filter_by(week_number=week, year=year).all():
-        if item.skip_shopping_list or not item.recipe:
-            continue
+    def _tel_receptregels_op(item, sla_over=False):
+        if sla_over or not item.recipe:
+            return
         m = _calc_multiplier(item.recipe.serves, item.people_count)
         for ri in item.recipe.ingredients:
             norm = _norm_unit(ri.unit)
@@ -49,17 +48,13 @@ def _build_shopping_dict(year, week, with_sources=False):
             shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
             sources[ri.ingredient_id].add(item.recipe.name)
 
+    # 1. Recepten uit weekmenu
+    for item in MenuItem.query.filter_by(week_number=week, year=year).all():
+        _tel_receptregels_op(item, sla_over=item.skip_shopping_list)
+
     # 2. Quick-add items
     for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
-        if not qi.recipe:
-            continue
-        m = _calc_multiplier(qi.recipe.serves, qi.people_count)
-        for ri in qi.recipe.ingredients:
-            norm = _norm_unit(ri.unit)
-            amount = ri.amount * m
-            norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
-            shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
-            sources[ri.ingredient_id].add(qi.recipe.name)
+        _tel_receptregels_op(qi)
 
     # 3a. Pantry filter — ingrediënten die altijd in huis zijn nooit op de lijst
     pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
