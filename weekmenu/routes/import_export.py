@@ -57,6 +57,71 @@ def export_data():
     return send_file(buf, mimetype='application/json', as_attachment=True, download_name=filename)
 
 
+def _importeer_uit_json(data, default_serves=None, image_check=None):
+    """Gedeeld leeswerk voor JSON- en ZIP-importen; geeft telling per type terug.
+
+    - default_serves is 4 in v1 (JSON zonder afbeeldingen) en None in v2 (ZIP);
+      een export van een oudere weekmenu-versie mist het serves-veld en zonder
+      default zou dat in v1 op None gaan staan waar 4 verwacht wordt.
+    - image_check is een callable die een 'image_filename'-veld omzet naar het
+      relatieve pad wanneer het bestand naast static/uploads bestaat, of None
+      teruggeeft. In v1 wordt het niet aangeroepen (geen images in de JSON).
+    """
+    counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0}
+
+    for cb_data in data.get('cookbooks', []):
+        if Cookbook.query.filter_by(name=cb_data['name']).first():
+            continue
+        kwargs = {'name': cb_data['name'], 'abbreviation': cb_data.get('abbreviation')}
+        if image_check is not None:
+            kwargs['image_path'] = image_check(cb_data.get('image_filename'))
+            kwargs['is_archived'] = cb_data.get('is_archived', False)
+        db.session.add(Cookbook(**kwargs))
+        counts['cookbooks'] += 1
+    db.session.commit()
+
+    for r_data in data.get('recipes', []):
+        if Recipe.query.filter_by(name=r_data['name']).first():
+            continue
+
+        cookbook = (Cookbook.query.filter_by(name=r_data['cookbook']).first()
+                    if r_data.get('cookbook') else None)
+        image_path = image_check(r_data.get('image_filename')) if image_check else None
+        recipe = Recipe(
+            name=r_data['name'],
+            serves=r_data.get('serves', default_serves),
+            cookbook_id=cookbook.id if cookbook else None,
+            page=r_data.get('page'),
+            is_favorite=r_data.get('is_favorite', False),
+            url=r_data.get('url'),
+            instructions=bereiding_naar_html(r_data.get('instructions')),
+            image_path=image_path,
+        )
+        db.session.add(recipe)
+        db.session.flush()
+
+        for ing_data in r_data.get('ingredients', []):
+            naam = (ing_data.get('name') or '').strip()
+            if not naam:
+                continue        # export van een andere versie, sla over
+            ingredient = _resolve_or_create_ingredient(
+                naam, ing_data.get('category', 'Overig'))
+            if not ingredient:
+                continue
+            counts['ingredients'] += 1
+            raw_amount = ing_data.get('amount') or 0
+            norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
+            db.session.add(RecipeIngredient(
+                recipe_id=recipe.id, ingredient_id=ingredient.id,
+                amount=norm_amount, unit=norm_unit,
+                preparation=ing_data.get('preparation'),
+            ))
+        counts['recipes'] += 1
+
+    db.session.commit()
+    return counts
+
+
 @bp.route('/import', methods=['POST'])
 def import_data():
     try:
@@ -65,57 +130,7 @@ def import_data():
             return jsonify({'status': 'error', 'message': 'Geen bestand geselecteerd'}), 400
 
         data = json.loads(file.read().decode('utf-8'))
-        counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0}
-
-        for cb_data in data.get('cookbooks', []):
-            if not Cookbook.query.filter_by(name=cb_data['name']).first():
-                db.session.add(Cookbook(
-                    name=cb_data['name'],
-                    abbreviation=cb_data.get('abbreviation')
-                ))
-                counts['cookbooks'] += 1
-        db.session.commit()
-
-        for r_data in data.get('recipes', []):
-            if Recipe.query.filter_by(name=r_data['name']).first():
-                continue
-
-            cookbook = Cookbook.query.filter_by(name=r_data['cookbook']).first() if r_data.get('cookbook') else None
-            recipe = Recipe(
-                name=r_data['name'],
-                serves=r_data.get('serves', 4),
-                cookbook_id=cookbook.id if cookbook else None,
-                page=r_data.get('page'),
-                is_favorite=r_data.get('is_favorite', False),
-                url=r_data.get('url'),
-                instructions=bereiding_naar_html(r_data.get('instructions')),
-            )
-            db.session.add(recipe)
-            db.session.flush()
-
-            for ing_data in r_data.get('ingredients', []):
-                naam = (ing_data.get('name') or '').strip()
-                if not naam:
-                    continue        # export van een andere versie, sla over
-                ingredient = _resolve_or_create_ingredient(
-                    naam, ing_data.get('category', 'Overig'))
-                if not ingredient:
-                    continue
-                counts['ingredients'] += 1
-
-                raw_amount = ing_data.get('amount', 0)
-                norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
-                db.session.add(RecipeIngredient(
-                    recipe_id=recipe.id,
-                    ingredient_id=ingredient.id,
-                    amount=norm_amount,
-                    unit=norm_unit,
-                    preparation=ing_data.get('preparation'),
-                ))
-
-            counts['recipes'] += 1
-
-        db.session.commit()
+        counts = _importeer_uit_json(data, default_serves=4)
         return jsonify({
             'status': 'success',
             'message': f"{counts['cookbooks']} kookboeken, {counts['recipes']} recepten en {counts['ingredients']} ingrediënten geïmporteerd."
@@ -188,6 +203,16 @@ def export_zip():
     return send_file(buf, mimetype='application/zip', as_attachment=True, download_name=filename)
 
 
+def _uploads_beeld_check(filename):
+    """Beeldpad voor de import als het bestand naast static/uploads staat."""
+    if not filename:
+        return None
+    candidate = os.path.join('static', 'uploads', filename)
+    if os.path.isfile(os.path.join(current_app.root_path, candidate)):
+        return candidate
+    return None
+
+
 @bp.route('/import/zip', methods=['POST'])
 def import_zip():
     try:
@@ -200,9 +225,9 @@ def import_zip():
             return jsonify({'status': 'error', 'message': 'Ongeldig ZIP-bestand'}), 400
 
         buf.seek(0)
-        counts = {'cookbooks': 0, 'recipes': 0, 'ingredients': 0, 'images': 0}
         uploads_dir = os.path.normpath(os.path.join(current_app.static_folder, 'uploads'))
         os.makedirs(uploads_dir, exist_ok=True)
+        beelden = 0
 
         with zipfile.ZipFile(buf, 'r') as zf:
             if 'weekmenu_export.json' not in zf.namelist():
@@ -217,79 +242,14 @@ def import_zip():
                     if not os.path.exists(dest):
                         with open(dest, 'wb') as f:
                             f.write(zf.read(entry))
-                        counts['images'] += 1
+                        beelden += 1
 
-            for cb_data in data.get('cookbooks', []):
-                if not Cookbook.query.filter_by(name=cb_data['name']).first():
-                    image_path = None
-                    if cb_data.get('image_filename'):
-                        candidate = os.path.join('static', 'uploads', cb_data['image_filename'])
-                        if os.path.isfile(os.path.join(current_app.root_path, candidate)):
-                            image_path = candidate
-                    db.session.add(Cookbook(
-                        name=cb_data['name'],
-                        abbreviation=cb_data.get('abbreviation'),
-                        image_path=image_path,
-                        is_archived=cb_data.get('is_archived', False),
-                    ))
-                    counts['cookbooks'] += 1
-            db.session.commit()
+            counts = _importeer_uit_json(data, image_check=_uploads_beeld_check)
 
-            for r_data in data.get('recipes', []):
-                if Recipe.query.filter_by(name=r_data['name']).first():
-                    continue
-
-                cookbook = (Cookbook.query.filter_by(name=r_data['cookbook']).first()
-                            if r_data.get('cookbook') else None)
-
-                image_path = None
-                if r_data.get('image_filename'):
-                    candidate = os.path.join('static', 'uploads', r_data['image_filename'])
-                    full_path = os.path.normpath(os.path.join(current_app.static_folder, '..', candidate))
-                    if os.path.isfile(full_path):
-                        image_path = candidate
-
-                recipe = Recipe(
-                    name=r_data['name'],
-                    serves=r_data.get('serves'),
-                    cookbook_id=cookbook.id if cookbook else None,
-                    page=r_data.get('page'),
-                    is_favorite=r_data.get('is_favorite', False),
-                    url=r_data.get('url'),
-                    instructions=bereiding_naar_html(r_data.get('instructions')),
-                    image_path=image_path,
-                )
-                db.session.add(recipe)
-                db.session.flush()
-
-                for ing_data in r_data.get('ingredients', []):
-                    # Via de reguliere weg: die valideert de categorie en zet
-                    # display_name en alias. Rechtstreeks Ingredient() aanmaken
-                    # leverde rijen zonder display_name en met een categorie
-                    # die niet meer bestaat.
-                    naam = (ing_data.get('name') or '').strip()
-                    if not naam:
-                        continue    # export van een andere versie, sla over
-                    ingredient = _resolve_or_create_ingredient(
-                        naam, ing_data.get('category'))
-                    if not ingredient:
-                        continue
-                    raw_amount = ing_data.get('amount') or 0
-                    norm_unit, norm_amount = _normalize_ri_unit(ingredient, ing_data.get('unit', ''), raw_amount)
-                    db.session.add(RecipeIngredient(
-                        recipe_id=recipe.id,
-                        ingredient_id=ingredient.id,
-                        amount=norm_amount,
-                        unit=norm_unit,
-                    ))
-                    counts['ingredients'] += 1
-                counts['recipes'] += 1
-
-        db.session.commit()
         return jsonify({
             'status': 'success',
             'message': (f"{counts['cookbooks']} kookboeken, {counts['recipes']} recepten, "
-                        f"{counts['ingredients']} ingrediënten en {counts['images']} afbeeldingen geïmporteerd.")
+                        f"{counts['ingredients']} ingrediënten en {beelden} afbeeldingen geïmporteerd.")
         })
     except Exception as e:
         db.session.rollback()
