@@ -5,10 +5,10 @@ import time
 from flask import Blueprint, request, jsonify, render_template
 
 from weekmenu.extensions import db
-from weekmenu.models import Ingredient, Settings
+from weekmenu.models import Ingredient
 from weekmenu.constants import _AH_TOKEN_URL, _AH_HEADERS, _AH_CLIENT_ID
 from weekmenu.services.ah import (
-    _ah_setting, ah_get_access_token, ah_search_products,
+    _ah_setting, _ah_clear_tokens, ah_get_access_token, ah_search_products,
     ah_search_with_facets, ah_login_with_password, ah_price_advice,
 )
 from weekmenu.services.units import _parse_product_size, _calc_ah_qty
@@ -57,11 +57,7 @@ def ah_status():
 
 @bp.route('/api/ah/disconnect', methods=['POST'])
 def ah_disconnect():
-    for key in ('ah_access_token', 'ah_refresh_token', 'ah_token_expires'):
-        s = Settings.query.filter_by(key=key).first()
-        if s:
-            db.session.delete(s)
-    db.session.commit()
+    _ah_clear_tokens()
     return jsonify({'status': 'ok'})
 
 
