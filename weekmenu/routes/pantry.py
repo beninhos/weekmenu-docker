@@ -12,6 +12,12 @@ from weekmenu.services.ingredienten import (
 bp = Blueprint('pantry', __name__)
 
 
+def _antwoord(dienstuitkomst):
+    """De service-laag geeft consequent (dict, statuscode); jsonify die."""
+    payload, status = dienstuitkomst
+    return jsonify(payload), status
+
+
 @bp.route('/voorraad')
 def pantry():
     items = (
@@ -51,19 +57,17 @@ def review_dubbel():
 def samenvoegen():
     """Twee varianten tot één ingredient. Alleen op een klik, nooit vanzelf."""
     data = request.get_json() or {}
-    payload, status = voeg_samen(data.get('verliezer_id'), data.get('winnaar_id'),
-                                 ah_van_id=data.get('ah_van_id'))
-    return jsonify(payload), status
+    return _antwoord(voeg_samen(data.get('verliezer_id'), data.get('winnaar_id'),
+                                ah_van_id=data.get('ah_van_id')))
 
 
 @bp.route('/api/ingredienten/omrekening', methods=['POST'])
 def omrekening():
     """'1 bosje = 4 stuks': de omrekening die alleen de gebruiker weet."""
     data = request.get_json() or {}
-    payload, status = leg_omrekening_vast(
+    return _antwoord(leg_omrekening_vast(
         data.get('ingredient_id'), data.get('ander_id'),
-        data.get('van'), data.get('naar'), data.get('factor'))
-    return jsonify(payload), status
+        data.get('van'), data.get('naar'), data.get('factor')))
 
 
 @bp.route('/api/ingredienten/apart', methods=['POST'])
@@ -76,29 +80,24 @@ def apart():
     """
     data = request.get_json() or {}
     if data.get('ander_id'):
-        payload, status = markeer_paar_apart(data.get('ingredient_id'), data.get('ander_id'))
-    else:
-        payload, status = markeer_apart(data.get('naam'), data.get('ingredient_id'))
-    return jsonify(payload), status
+        return _antwoord(markeer_paar_apart(data.get('ingredient_id'), data.get('ander_id')))
+    return _antwoord(markeer_apart(data.get('naam'), data.get('ingredient_id')))
 
 
 @bp.route('/api/ingredienten/alias', methods=['POST'])
 def alias():
     """'Zelfde product': onthoud deze spelling bij dit ingredient."""
     data = request.get_json() or {}
-    payload, status = koppel_alias(data.get('naam'), data.get('ingredient_id'))
-    return jsonify(payload), status
+    return _antwoord(koppel_alias(data.get('naam'), data.get('ingredient_id')))
 
 
 @bp.route('/api/ingredient/<int:ingredient_id>/category', methods=['POST'])
 def update_category(ingredient_id):
     data = request.get_json() or {}
-    payload, status = set_category(ingredient_id, data.get('category'))
-    return jsonify(payload), status
+    return _antwoord(set_category(ingredient_id, data.get('category')))
 
 
 @bp.route('/api/ingredient/<int:ingredient_id>/bron', methods=['POST'])
 def update_bron(ingredient_id):
     data = request.get_json() or {}
-    payload, status = set_bron(ingredient_id, data.get('bron'))
-    return jsonify(payload), status
+    return _antwoord(set_bron(ingredient_id, data.get('bron')))

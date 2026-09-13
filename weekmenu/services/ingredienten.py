@@ -118,6 +118,11 @@ def variantsleutel(naam):
 def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
     """Voeg de verliezer op in de winnaar. Geeft (payload, statuscode).
 
+    Elke service-functie in deze module én in services/pantry.py gebruikt
+    dezelfde vorm — succes = ({...}, 200), fout = ({'status': 'error', ...}, 4xx/5xx) —
+    zodat de routes zonder eigen branching één helper (_antwoord in
+    routes/pantry.py) hebben om er JSON van te maken.
+
     Alles gebeurt in één transactie: gaat er onderweg iets mis, dan staat de
     database er precies zo bij als ervoor. Een half samengevoegd ingredient —
     receptregels verhuisd maar de rij nog aanwezig — zou de boodschappenlijst
