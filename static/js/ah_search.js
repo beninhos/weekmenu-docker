@@ -1,6 +1,7 @@
 // AH-productzoeker voor boodschappenlijst-items.
 // Verwacht per item een .shopping-item met daarin het paneel uit
-// templates/_ah_search_panel.html. Vereist esc() uit utils.js.
+// templates/_ah_search_panel.html. Vereist esc() uit utils.js en
+// ahFetchProducts() uit ah_common.js.
 
 const AH_SEARCH_SIZE = 50;
 
@@ -31,13 +32,11 @@ async function doSearch(input, taxonomyId, pkg) {
     if (pkg === undefined)        pkg        = prev ? prev.pkg : null;
 
     resultsEl.innerHTML = '<div class="text-xs text-[#6B6B6B] p-3 text-center">Zoeken...</div>';
-    let url = '/api/ah/product-search?q=' + encodeURIComponent(query) + '&size=' + AH_SEARCH_SIZE;
-    if (taxonomyId) url += '&taxonomy_id=' + encodeURIComponent(taxonomyId);
-    if (pkg) url += '&pkg=' + encodeURIComponent(pkg);
 
     try {
-        const resp = await fetch(url);
-        const data = await resp.json();
+        const data = await ahFetchProducts(query, {
+            size: AH_SEARCH_SIZE, taxonomyId, pkg,
+        });
         _ahState.set(panel, {
             products:   data.products || [],
             taxonomies: data.taxonomies || [],
