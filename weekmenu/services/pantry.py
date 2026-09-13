@@ -68,6 +68,10 @@ DOSE_UNITS = {'el', 'tl', 'kl', 'snufje', 'snuf', 'mespunt', 'scheutje', 'scheut
 _VERS_RE = re.compile(r'\b(verse?|takjes?|blaadjes?|bosje)\b')
 
 
+def _is_verse(name):
+    return bool(_VERS_RE.search(_normalize_ingredient((name or '').lower())))
+
+
 def _is_dose(unit, amount):
     """True als de receptregel een dosis noemt, geen hele verpakking.
 
@@ -167,7 +171,7 @@ def annotate_pantry_status(ingredients):
             continue
 
         category = row.get('category') or ''
-        is_fresh = bool(_VERS_RE.search(_normalize_ingredient(name.lower())))
+        is_fresh = _is_verse(name)
         if category in KAST_CATEGORIES and not is_fresh and _is_dose(row.get('unit'), row.get('amount')):
             row['pantry_hint'] = 'suggest'
         else:
@@ -204,7 +208,7 @@ def pantry_hints_for(ingredients):
             hints[ing.id] = 'in_pantry'
             continue
         rows = uses.get(ing.id)
-        is_fresh = bool(_VERS_RE.search(_normalize_ingredient((ing.name or '').lower())))
+        is_fresh = _is_verse(ing.name)
         if (rows and ing.category in KAST_CATEGORIES and not is_fresh
                 and all(_is_dose(u, a) for u, a in rows)):
             hints[ing.id] = 'suggest'
@@ -247,7 +251,7 @@ def hints_for_recipe_rows(recipe_ingredients):
                           'variant_of': {'id': twin.id, 'name': twin.display}}
             continue
 
-        is_fresh = bool(_VERS_RE.search(_normalize_ingredient((ing.name or '').lower())))
+        is_fresh = _is_verse(ing.name)
         if (ing.category in KAST_CATEGORIES and not is_fresh
                 and _is_dose(ri.unit, ri.amount)):
             out[ri.id] = {'hint': 'suggest', 'variant_of': None}
@@ -288,7 +292,7 @@ def review_lists():
         base = {'id': ing.id, 'name': ing.display, 'category': ing.category, 'uses': n}
 
         if ing.id not in pantry_ids and ing.category in KAST_CATEGORIES and rows:
-            is_fresh = bool(_VERS_RE.search(_normalize_ingredient((ing.name or '').lower())))
+            is_fresh = _is_verse(ing.name)
             if not is_fresh and all(_is_dose(u, a) for u, a in rows):
                 kandidaten.append(base)
 
