@@ -31,13 +31,18 @@ def _plan(recipe, year, week, day=0):
     db.session.flush()
 
 
-def test_window_weeks_geeft_precies_de_aankomende_week(app):
-    # TODAY is een zaterdag: morgen (zondag) valt in dezelfde iso-week 28.
-    assert window_weeks(today=TODAY) == [(2026, 28)]
+def test_window_weeks_geeft_alle_geplande_weken(app):
+    # Zonder gepland niks: lege lijst.
+    assert window_weeks() == []
 
-    # Op zondag valt morgen (maandag) in de vólgende iso-week 29.
-    zondag = date(2026, 7, 12)
-    assert window_weeks(today=zondag) == [(2026, 29)]
+    # Zet twee weken op de kaart, elk met een andere bron.
+    r, _ = _mk_recipe('Iets', 'iets', 100)
+    _plan(r, 2026, 28)
+    db.session.add(QuickAddItem(recipe_id=r.id, people_count=2,
+                                week_number=41, year=2026))
+    db.session.commit()
+
+    assert window_weeks() == [(2026, 28), (2026, 41)]
 
 
 def test_zelfde_ingredient_twee_recepten_zelfde_week_wordt_gemerged(app):

@@ -102,20 +102,22 @@ def _build_shopping_dict(year, week, with_sources=False):
 
 
 def window_weeks(today=None):
-    """De ene week waarvoor de boodschappenlijst nu geldt.
+    """Alle weken waarvoor iets gepland staat.
 
-    Regel: neem de iso-week van MORGEN. Op zondag valt morgen in de volgende
-    week — dan zie je precies wat je wil zien als je 's avonds voor de aankomende
-    week bestelt. Op maandag t/m zaterdag valt morgen in dezelfde week, dus je
-    ziet 'de week waarin je zit'.
-
-    De vroegere bundel van vier weken (-7/+0/+7/+14) is bewust weg: als het
-    lijstje op nul staat, betekent dat 'boodschappen gedaan'. Als er iets is
-    vergeten, plan je het recept opnieuw en het staat er weer.
+    Rutgers regel, letterlijk: 'alles wat ik afvink gaat van de lijst. Tot ik
+    het opnieuw erop zet. Vink ik het niet af — of schiet het niet naar de
+    Appie maar naar de markt — dan blijft het staan.' Geen tijdsvenster dus;
+    de lijst is ALLE open receptregels ongeacht welke week. Afvinken schrijft
+    voor élke week waarin het ingredient staat een ShoppingCheck-rij weg
+    (zie _set_checks) → item weg. Een nieuw recept plannen zet een nieuwe
+    (jaar, week) op de kaart die nog niet in ShoppingCheck staat → item terug.
     """
-    today = today or date.today()
-    iso = (today + timedelta(days=1)).isocalendar()
-    return [(iso[0], iso[1])]
+    del today                       # nog in de signature; laat de aanroepers ongewijzigd
+    weken = set()
+    for model in (MenuItem, QuickAddItem, CustomShoppingIngredient):
+        for y, w in db.session.query(model.year, model.week_number).distinct():
+            weken.add((y, w))
+    return sorted(weken)
 
 
 def _row_base(ing, unit, amount, recipe_names=None):
