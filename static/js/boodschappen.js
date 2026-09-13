@@ -221,7 +221,7 @@ async function addLosItem() {
     const unit   = document.getElementById('addItemUnit').value.trim() || 'stuks';
 
     try {
-        const resp = await fetch(``/api/shopping-list/${_pageData.year}/${_pageData.week}/add-item``, {
+        const resp = await fetch(`/api/shopping-list/${_pageData.year}/${_pageData.week}/add-item`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ ingredient_id: parseInt(ingredientId), amount, unit }),

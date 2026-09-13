@@ -1,5 +1,5 @@
 """Regressies uit de eindreview van branch fix/voorraad-en-categorie."""
-from datetime import date
+from datetime import date, timedelta
 
 from weekmenu.extensions import db
 from weekmenu.models import (Ingredient, MenuItem, PantryIngredient, Recipe,
@@ -14,7 +14,7 @@ def _ing(name, category='Oliën, Sauzen & Smaakmakers', **kw):
 
 
 def _plan(ing, amount=1, unit='el'):
-    iso = date.today().isocalendar()
+    iso = (date.today() + timedelta(days=1)).isocalendar()
     r = Recipe(name='R', serves=2)
     db.session.add(r)
     db.session.flush()

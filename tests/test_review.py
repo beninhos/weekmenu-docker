@@ -109,8 +109,8 @@ def test_onbekende_bron_wordt_geweigerd(client, app):
 
 def test_niet_ah_items_krijgen_een_eigen_blok_op_de_lijst(client, app):
     from weekmenu.models import Recipe, MenuItem
-    from datetime import date
-    iso = date.today().isocalendar()
+    from datetime import date, timedelta
+    iso = (date.today() + timedelta(days=1)).isocalendar()
 
     polenta = _ing('polenta', 'Pasta, Rijst & Wereldkeuken')
     ui = _ing('ui', 'Groente, Fruit & Aardappelen')

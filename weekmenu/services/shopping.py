@@ -102,26 +102,20 @@ def _build_shopping_dict(year, week, with_sources=False):
 
 
 def window_weeks(today=None):
-    """ISO-weken van vandaag-7d t/m vandaag+14d, plus handmatige weken tot 4 weken terug."""
+    """De ene week waarvoor de boodschappenlijst nu geldt.
+
+    Regel: neem de iso-week van MORGEN. Op zondag valt morgen in de volgende
+    week — dan zie je precies wat je wil zien als je 's avonds voor de aankomende
+    week bestelt. Op maandag t/m zaterdag valt morgen in dezelfde week, dus je
+    ziet 'de week waarin je zit'.
+
+    De vroegere bundel van vier weken (-7/+0/+7/+14) is bewust weg: als het
+    lijstje op nul staat, betekent dat 'boodschappen gedaan'. Als er iets is
+    vergeten, plan je het recept opnieuw en het staat er weer.
+    """
     today = today or date.today()
-    weeks = []
-    for delta in (-7, 0, 7, 14):
-        iso = (today + timedelta(days=delta)).isocalendar()
-        wk = (iso[0], iso[1])
-        if wk not in weeks:
-            weeks.append(wk)
-    for delta in (-28, -21, -14):
-        iso = (today + timedelta(days=delta)).isocalendar()
-        wk = (iso[0], iso[1])
-        if wk in weeks:
-            continue
-        has_manual = (
-            QuickAddItem.query.filter_by(year=wk[0], week_number=wk[1]).count() > 0
-            or CustomShoppingIngredient.query.filter_by(year=wk[0], week_number=wk[1]).count() > 0
-        )
-        if has_manual:
-            weeks.append(wk)
-    return sorted(weeks)
+    iso = (today + timedelta(days=1)).isocalendar()
+    return [(iso[0], iso[1])]
 
 
 def _row_base(ing, unit, amount, recipe_names=None):

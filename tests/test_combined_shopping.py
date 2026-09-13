@@ -31,32 +31,28 @@ def _plan(recipe, year, week, day=0):
     db.session.flush()
 
 
-def test_window_weeks_covers_prev_to_plus_two(app):
-    weeks = window_weeks(today=TODAY)
-    assert (2026, 27) in weeks and (2026, 28) in weeks
-    assert (2026, 29) in weeks and (2026, 30) in weeks
+def test_window_weeks_geeft_precies_de_aankomende_week(app):
+    # TODAY is een zaterdag: morgen (zondag) valt in dezelfde iso-week 28.
+    assert window_weeks(today=TODAY) == [(2026, 28)]
+
+    # Op zondag valt morgen (maandag) in de vólgende iso-week 29.
+    zondag = date(2026, 7, 12)
+    assert window_weeks(today=zondag) == [(2026, 29)]
 
 
-def test_same_ingredient_two_weeks_merges_and_checks_partially(app):
-    r1, ing = _mk_recipe('Dal wk28', 'rode linzen', 200)
-    r2, _ = _mk_recipe('Dal wk29', 'rode linzen', 300)
+def test_zelfde_ingredient_twee_recepten_zelfde_week_wordt_gemerged(app):
+    r1, ing = _mk_recipe('Dal', 'rode linzen', 200)
+    r2, _ = _mk_recipe('Andere dal', 'rode linzen', 300)
     _plan(r1, 2026, 28)
-    _plan(r2, 2026, 29)
+    _plan(r2, 2026, 28)
 
     result = build_combined_shopping_list(today=TODAY)
     rows = [x for x in result['open'] if x['name'].lower().startswith('rode linzen')]
     assert len(rows) == 1
     assert rows[0]['amount'] == 500  # 200 + 300 samengevoegd
 
-    # week 28 afvinken → alleen 300 nog open
-    db.session.add(ShoppingCheck(year=2026, week_number=28, ingredient_id=ing.id))
-    db.session.commit()
-    result = build_combined_shopping_list(today=TODAY)
-    rows = [x for x in result['open'] if x['ingredient_id'] == ing.id]
-    assert rows[0]['amount'] == 300
-
-    # beide weken afgevinkt → rij naar checked
-    db.session.add(ShoppingCheck(year=2026, week_number=29, ingredient_id=ing.id,
+    # afvinken → naar checked
+    db.session.add(ShoppingCheck(year=2026, week_number=28, ingredient_id=ing.id,
                                  via_ah=True))
     db.session.commit()
     result = build_combined_shopping_list(today=TODAY)
@@ -69,34 +65,30 @@ def test_open_row_includes_recipe_hint(app):
     r1, ing = _mk_recipe('Pasta bolognese', 'gehakt', 300)
     r2, _ = _mk_recipe('Taco maandag', 'gehakt', 200)
     _plan(r1, 2026, 28)
-    _plan(r2, 2026, 29)
+    _plan(r2, 2026, 28)
 
     result = build_combined_shopping_list(today=TODAY)
     row = next(x for x in result['open'] if x['ingredient_id'] == ing.id)
     assert row['recipes'] == ['Pasta bolognese', 'Taco maandag']
 
 
-def test_excluded_week_does_not_leak_into_recipe_hint(app):
+def test_excluded_ingredient_verdwijnt_uit_de_lijst(app):
     from weekmenu.models import ShoppingListExclusion
 
-    r1, ing = _mk_recipe('Soep wk28', 'wortel', 200)
-    r2, _ = _mk_recipe('Ander recept wk29', 'wortel', 300)
-    _plan(r1, 2026, 28)
-    _plan(r2, 2026, 29)
-    db.session.add(ShoppingListExclusion(year=2026, week_number=29, ingredient_id=ing.id))
+    r, ing = _mk_recipe('Soep', 'wortel', 200)
+    _plan(r, 2026, 28)
+    db.session.add(ShoppingListExclusion(year=2026, week_number=28, ingredient_id=ing.id))
     db.session.commit()
 
     result = build_combined_shopping_list(today=TODAY)
-    row = next(x for x in result['open'] if x['ingredient_id'] == ing.id)
-    assert row['amount'] == 200
-    assert row['recipes'] == ['Soep wk28']
+    assert not [x for x in result['open'] if x['ingredient_id'] == ing.id]
 
 
 def test_manual_item_has_no_recipe_hint(app):
     ing = Ingredient(name='statiegeldflesje', display_name='Statiegeldflesje', category='overig')
     db.session.add(ing)
     db.session.commit()
-    iso = date.today().isocalendar()
+    iso = (date.today() + timedelta(days=1)).isocalendar()
     db.session.add(CustomShoppingIngredient(year=iso[0], week_number=iso[1],
                                             ingredient_id=ing.id, amount=1, unit='stuks'))
     db.session.commit()
@@ -117,11 +109,11 @@ def test_checked_older_than_14_days_hidden(app):
     assert not [x for x in result['open'] if x['ingredient_id'] == ing.id]
 
 
-def test_quick_add_recipe_counts_and_old_manual_week_included(app):
+def test_quick_add_recipe_verschijnt_op_de_boodschappenlijst(app):
+    # Los-recept in dezelfde iso-week als de boodschappenlijst kijkt.
     r, ing = _mk_recipe('Feestje', 'chips', 3, unit='zak')
-    # QuickAddItem in een week buiten het venster (3 weken terug, week 25)
     db.session.add(QuickAddItem(recipe_id=r.id, people_count=4,
-                                week_number=25, year=2026))
+                                week_number=28, year=2026))
     db.session.commit()
     result = build_combined_shopping_list(today=TODAY)
     assert [x for x in result['open'] if x['ingredient_id'] == ing.id]
@@ -159,18 +151,15 @@ def test_send_dict_to_ah_returns_sent_ids(app, monkeypatch):
     assert 'ongekoppeld-ding' in ' '.join(payload['not_linked'])
 
 
-def test_check_endpoint_checks_all_weeks(app, client):
-    r1, ing = _mk_recipe('A', 'kikkererwten', 200)
-    r2, _ = _mk_recipe('B', 'kikkererwten', 100)
-    iso = date.today().isocalendar()
-    nxt = (date.today() + timedelta(days=7)).isocalendar()
-    _plan(r1, iso[0], iso[1])
-    _plan(r2, nxt[0], nxt[1])
+def test_check_endpoint_zet_ingredient_op_afgevinkt(app, client):
+    r, ing = _mk_recipe('A', 'kikkererwten', 200)
+    iso = (date.today() + timedelta(days=1)).isocalendar()
+    _plan(r, iso[0], iso[1])
     db.session.commit()
 
     resp = client.post(f'/api/boodschappen/item/{ing.id}/check', json={'checked': True})
     assert resp.status_code == 200
-    assert ShoppingCheck.query.filter_by(ingredient_id=ing.id).count() == 2
+    assert ShoppingCheck.query.filter_by(ingredient_id=ing.id).count() == 1
 
     resp = client.post(f'/api/boodschappen/item/{ing.id}/check', json={'checked': False})
     assert resp.status_code == 200
@@ -199,7 +188,7 @@ def test_add_item_current_week_appears_open(app, client):
     ing = Ingredient(name='verse munt', display_name='Verse munt', category='groente')
     db.session.add(ing)
     db.session.commit()
-    iso = date.today().isocalendar()
+    iso = (date.today() + timedelta(days=1)).isocalendar()
 
     resp = client.post(f'/api/shopping-list/{iso[0]}/{iso[1]}/add-item',
                        json={'ingredient_id': ing.id, 'amount': 1, 'unit': 'bosje'})
@@ -224,7 +213,7 @@ def test_combined_send_to_ah_checks_sent_items(app, client, monkeypatch):
     from weekmenu.services import shopping as shopping_svc
     r, ing = _mk_recipe('Dal-ah', 'linzen-combined', 200)
     ing.ah_product_id = 777
-    iso = date.today().isocalendar()
+    iso = (date.today() + timedelta(days=1)).isocalendar()
     _plan(r, iso[0], iso[1])
     db.session.commit()
 
@@ -286,7 +275,7 @@ def test_remove_endpoint_removes_custom_item(app, client):
     ing = Ingredient(name='verwijdertest', display_name='verwijdertest', category='overig')
     db.session.add(ing)
     db.session.commit()
-    iso = date.today().isocalendar()
+    iso = (date.today() + timedelta(days=1)).isocalendar()
     client.post(f'/api/shopping-list/{iso[0]}/{iso[1]}/add-item',
                 json={'ingredient_id': ing.id, 'amount': 1, 'unit': 'stuks'})
     assert [x for x in build_combined_shopping_list()['open'] if x['ingredient_id'] == ing.id]
@@ -298,7 +287,7 @@ def test_remove_endpoint_removes_custom_item(app, client):
 
 def test_remove_endpoint_removes_menu_item_via_exclusion(app, client):
     r, ing = _mk_recipe('Wegwezen', 'exclude-ding', 100)
-    iso = date.today().isocalendar()
+    iso = (date.today() + timedelta(days=1)).isocalendar()
     _plan(r, iso[0], iso[1])
     db.session.commit()
     assert client.post(f'/api/boodschappen/item/{ing.id}/remove').status_code == 200
