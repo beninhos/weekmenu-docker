@@ -28,6 +28,17 @@ COPY . .
 # Data-directory en de map waar de uploads overheen gemonteerd worden
 RUN mkdir -p /data /app/static/uploads && chmod -R 755 /app/static/uploads
 
+# Niet als root draaien: een kwaadaardige recept-PDF of afbeelding gaat door
+# Pillow/pypdfium2, en die parsers zijn zwaar C-based; als daar ooit iets
+# stukgaat, willen we niet dat het als root gebeurt. De user is systeem-account
+# (login shell uit); /data en /app/static/uploads worden meegemount vanaf de
+# host als hun bind-mount volumes, dus die krijgen hun eigenaar van de host.
+# UID/GID 1000 komt overeen met de host-user, zodat bind-mounts (./data,
+# ./static/uploads) zonder handmatige chown werken.
+RUN groupadd -g 1000 app && useradd -u 1000 -g 1000 -s /usr/sbin/nologin app \
+    && chown -R app:app /app /data
+USER app
+
 # Poort waarop de applicatie draait
 EXPOSE 5001
 EXPOSE 9002
@@ -36,6 +47,6 @@ ENV FLASK_APP=app.py
 ENV DATABASE_URL=sqlite:////data/weekmenu.db
 
 # Start de applicatie
-COPY start.sh /start.sh
+COPY --chown=app:app start.sh /start.sh
 RUN chmod +x /start.sh
 CMD ["/start.sh"]
