@@ -72,5 +72,9 @@ def create_app():
         db.create_all()
         from weekmenu.migrations import migrate_db
         migrate_db()
+        # Als de vorige start midden in een dump-batch is afgebroken, laat de
+        # dump-pagina niet eeuwig staan te polten op een dode thread.
+        from weekmenu.services.dump import herstel_verloren_jobs
+        herstel_verloren_jobs()
 
     return app

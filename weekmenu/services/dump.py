@@ -223,6 +223,25 @@ def _job_dir(job_id):
     return os.path.join(current_app.static_folder, 'uploads', 'dump', job_id)
 
 
+def herstel_verloren_jobs():
+    """Markeer alle 'processing' jobs als error bij Flask-opstart.
+
+    De achterliggende thread leeft niet meer als de container is herstart, maar
+    de status in de database blijft 'processing'. De dump-pagina polt daar dan
+    eeuwig op — Ctrl-R helpt niet omdat de status niet vanzelf verandert.
+    Bij opstart zetten we die jobs op 'error' met een nette melding; de
+    gebruiker kan er dan de 'Opnieuw proberen'-knop op klikken en de retry-flow
+    doet de rest.
+    """
+    verloren = DumpJob.query.filter_by(status='processing').all()
+    for job in verloren:
+        job.status = 'error'
+        job.error_message = 'Server is herstart tijdens verwerking. Klik "Opnieuw proberen".'
+    if verloren:
+        db.session.commit()
+    return len(verloren)
+
+
 def start_dump_job(files, mode='boek'):
     """Sla uploads op, maak een DumpJob en start de verwerkingsthread. Returns job_id.
 
