@@ -228,7 +228,7 @@ class DumpJob(db.Model):
     warning = db.Column(db.Text, nullable=True)
     # 'boek' (één pagina = één recept) of 'kaart' (twee pagina's = één recept).
     mode = db.Column(db.String(10), nullable=False, default='boek')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
     drafts = db.relationship('RecipeDraft', backref='job', lazy=True, cascade='all, delete-orphan')
 
 
@@ -248,7 +248,7 @@ class RecipeDraft(db.Model):
     prep_time = db.Column(db.Integer, nullable=True)
     source_page = db.Column(db.Integer, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending|accepted|rejected
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
 
 
 class ShoppingCheck(db.Model):
