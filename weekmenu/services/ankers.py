@@ -612,3 +612,40 @@ def _kort(anker, n=_ANKER_KORT):
 def _zelfde_woord(regelwoord, naamwoord):
     """Gelijk, of een aan een schuine streep afgebroken woord ('en/' bij 'en/of')."""
     return regelwoord == naamwoord or (regelwoord.endswith('/') and naamwoord.startswith(regelwoord))
+
+
+def bereiding(item, photo_page, page_texts, ingredienten):
+    """Bereidingstekst van één recept: geknipt op ankers, anders zoals het model hem gaf."""
+    steps = item.get('steps')
+    if not steps:
+        tekst = item.get('instructions') or ''
+        return tekst, [] if tekst else ['geen bereidingsstappen aangewezen']
+    if not page_texts or not photo_page or photo_page > len(page_texts):
+        return item.get('instructions') or '', [
+            'bereidingsstappen aangewezen maar geen paginatekst om uit te knippen']
+    tekst, meldingen = knip_stappen(page_texts[photo_page - 1], steps,
+                                    corpus='\n'.join(page_texts), ingredienten=ingredienten,
+                                    titel=item.get('title'))
+    if not tekst:
+        elders = pagina_met_anker(steps, page_texts, photo_page)
+        if elders:
+            # Een recept dat over twee pagina's loopt, of een verkeerd
+            # paginanummer van het model: de ankers staan er wel, maar op een
+            # andere pagina. Dat is een andere fout dan 'niet gevonden', en de
+            # gebruiker moet weten welke.
+            meldingen.append(f'de bereidingsstappen staan op pagina {elders}, niet op '
+                             f'pagina {photo_page}; loopt dit recept over twee pagina\'s?')
+    return tekst, meldingen
+
+
+def pagina_met_anker(steps, page_texts, behalve):
+    """Paginanummer waar het eerste beginanker wél letterlijk staat, of None."""
+    eerste = next((s.get('start') for s in steps if isinstance(s, dict)
+                   and isinstance(s.get('start'), str) and s.get('start').strip()), None)
+    if not eerste:
+        return None
+    anker = re.sub(r'\s+', ' ', eerste).strip()
+    for nummer, tekst in enumerate(page_texts, 1):
+        if nummer != behalve and anker in normaliseer(tekst).replace('\n', ' '):
+            return nummer
+    return None

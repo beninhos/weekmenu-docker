@@ -14,7 +14,7 @@ from weekmenu.models import DumpJob, RecipeDraft
 from weekmenu.services.gemini import (
     _get_gemini_api_key, _sanitize_json, _build_gemini_ingredients, _UNITS_STR,
 )
-from weekmenu.services.ankers import knip_stappen, normaliseer
+from weekmenu.services.ankers import bereiding as _knip_bereiding
 from weekmenu.services.images import normaliseer_orientatie
 from weekmenu.services.kaart import (controleer_tegen_tabel, kaart_invoer,
                                      paren, zonder_tabelregels)
@@ -190,8 +190,8 @@ def parse_batch_response(text, page_texts=None, standaard_pagina=None):
             # mag geen paginanummer kiezen dat er niet is.
             photo_page = standaard_pagina
         ingredients = _build_gemini_ingredients(item.get('ingredients') or [])
-        instructions, meldingen = _bereiding(item, photo_page, page_texts,
-                                             [i['name'] for i in ingredients])
+        instructions, meldingen = _knip_bereiding(item, photo_page, page_texts,
+                                                  [i['name'] for i in ingredients])
         recipes.append({
             'name': name[:100],
             'serves': _eerste_getal(item.get('yields')),
@@ -201,43 +201,6 @@ def parse_batch_response(text, page_texts=None, standaard_pagina=None):
             'meldingen': meldingen,
         })
     return recipes
-
-
-def _bereiding(item, photo_page, page_texts, ingredienten):
-    """Bereidingstekst van één recept: geknipt op ankers, anders zoals het model hem gaf."""
-    steps = item.get('steps')
-    if not steps:
-        tekst = item.get('instructions') or ''
-        return tekst, [] if tekst else ['geen bereidingsstappen aangewezen']
-    if not page_texts or not photo_page or photo_page > len(page_texts):
-        return item.get('instructions') or '', [
-            'bereidingsstappen aangewezen maar geen paginatekst om uit te knippen']
-    tekst, meldingen = knip_stappen(page_texts[photo_page - 1], steps,
-                                    corpus='\n'.join(page_texts), ingredienten=ingredienten,
-                                    titel=item.get('title'))
-    if not tekst:
-        elders = _pagina_met_anker(steps, page_texts, photo_page)
-        if elders:
-            # Een recept dat over twee pagina's loopt, of een verkeerd
-            # paginanummer van het model: de ankers staan er wel, maar op een
-            # andere pagina. Dat is een andere fout dan 'niet gevonden', en de
-            # gebruiker moet weten welke.
-            meldingen.append(f'de bereidingsstappen staan op pagina {elders}, niet op '
-                             f'pagina {photo_page}; loopt dit recept over twee pagina\'s?')
-    return tekst, meldingen
-
-
-def _pagina_met_anker(steps, page_texts, behalve):
-    """Paginanummer waar het eerste beginanker wél letterlijk staat, of None."""
-    eerste = next((s.get('start') for s in steps if isinstance(s, dict)
-                   and isinstance(s.get('start'), str) and s.get('start').strip()), None)
-    if not eerste:
-        return None
-    anker = re.sub(r'\s+', ' ', eerste).strip()
-    for nummer, tekst in enumerate(page_texts, 1):
-        if nummer != behalve and anker in normaliseer(tekst).replace('\n', ' '):
-            return nummer
-    return None
 
 
 def _eerste_getal(waarde):
