@@ -162,24 +162,12 @@ def _download_image_to_uploads(image_url):
         return None
     try:
         from curl_cffi import requests as _cffi_requests
+        from weekmenu.services.images import extensie_uit_content_type, schrijf_naar_uploads
         img_resp = _cffi_requests.get(image_url, impersonate='chrome', timeout=10)
         img_resp.raise_for_status()
-        content_type = img_resp.headers.get('Content-Type', '')
-        ext = '.jpg'
-        if 'png' in content_type:
-            ext = '.png'
-        elif 'webp' in content_type:
-            ext = '.webp'
-        elif 'avif' in content_type:
-            ext = '.avif'
-        elif 'gif' in content_type:
-            ext = '.gif'
+        ext = extensie_uit_content_type(img_resp.headers.get('Content-Type'), default='.jpg')
         fname = hashlib.md5(image_url.encode()).hexdigest() + ext
-        save_path = os.path.join(current_app.static_folder, 'uploads', fname)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        with open(save_path, 'wb') as f:
-            f.write(img_resp.content)
-        return os.path.join('static/uploads', fname)
+        return schrijf_naar_uploads(fname, img_resp.content)
     except Exception:
         return None
 
@@ -488,19 +476,10 @@ def recipe_from_photos(photos):
         image_bytes = photo.read()
 
         if i == 0:
-            ext = '.jpg'
-            if photo.content_type == 'image/png':
-                ext = '.png'
-            elif photo.content_type == 'image/webp':
-                ext = '.webp'
-            elif photo.content_type == 'image/avif':
-                ext = '.avif'
+            from weekmenu.services.images import extensie_uit_content_type, schrijf_naar_uploads
+            ext = extensie_uit_content_type(photo.content_type, default='.jpg')
             fname = hashlib.md5(image_bytes).hexdigest() + ext
-            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, 'wb') as f:
-                f.write(image_bytes)
-            first_image_path = os.path.join('static/uploads', fname)
+            first_image_path = schrijf_naar_uploads(fname, image_bytes)
 
         image_parts.append(
             _gtypes.Part.from_bytes(data=image_bytes, mime_type=photo.content_type or 'image/jpeg')

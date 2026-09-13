@@ -11,6 +11,45 @@ from flask import current_app
 _KWARTSLAGEN = {90: 'ROTATE_270', 180: 'ROTATE_180', 270: 'ROTATE_90'}
 
 
+# Vertaaltabel content-type → bestandsextensie. Blijft één plek zodat een nieuw
+# formaat (avif, heic, ...) niet op twee downloaders tegelijk opgezocht hoeft.
+_CT_NAAR_EXT = {
+    'svg': '.svg',
+    'png': '.png',
+    'webp': '.webp',
+    'avif': '.avif',
+    'gif': '.gif',
+    'jpeg': '.jpg', 'jpg': '.jpg',
+}
+
+
+def extensie_uit_content_type(content_type, default='.jpg'):
+    """Beste gok voor de extensie op basis van een HTTP Content-Type-header.
+
+    Voor onbekende types kiest de aanroeper zelf de terugval — een recept-foto
+    valt beter terug op .jpg, een sitelogo op .png.
+    """
+    ct = (content_type or '').lower()
+    for sleutel, ext in _CT_NAAR_EXT.items():
+        if sleutel in ct:
+            return ext
+    return default
+
+
+def schrijf_naar_uploads(bestandsnaam, bytes_content):
+    """Sla bytes op onder static/uploads/<bestandsnaam> en geef het relatieve pad terug.
+
+    De aanroeper bepaalt de naam (hash-prefix, url-hash, ...); deze helper zorgt
+    alleen dat de doelmap bestaat en dat het pad in de vorm 'static/uploads/xxx'
+    wordt teruggegeven zoals de rest van de app dat verwacht.
+    """
+    doel = os.path.join(current_app.static_folder, 'uploads', bestandsnaam)
+    os.makedirs(os.path.dirname(doel), exist_ok=True)
+    with open(doel, 'wb') as fh:
+        fh.write(bytes_content)
+    return os.path.join('static/uploads', bestandsnaam)
+
+
 def _parse_rotatie(waarde):
     """Maak van een hoek een kwartslag 0/90/180/270, of None als dat niet kan.
 

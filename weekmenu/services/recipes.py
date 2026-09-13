@@ -1,12 +1,10 @@
 import re
-import os
 import hashlib
-
-from flask import current_app
 
 from weekmenu.extensions import db
 from weekmenu.models import Ingredient, IngredientAlias, Cookbook
 from weekmenu.constants import _KNOWN_SITES, _BROWSER_HEADERS, PRODUCT_CATEGORIES
+from weekmenu.services.images import extensie_uit_content_type, schrijf_naar_uploads
 from weekmenu.services.units import _normalize_ingredient, _guess_ingredient_category
 
 
@@ -101,18 +99,9 @@ def _download_site_logo(domain, html_text, requests_module):
         try:
             r = requests_module.get(logo_url, headers=_BROWSER_HEADERS, timeout=5)
             if r.status_code == 200 and len(r.content) > 2000:
-                ext = '.png'
-                ct = r.headers.get('content-type', '')
-                if 'svg' in ct:
-                    ext = '.svg'
-                elif 'jpeg' in ct or 'jpg' in ct:
-                    ext = '.jpg'
+                ext = extensie_uit_content_type(r.headers.get('content-type'), default='.png')
                 fname = f"site_{hashlib.md5(clean_domain.encode()).hexdigest()[:8]}{ext}"
-                dest = os.path.join(current_app.static_folder, 'uploads', fname)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                with open(dest, 'wb') as f:
-                    f.write(r.content)
-                return f'static/uploads/{fname}'
+                return schrijf_naar_uploads(fname, r.content)
         except Exception:
             continue
     return None
