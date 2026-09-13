@@ -215,6 +215,9 @@
     <main class="container mx-auto p-4 mt-2">
         {% block content %}{% endblock %}
     </main>
+    <footer class="container mx-auto px-4 pt-8 pb-4 text-center meta">
+        Weekmenu {{ app_version }} · beta
+    </footer>
     <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js');</script>
 </body>
 </html>

@@ -5,6 +5,8 @@ from flask import Flask
 
 from weekmenu.extensions import db
 
+__version__ = '0.7.0-beta'
+
 
 def _secret_key():
     """De sleutel waarmee sessies en flash-berichten ondertekend worden.
@@ -62,6 +64,13 @@ def create_app():
     app.config['SECRET_KEY'] = _secret_key()
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:////data/weekmenu.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['VERSION'] = __version__
+
+    # Zodat elke template de versie in de footer kan tonen zonder dat de route
+    # er iets voor hoeft door te geven.
+    @app.context_processor
+    def _versie_in_template():
+        return {'app_version': __version__}
 
     db.init_app(app)
 
