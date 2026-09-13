@@ -20,6 +20,7 @@ from weekmenu.services.units import (
 from weekmenu.services.bereiding import bereiding_naar_html
 from weekmenu.services.images import (
     normaliseer_orientatie, parse_crop_body, bijsnijden_met_origineel,
+    schrijf_naar_uploads,
 )
 from weekmenu.services.recipes import (
     _resolve_or_create_ingredient, _download_site_logo,
@@ -289,6 +290,90 @@ def _sync_pantry(scope_ids, wanted_ids):
     db.session.commit()
 
 
+def _verwerk_form_upload():
+    """Sla request.files['image'] op in static/uploads en geef het relatieve pad terug, of None.
+
+    Een telefoonfoto draagt de draai als EXIF-tag; die bakken we in de pixels,
+    anders ziet PIL bij een latere bijsnijding een ander beeld dan de browser
+    toonde.
+    """
+    image = request.files.get('image')
+    if not (image and image.filename):
+        return None
+    image_data = image.read()
+    ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
+    image_data, ext = normaliseer_orientatie(image_data, ext)
+    fname = hashlib.md5(image_data).hexdigest() + ext
+    return schrijf_naar_uploads(fname, image_data)
+
+
+def _resolveer_cookbook_id():
+    """Lees het cookbook-veld; maak eventueel een nieuw kookboek en geef het id terug."""
+    cookbook_id = request.form.get('cookbook') or None
+    if cookbook_id != '__new__':
+        return cookbook_id
+    new_name = request.form.get('new_cookbook_name', '').strip()
+    if not new_name:
+        return None
+    existing = Cookbook.query.filter_by(name=new_name).first()
+    if existing:
+        return existing.id
+    abbr = ''.join(w[0].upper() for w in new_name.split() if w)[:5]
+    cb_image = None
+    recipe_url = request.form.get('url', '').strip()
+    if recipe_url:
+        try:
+            from urllib.parse import urlparse as _up
+            import requests as _req
+            cb_image = _download_site_logo(_up(recipe_url).netloc, '', _req)
+        except Exception:
+            pass
+    new_cb = Cookbook(name=new_name, abbreviation=abbr, image_path=cb_image)
+    db.session.add(new_cb)
+    db.session.flush()
+    return new_cb.id
+
+
+def _lees_ingredient_rijen(recipe):
+    """Voeg RecipeIngredient-rijen toe uit request.form; sync pantry en meal_types."""
+    ingredient_ids = request.form.getlist('ingredient_id[]')
+    ingredient_names = request.form.getlist('ingredient[]')
+    amounts = request.form.getlist('amount[]')
+    units = request.form.getlist('unit[]')
+    categories = request.form.getlist('category[]')
+    preparations = request.form.getlist('preparation[]')
+    pantry_flags = request.form.getlist('pantry_flag[]')
+    pantry_scope, pantry_wanted = set(), set()
+
+    for i in range(len(ingredient_names)):
+        if not ingredient_names[i]:
+            continue
+
+        ingredient = _pick_ingredient(ingredient_ids, ingredient_names, categories, i)
+        if not ingredient:
+            continue
+
+        # Alleen een rij die zijn ingredient bij naam kent mag iets uit de
+        # voorraad HALEN; zonder id weet het formulier niet waarover het praat
+        # en zou een leeg vinkje stilzwijgend iets verwijderen.
+        if i < len(ingredient_ids) and ingredient_ids[i]:
+            pantry_scope.add(ingredient.id)
+        if i < len(pantry_flags) and pantry_flags[i] == '1':
+            pantry_wanted.add(ingredient.id)
+
+        prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
+        raw_amount = float(amounts[i]) if amounts[i] else 0
+        norm_unit, norm_amount = _normalize_ri_unit(ingredient, units[i], raw_amount)
+        db.session.add(RecipeIngredient(
+            recipe_id=recipe.id, ingredient_id=ingredient.id,
+            amount=norm_amount, unit=norm_unit, preparation=prep,
+        ))
+
+    db.session.commit()
+    _sync_pantry(pantry_scope, pantry_wanted)
+    _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
+
+
 @bp.route('/recipe/new', methods=['GET', 'POST'])
 def new_recipe():
     cookbooks = Cookbook.query.order_by(Cookbook.name).all()
@@ -302,71 +387,26 @@ def new_recipe():
             except (TypeError, ValueError):
                 draft = None
 
-        image = request.files.get('image')
-        image_path = None
+        image_path = _verwerk_form_upload()
         original_image_path = None
-        if image and image.filename:
-            image_data = image.read()
-            ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
-            # Een telefoonfoto draagt de draai als EXIF-tag; die bakken we hier
-            # in de pixels, anders ziet PIL bij het bijsnijden een ander beeld
-            # dan de browser toonde.
-            image_data, ext = normaliseer_orientatie(image_data, ext)
-            fname = hashlib.md5(image_data).hexdigest() + ext
-            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, 'wb') as f:
-                f.write(image_data)
-            image_path = os.path.join('static/uploads', fname)
-        elif request.form.get('image_path_imported'):
+        if image_path is None and request.form.get('image_path_imported'):
             image_path = request.form.get('image_path_imported')
             # De ongesneden pagina staat bij het concept. Nemen we hem niet
             # over, dan snijdt een tweede poging uit de al bijgesneden versie
-            # en is de volledige pagina definitief kwijt. Alleen bij een
-            # overgenomen afbeelding: wie zelf een bestand kiest wil niet de
-            # oude pagina als origineel.
-            #
-            # En alleen als de afbeelding die we opslaan aantoonbaar nog die
-            # van het concept is. Een foto- of linkimport ná het concept zet
-            # een andere afbeelding in het formulier terwijl draft_id blijft
-            # staan (dat hoort ook, het concept moet op 'accepted'); erfde het
-            # recept dan de boekpagina, dan opende het aanpasformulier de crop
-            # op een pagina die er niets mee te maken heeft.
+            # en is de volledige pagina definitief kwijt. Alleen als de
+            # afbeelding die we opslaan aantoonbaar nog die van het concept
+            # is: een foto- of linkimport ná het concept zet een andere
+            # afbeelding in het formulier terwijl draft_id blijft staan, en
+            # dan opende het aanpasformulier anders de crop op een pagina die
+            # er niets mee te maken heeft.
             if draft and image_path in (draft.image_path, draft.original_image_path):
                 original_image_path = draft.original_image_path
-
-        cookbook_id = request.form.get('cookbook') or None
-        if cookbook_id == '__new__':
-            new_name = request.form.get('new_cookbook_name', '').strip()
-            if new_name:
-                existing = Cookbook.query.filter_by(name=new_name).first()
-                if existing:
-                    cookbook_id = existing.id
-                else:
-                    words = new_name.split()
-                    abbr = ''.join(w[0].upper() for w in words if w)[:5]
-                    cb_image = None
-                    recipe_url = request.form.get('url', '').strip()
-                    if recipe_url:
-                        try:
-                            from urllib.parse import urlparse as _up
-                            domain = _up(recipe_url).netloc
-                            import requests as _req
-                            cb_image = _download_site_logo(domain, '', _req)
-                        except Exception:
-                            pass
-                    new_cb = Cookbook(name=new_name, abbreviation=abbr, image_path=cb_image)
-                    db.session.add(new_cb)
-                    db.session.flush()
-                    cookbook_id = new_cb.id
-            else:
-                cookbook_id = None
 
         serves_val = request.form.get('serves', '').strip()
         recipe = Recipe(
             name=request.form['name'],
             serves=int(serves_val) if serves_val else None,
-            cookbook_id=cookbook_id,
+            cookbook_id=_resolveer_cookbook_id(),
             page=request.form['page'] if request.form['page'] else None,
             image_path=image_path,
             original_image_path=original_image_path,
@@ -377,48 +417,7 @@ def new_recipe():
         db.session.add(recipe)
         db.session.commit()
 
-        ingredient_ids = request.form.getlist('ingredient_id[]')
-        ingredient_names = request.form.getlist('ingredient[]')
-        amounts = request.form.getlist('amount[]')
-        units = request.form.getlist('unit[]')
-        categories = request.form.getlist('category[]')
-        preparations = request.form.getlist('preparation[]')
-        pantry_flags = request.form.getlist('pantry_flag[]')
-        pantry_scope, pantry_wanted = set(), set()
-
-        for i in range(len(ingredient_names)):
-            if not ingredient_names[i]:
-                continue
-
-            ingredient = _pick_ingredient(ingredient_ids, ingredient_names, categories, i)
-
-            if not ingredient:
-                continue
-
-            # Alleen een rij die zijn ingredient bij naam kent mag iets uit de
-            # voorraad HALEN; zonder id weet het formulier niet waarover het
-            # praat en zou een leeg vinkje stilzwijgend iets verwijderen.
-            if i < len(ingredient_ids) and ingredient_ids[i]:
-                pantry_scope.add(ingredient.id)
-            if i < len(pantry_flags) and pantry_flags[i] == '1':
-                pantry_wanted.add(ingredient.id)
-
-            prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
-
-            raw_amount = float(amounts[i]) if amounts[i] else 0
-            norm_unit, norm_amount = _normalize_ri_unit(ingredient, units[i], raw_amount)
-            recipe_ingredient = RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ingredient.id,
-                amount=norm_amount,
-                unit=norm_unit,
-                preparation=prep,
-            )
-            db.session.add(recipe_ingredient)
-
-        db.session.commit()
-        _sync_pantry(pantry_scope, pantry_wanted)
-        _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
+        _lees_ingredient_rijen(recipe)
 
         if draft:
             draft.status = 'accepted'
@@ -442,100 +441,20 @@ def edit_recipe(id):
         serves_val = request.form.get('serves', '').strip()
         recipe.serves = int(serves_val) if serves_val else None
         recipe.prep_time = _minuten(request.form.get('prep_time'))
-
-        cookbook_id = request.form.get('cookbook') or None
-        if cookbook_id == '__new__':
-            new_name = request.form.get('new_cookbook_name', '').strip()
-            if new_name:
-                existing = Cookbook.query.filter_by(name=new_name).first()
-                if existing:
-                    cookbook_id = existing.id
-                else:
-                    words = new_name.split()
-                    abbr = ''.join(w[0].upper() for w in words if w)[:5]
-                    cb_image = None
-                    recipe_url = request.form.get('url', '').strip()
-                    if recipe_url:
-                        try:
-                            from urllib.parse import urlparse as _up
-                            domain = _up(recipe_url).netloc
-                            import requests as _req
-                            cb_image = _download_site_logo(domain, '', _req)
-                        except Exception:
-                            pass
-                    new_cb = Cookbook(name=new_name, abbreviation=abbr, image_path=cb_image)
-                    db.session.add(new_cb)
-                    db.session.flush()
-                    cookbook_id = new_cb.id
-            else:
-                cookbook_id = None
-        recipe.cookbook_id = cookbook_id
+        recipe.cookbook_id = _resolveer_cookbook_id()
         recipe.page = request.form['page'] if request.form['page'] else None
         recipe.url = request.form.get('url') or None
         recipe.instructions = bereiding_naar_html(request.form.get('instructions')) or None
 
-        image = request.files.get('image')
-        if image and image.filename:
-            image_data = image.read()
-            ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
-            # Zie new_recipe: de EXIF-draai hoort in de pixels te zitten voor
-            # het bijsnijden er later overheen gaat.
-            image_data, ext = normaliseer_orientatie(image_data, ext)
-            fname = hashlib.md5(image_data).hexdigest() + ext
-            save_path = os.path.join(current_app.static_folder, 'uploads', fname)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            with open(save_path, 'wb') as f:
-                f.write(image_data)
-            recipe.image_path = os.path.join('static/uploads', fname)
+        nieuw_image = _verwerk_form_upload()
+        if nieuw_image:
+            recipe.image_path = nieuw_image
             # Een vers bestand is zijn eigen origineel; het oude ongesneden
             # beeld hoort er niet meer bij.
             recipe.original_image_path = None
 
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
-
-        ingredient_ids = request.form.getlist('ingredient_id[]')
-        ingredient_names = request.form.getlist('ingredient[]')
-        amounts = request.form.getlist('amount[]')
-        units = request.form.getlist('unit[]')
-        categories = request.form.getlist('category[]')
-        preparations = request.form.getlist('preparation[]')
-        pantry_flags = request.form.getlist('pantry_flag[]')
-        pantry_scope, pantry_wanted = set(), set()
-
-        for i in range(len(ingredient_names)):
-            if not ingredient_names[i]:
-                continue
-
-            ingredient = _pick_ingredient(ingredient_ids, ingredient_names, categories, i)
-
-            if not ingredient:
-                continue
-
-            # Alleen een rij die zijn ingredient bij naam kent mag iets uit de
-            # voorraad HALEN; zonder id weet het formulier niet waarover het
-            # praat en zou een leeg vinkje stilzwijgend iets verwijderen.
-            if i < len(ingredient_ids) and ingredient_ids[i]:
-                pantry_scope.add(ingredient.id)
-            if i < len(pantry_flags) and pantry_flags[i] == '1':
-                pantry_wanted.add(ingredient.id)
-
-            prep = preparations[i].strip() if i < len(preparations) and preparations[i] else None
-
-            raw_amount = float(amounts[i]) if amounts[i] else 0
-            norm_unit, norm_amount = _normalize_ri_unit(ingredient, units[i], raw_amount)
-            recipe_ingredient = RecipeIngredient(
-                recipe_id=recipe.id,
-                ingredient_id=ingredient.id,
-                amount=norm_amount,
-                unit=norm_unit,
-                preparation=prep,
-            )
-            db.session.add(recipe_ingredient)
-
-        db.session.commit()
-
-        _sync_pantry(pantry_scope, pantry_wanted)
-        _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
+        _lees_ingredient_rijen(recipe)
 
         return redirect(url_for('recipes.receptenplanner'))
 
