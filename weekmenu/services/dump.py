@@ -332,25 +332,20 @@ def process_dump_job(app, job_id):
         db.session.commit()
 
 
-def _process(job):
-    from google import genai as _genai
-    from google.genai import types as _gtypes
+def _verzamel_beelden(job_dir):
+    """Elke pagina uit de jobmap als JPEG-bytes; PDF-pagina's uitgesplitst.
 
-    api_key = _get_gemini_api_key()
-    if not api_key:
-        raise ValueError('Gemini API key niet geconfigureerd')
-
-    job_dir = _job_dir(job.id)
+    Geeft (images, page_map). page_map is 1-gebaseerd paginanummer →
+    (bronpad, pdf_page_index|None) — het bronpad wordt straks door
+    _resolve_image gebruikt om de foto naar static/uploads te kopiëren.
+    Bestandsnamen die met 'page_' beginnen zijn eerder gerenderde
+    PDF-pagina's die bij een retry al bestaan; die slaan we hier over.
+    """
     file_paths = sorted(
         os.path.join(job_dir, n) for n in os.listdir(job_dir)
-        if not n.startswith('page_')  # eerder gerenderde PDF-pagina's overslaan bij retry
+        if not n.startswith('page_')
     )
-
-    # Elke pagina wordt eerst uitgelezen door Cloud Vision. Het taalmodel krijgt
-    # dus tekst en geen beeld: het kan een hoeveelheid niet meer verkeerd lezen
-    # en niets verzinnen wat het niet kan ontcijferen.
     images = []
-    # page_map: 1-gebaseerd paginanummer → (bronpad, pdf_page_index|None)
     page_map = {}
     page_no = 0
     for path in file_paths:
@@ -364,12 +359,93 @@ def _process(job):
                 images.append(fh.read())
             page_no += 1
             page_map[page_no] = (path, None)
+    return images, page_map
 
-    if job.mode == 'kaart':
+
+def _lees_ocr_pagina_tekst(images, mode):
+    """Cloud Vision op elke pagina; annotaties alleen in kaartmodus.
+
+    Het taalmodel krijgt straks tekst en geen beeld: dan kan het een hoeveelheid
+    niet meer verkeerd lezen en niets verzinnen wat het niet kan ontcijferen.
+    """
+    if mode == 'kaart':
         texts, twijfels, annotaties = lees_paginas_met_annotaties(images)
     else:
         texts, twijfels = lees_paginas(images)
         annotaties = None
+    return texts, twijfels, annotaties
+
+
+def _gemini_recepten(mode, texts, annotaties, client, config, aantal_beelden, aantal_leeg):
+    """Gemini-parse; geeft (recipes, meldingen, verwacht_aantal_recepten).
+
+    Kaartmodus roept per pagina-paar aan (_verwerk_kaarten); boekmodus doet één
+    batch over alle uitgelezen tekst. In beide gevallen komt er een lijst met
+    dicts terug in dezelfde vorm.
+    """
+    meldingen = []
+    if mode == 'kaart':
+        recipes, kaartmeldingen, verwacht = _verwerk_kaarten(texts, annotaties, client, config)
+        meldingen += kaartmeldingen
+        return recipes, meldingen, verwacht
+
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=[_BATCH_PROMPT + '\n\n' + pages_as_labelled_text(texts)],
+        config=config)
+    if _warn_if_truncated(response):
+        meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
+                         'ontbreken. Probeer het opnieuw of splits de batch.')
+    recipes = parse_batch_response(response.text, [clean_ocr_text(t) for t in texts])
+    # Vangnet: kaarten in boekmodus leveren twee halve recepten per kaart op.
+    kaarten = [n for n, t in enumerate(texts, 1) if is_voorkant(t)]
+    if len(kaarten) >= 2:
+        meldingen.append("Pagina's {} lijken receptkaarten. Kies 'receptkaarten' als soort "
+                         "scan en probeer opnieuw.".format(', '.join(map(str, kaarten))))
+    return recipes, meldingen, aantal_beelden - aantal_leeg
+
+
+def _schrijf_concepten(job, recipes, page_map):
+    """Zet elk recept in de database als RecipeDraft; skip als de pagina al accepted is.
+
+    Geeft het aantal wél-aangemaakte concepten terug; de aanroeper vergelijkt
+    dat met wat er verwacht was.
+    """
+    al_afgehandeld = _accepted_pages(job.id)
+    overgeslagen = 0
+    for r in recipes:
+        if r['photo_page'] in al_afgehandeld:
+            current_app.logger.info(
+                'Pagina %s overgeslagen: daar is al een recept van gemaakt', r['photo_page'])
+            overgeslagen += 1
+            continue
+        db.session.add(RecipeDraft(
+            job_id=job.id, name=r['name'],
+            serves=r['serves'],
+            prep_time=r.get('prep_time'),
+            instructions=r['instructions'],
+            ingredients_json=json.dumps(r['ingredients']),
+            # Wat over dit ene recept gaat staat op het concept, naast het
+            # veld waar het over gaat; job.warning is voor de hele batch.
+            meldingen_json=json.dumps(r.get('meldingen') or [], ensure_ascii=False),
+            image_path=_resolve_image(job.id, r['photo_page'], page_map),
+            back_image_path=(_resolve_image(job.id, r['back_page'], page_map)
+                             if r.get('back_page') else None),
+            source_page=r['photo_page'], status='pending',
+        ))
+    return len(recipes) - overgeslagen
+
+
+def _process(job):
+    from google import genai as _genai
+    from google.genai import types as _gtypes
+
+    api_key = _get_gemini_api_key()
+    if not api_key:
+        raise ValueError('Gemini API key niet geconfigureerd')
+
+    images, page_map = _verzamel_beelden(_job_dir(job.id))
+    texts, twijfels, annotaties = _lees_ocr_pagina_tekst(images, job.mode)
     if not any(t.strip() for t in texts):
         raise ValueError('Geen tekst gevonden op de aangeleverde pagina\'s. '
                          'Is de scan scherp genoeg?')
@@ -391,54 +467,16 @@ def _process(job):
     # bleef de breukafhandeling over drie aanroepen gelijk.
     client = _genai.Client(api_key=api_key)
     config = _gtypes.GenerateContentConfig(temperature=0)
-    if job.mode == 'kaart':
-        recipes, kaartmeldingen, verwacht = _verwerk_kaarten(texts, annotaties, client, config)
-        meldingen += kaartmeldingen
-    else:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[_BATCH_PROMPT + '\n\n' + pages_as_labelled_text(texts)],
-            config=config)
-        if _warn_if_truncated(response):
-            meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
-                             'ontbreken. Probeer het opnieuw of splits de batch.')
-        recipes = parse_batch_response(response.text, [clean_ocr_text(t) for t in texts])
-        verwacht = len(images) - len(zonder_tekst)
-        # Vangnet: kaarten in boekmodus leveren twee halve recepten per kaart op.
-        kaarten = [n for n, t in enumerate(texts, 1) if is_voorkant(t)]
-        if len(kaarten) >= 2:
-            meldingen.append("Pagina's {} lijken receptkaarten. Kies 'receptkaarten' als soort "
-                             "scan en probeer opnieuw.".format(', '.join(map(str, kaarten))))
+    recipes, gemini_meldingen, verwacht = _gemini_recepten(
+        job.mode, texts, annotaties, client, config,
+        aantal_beelden=len(images), aantal_leeg=len(zonder_tekst))
+    meldingen += gemini_meldingen
     _markeer_twijfels(recipes, twijfels)
 
-    al_afgehandeld = _accepted_pages(job.id)
-    overgeslagen = 0
-    for r in recipes:
-        if r['photo_page'] in al_afgehandeld:
-            current_app.logger.info(
-                'Pagina %s overgeslagen: daar is al een recept van gemaakt', r['photo_page'])
-            overgeslagen += 1
-            continue
-        image_path = _resolve_image(job.id, r['photo_page'], page_map)
-        db.session.add(RecipeDraft(
-            job_id=job.id, name=r['name'],
-            serves=r['serves'],
-            prep_time=r.get('prep_time'),
-            instructions=r['instructions'],
-            ingredients_json=json.dumps(r['ingredients']),
-            # Wat over dit ene recept gaat staat op het concept, naast het
-            # veld waar het over gaat; job.warning is voor de hele batch.
-            meldingen_json=json.dumps(r.get('meldingen') or [], ensure_ascii=False),
-            image_path=image_path,
-            back_image_path=(_resolve_image(job.id, r['back_page'], page_map)
-                             if r.get('back_page') else None),
-            source_page=r['photo_page'], status='pending',
-        ))
-
+    gemaakt = _schrijf_concepten(job, recipes, page_map)
     # Twee pagina's kunnen samen één recept zijn, dus minder recepten dan
     # pagina's is niet per se fout — maar het is wel het patroon waarmee een
     # halve batch er compleet uitziet, dus de gebruiker krijgt het te zien.
-    gemaakt = len(recipes) - overgeslagen
     if gemaakt < verwacht:
         meldingen.append(f'{len(images)} pagina\'s aangeleverd, {gemaakt} recept(en) '
                          f'herkend. Controleer of er niets ontbreekt.')
