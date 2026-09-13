@@ -23,7 +23,16 @@ def week_menu(year, week):
 
     menu_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     recipes = Recipe.query.order_by(Recipe.name).all()
-    recipes_json = json.dumps([{'id': r.id, 'name': r.name, 'serves': r.serves} for r in recipes])
+    # Wat het week_menu-scherm nodig heeft. Bevat álle velden die JS gebruikt,
+    # zodat er in het template geen Jinja-for-loop meer omheen hoeft.
+    recipes_json = json.dumps([{
+        'id': r.id,
+        'name': r.name,
+        'serves': r.serves,
+        'cookbook': r.cookbook.name if r.cookbook else None,
+        'cookbookAbbr': (r.cookbook.abbreviation or r.cookbook.name[:3]) if r.cookbook else None,
+        'page': r.page,
+    } for r in recipes])
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
     sunday = monday + timedelta(days=6)
