@@ -63,15 +63,18 @@ def plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_
 def update_week_menu(week, year, menu_data):
     """Bulk update alle menu items voor een week.
 
-    BUG 1 FIX: Bij nieuw toegevoegde recepten worden stale
-    ShoppingListExclusion records opgeruimd, zodat ingrediënten
-    die via favorieten worden toegevoegd correct op de boodschappenlijst komen.
+    Een positie is (dag, maaltijd, recept, personen). Elke positie die er
+    vóór het opslaan niet was — nieuw recept, hetzelfde recept op een extra
+    dag, of een ander aantal personen — telt als 'opnieuw op de lijst zetten'
+    en wist afvink- en uitsluitstatus van dat recept in die week. Een recept
+    alleen naar een andere dag schuiven verandert de boodschappen niet en laat
+    de status dus staan.
     """
     old_items = MenuItem.query.filter_by(week_number=week, year=year).all()
     old_positions = set()
     for old_item in old_items:
         if old_item.recipe_id:
-            old_positions.add((old_item.day_of_week, old_item.meal_type, old_item.recipe_id))
+            old_positions.add((old_item.meal_type, old_item.recipe_id, old_item.people_count))
 
     MenuItem.query.filter_by(week_number=week, year=year).delete()
 
@@ -91,7 +94,7 @@ def update_week_menu(week, year, menu_data):
 
             if recipe_id:
                 recipe_id = int(recipe_id)
-                new_positions.add((day['day'], meal_type, recipe_id))
+                new_positions.add((meal_type, recipe_id, people_count))
                 db.session.add(MenuItem(
                     day_of_week=day['day'],
                     meal_type=meal_type,
@@ -101,17 +104,18 @@ def update_week_menu(week, year, menu_data):
                     year=year
                 ))
 
-    # BUG 1 FIX: ruim stale exclusions op voor nieuw toegevoegde recepten
-    truly_new_recipe_ids = {pos[2] for pos in new_positions} - {pos[2] for pos in old_positions}
-    for rid in truly_new_recipe_ids:
+    truly_new_recipe_ids = {pos[1] for pos in new_positions} - {pos[1] for pos in old_positions}
+    for rid in {pos[1] for pos in new_positions - old_positions}:
         recipe = db.session.get(Recipe, rid)
-        if recipe:
+        if not recipe:
+            continue
+        if rid in truly_new_recipe_ids:
             recipe.usage_count = (recipe.usage_count or 0) + 1
             recipe.last_used = datetime.now()
-            for ri in recipe.ingredients:
-                _zet_terug_op_de_lijst(year, week, ri.ingredient_id)
+        for ri in recipe.ingredients:
+            _zet_terug_op_de_lijst(year, week, ri.ingredient_id)
 
-    used_recipe_ids = {pos[2] for pos in new_positions}
+    used_recipe_ids = {pos[1] for pos in new_positions}
     for recipe_id in used_recipe_ids:
         recipe = db.session.get(Recipe, recipe_id)
         if recipe:

@@ -56,6 +56,9 @@ async function checkItem(ingredientId, checked) {
 
 async function checkAll() {
     if (!confirm('Alle openstaande items afvinken?')) return;
+    const btn = document.getElementById('checkAllBtn');
+    btn.disabled = true;
+    btn.textContent = 'Bezig…';
     await fetch('/api/boodschappen/check-all', { method: 'POST' });
     location.reload();
 }

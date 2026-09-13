@@ -65,8 +65,15 @@ def boodschappen():
                            current_week=iso_now[1])
 
 
-def _set_checks(ingredient_id, checked, via_ah=False):
-    data = build_combined_shopping_list()
+def _set_checks(ingredient_id, checked, via_ah=False, data=None, commit=True):
+    """Zet de afvinkstatus voor élke week waarin het ingredient op de lijst staat.
+
+    `data` mag een al gebouwde gecombineerde lijst zijn: bulk-aanroepers
+    (alles afvinken, versturen naar AH) bouwen hem één keer en committen één
+    keer. Per regel opnieuw bouwen kostte zes seconden op de echte data, en
+    de knop gaf ondertussen geen teken van leven.
+    """
+    data = data or build_combined_shopping_list()
     weeks = data['weeks_by_ingredient'].get(ingredient_id)
     if not weeks:
         return False
@@ -78,7 +85,8 @@ def _set_checks(ingredient_id, checked, via_ah=False):
                                          ingredient_id=ingredient_id, via_ah=via_ah))
         elif not checked and existing:
             db.session.delete(existing)
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return True
 
 
@@ -116,7 +124,8 @@ def boodschappen_remove(ingredient_id):
 def boodschappen_check_all():
     data = build_combined_shopping_list()
     for row in data['open']:
-        _set_checks(row['ingredient_id'], True)
+        _set_checks(row['ingredient_id'], True, data=data, commit=False)
+    db.session.commit()
     return jsonify({'status': 'success', 'checked': len(data['open'])})
 
 
@@ -135,7 +144,8 @@ def boodschappen_send_to_ah():
     payload, status, sent_ids = send_dict_to_ah(open_dict, qty_overrides)
     if status == 200 and payload.get('status') == 'success' and sent_ids:
         for ing_id in sent_ids:
-            _set_checks(ing_id, True, via_ah=True)
+            _set_checks(ing_id, True, via_ah=True, data=data, commit=False)
+        db.session.commit()
     return jsonify(payload), status
 
 
