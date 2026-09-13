@@ -83,7 +83,7 @@ def dump_share():
 
 @bp.route('/dump/status/<job_id>')
 def dump_status(job_id):
-    job = DumpJob.query.get_or_404(job_id)
+    job = db.get_or_404(DumpJob, job_id)
     drafts = RecipeDraft.query.filter_by(job_id=job_id, status='pending') \
                               .order_by(RecipeDraft.created_at).all()
     return jsonify({'status': job.status,
@@ -101,7 +101,7 @@ def dump_retry(job_id):
 
 @bp.route('/dump/draft/<int:id>')
 def dump_draft(id):
-    d = RecipeDraft.query.get_or_404(id)
+    d = db.get_or_404(RecipeDraft, id)
     payload = serialize_draft(d)
     # De nakijkkaart toont de bereiding als platte tekst met
     # white-space:pre-wrap; het aanpasformulier zet hem in Quill en heeft HTML
@@ -137,7 +137,7 @@ def _bereiding_ontbreekt(instructions):
 
 @bp.route('/dump/draft/<int:id>/accept', methods=['POST'])
 def dump_draft_accept(id):
-    d = RecipeDraft.query.get_or_404(id)
+    d = db.get_or_404(RecipeDraft, id)
     if d.status != 'pending':
         # Twee tabbladen open, of tweemaal geklikt: zonder deze controle komt
         # hetzelfde recept er een tweede keer in.
@@ -195,7 +195,7 @@ def dump_draft_accept(id):
 
 @bp.route('/dump/draft/<int:id>/reject', methods=['POST'])
 def dump_draft_reject(id):
-    d = RecipeDraft.query.get_or_404(id)
+    d = db.get_or_404(RecipeDraft, id)
     d.status = 'rejected'
     db.session.commit()
     return jsonify({'status': 'success'})
@@ -204,7 +204,7 @@ def dump_draft_reject(id):
 @bp.route('/dump/draft/<int:id>/crop', methods=['POST'])
 def dump_draft_crop(id):
     from weekmenu.services.images import parse_crop_body, bijsnijden_met_origineel
-    d = RecipeDraft.query.get_or_404(id)
+    d = db.get_or_404(RecipeDraft, id)
     coords = parse_crop_body(request.get_json(silent=True) or {})
     if coords is None:
         return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400

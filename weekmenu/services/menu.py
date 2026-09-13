@@ -9,7 +9,7 @@ from weekmenu.models import (
 
 def plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_ids):
     """Plan een recept op een specifieke dag/maaltijd met ingredient-selectie."""
-    recipe = Recipe.query.get_or_404(recipe_id)
+    recipe = db.get_or_404(Recipe, recipe_id)
 
     existing = MenuItem.query.filter_by(
         week_number=week, year=year, day_of_week=day, meal_type=meal_type
@@ -91,7 +91,7 @@ def update_week_menu(week, year, menu_data):
     # BUG 1 FIX: ruim stale exclusions op voor nieuw toegevoegde recepten
     truly_new_recipe_ids = {pos[2] for pos in new_positions} - {pos[2] for pos in old_positions}
     for rid in truly_new_recipe_ids:
-        recipe = Recipe.query.get(rid)
+        recipe = db.session.get(Recipe, rid)
         if recipe:
             recipe.usage_count = (recipe.usage_count or 0) + 1
             recipe.last_used = datetime.now()
@@ -103,7 +103,7 @@ def update_week_menu(week, year, menu_data):
 
     used_recipe_ids = {pos[2] for pos in new_positions}
     for recipe_id in used_recipe_ids:
-        recipe = Recipe.query.get(recipe_id)
+        recipe = db.session.get(Recipe, recipe_id)
         if recipe:
             recipe.last_used = datetime.now()
 

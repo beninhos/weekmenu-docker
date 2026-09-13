@@ -142,7 +142,7 @@ def boodschappen_send_to_ah():
 @bp.route('/api/boodschappen/extra', methods=['POST'])
 def boodschappen_extra_add():
     body = request.get_json(silent=True) or {}
-    recipe = Recipe.query.get(body.get('recipe_id') or 0)
+    recipe = db.session.get(Recipe, body.get('recipe_id') or 0)
     if not recipe:
         return jsonify({'status': 'error', 'message': 'Recept niet gevonden'}), 404
     iso = date.today().isocalendar()
@@ -156,7 +156,7 @@ def boodschappen_extra_add():
 
 @bp.route('/api/boodschappen/extra/<int:id>', methods=['DELETE'])
 def boodschappen_extra_delete(id):
-    qi = QuickAddItem.query.get_or_404(id)
+    qi = db.get_or_404(QuickAddItem, id)
     db.session.delete(qi)
     db.session.commit()
     return jsonify({'status': 'success'})
@@ -230,7 +230,7 @@ def add_shopping_item(year, week):
     if not ingredient_id:
         return jsonify({'status': 'error', 'message': 'ingredient_id is verplicht'}), 400
 
-    ing = Ingredient.query.get(ingredient_id)
+    ing = db.session.get(Ingredient, ingredient_id)
     if not ing:
         return jsonify({'status': 'error', 'message': 'Ingrediënt niet gevonden'}), 404
 

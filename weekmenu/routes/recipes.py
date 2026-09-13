@@ -97,7 +97,7 @@ def receptenplanner():
 
 @bp.route('/api/recipe/<int:id>')
 def api_recipe_detail(id):
-    recipe = Recipe.query.get_or_404(id)
+    recipe = db.get_or_404(Recipe, id)
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else 4
     return jsonify(serialize_recipe(recipe, default_serves))
@@ -105,7 +105,7 @@ def api_recipe_detail(id):
 
 @bp.route('/cookbook/<int:id>/recipes')
 def list_cookbook_recipes(id):
-    cookbook = Cookbook.query.get_or_404(id)
+    cookbook = db.get_or_404(Cookbook, id)
     recipes = sorted(cookbook.recipes, key=lambda x: (x.page is None, x.page or 0))
     return render_template('cookbook_recipes.html', cookbook=cookbook, recipes=recipes)
 
@@ -156,7 +156,7 @@ def new_cookbook():
 
 @bp.route('/cookbook/<int:id>/edit', methods=['GET', 'POST'])
 def edit_cookbook(id):
-    cookbook = Cookbook.query.get_or_404(id)
+    cookbook = db.get_or_404(Cookbook, id)
 
     if request.method == 'POST':
         cookbook.name = request.form['name']
@@ -187,7 +187,7 @@ def edit_cookbook(id):
 
 @bp.route('/cookbook/<int:id>/rename', methods=['POST'])
 def rename_cookbook(id):
-    cookbook = Cookbook.query.get_or_404(id)
+    cookbook = db.get_or_404(Cookbook, id)
     new_name = request.form.get('name', '').strip()
     if not new_name:
         return jsonify({'status': 'error', 'message': 'Naam mag niet leeg zijn'}), 400
@@ -200,12 +200,12 @@ def rename_cookbook(id):
 
 @bp.route('/cookbook/<int:id>/migrate', methods=['POST'])
 def migrate_cookbook(id):
-    cookbook = Cookbook.query.get_or_404(id)
+    cookbook = db.get_or_404(Cookbook, id)
     data = request.get_json()
     target_id = data.get('target_cookbook_id')
     if not target_id:
         return jsonify({'status': 'error', 'message': 'Geen doelkookboek opgegeven'}), 400
-    target = Cookbook.query.get_or_404(int(target_id))
+    target = db.get_or_404(Cookbook, int(target_id))
     Recipe.query.filter_by(cookbook_id=id).update({'cookbook_id': target.id})
     db.session.commit()
     return jsonify({'status': 'success', 'message': f'Recepten verplaatst naar {target.name}'})
@@ -213,7 +213,7 @@ def migrate_cookbook(id):
 
 @bp.route('/cookbook/<int:id>/archive', methods=['POST'])
 def archive_cookbook(id):
-    cookbook = Cookbook.query.get_or_404(id)
+    cookbook = db.get_or_404(Cookbook, id)
     cookbook.is_archived = not cookbook.is_archived
     db.session.commit()
     return jsonify({'status': 'success', 'is_archived': cookbook.is_archived})
@@ -221,7 +221,7 @@ def archive_cookbook(id):
 
 @bp.route('/cookbook/<int:id>/delete', methods=['POST'])
 def delete_cookbook(id):
-    cookbook = Cookbook.query.get_or_404(id)
+    cookbook = db.get_or_404(Cookbook, id)
     if cookbook.recipes:
         return jsonify({'status': 'error', 'message': 'Kookboek heeft nog recepten. Verwijder of verplaats ze eerst.'}), 400
     if cookbook.image_path:
@@ -244,7 +244,7 @@ def _pick_ingredient(ingredient_ids, ingredient_names, categories, i):
     posted_cat = categories[i] if i < len(categories) else None
 
     if i < len(ingredient_ids) and ingredient_ids[i]:
-        ingredient = Ingredient.query.get(int(ingredient_ids[i]))
+        ingredient = db.session.get(Ingredient, int(ingredient_ids[i]))
     else:
         ingredient = _resolve_or_create_ingredient(ingredient_names[i], posted_cat)
 
@@ -433,7 +433,7 @@ def new_recipe():
 
 @bp.route('/recipe/<int:id>/edit', methods=['GET', 'POST'])
 def edit_recipe(id):
-    recipe = Recipe.query.get_or_404(id)
+    recipe = db.get_or_404(Recipe, id)
     cookbooks = Cookbook.query.order_by(Cookbook.name).all()
 
     if request.method == 'POST':
@@ -549,7 +549,7 @@ def edit_recipe(id):
 
 @bp.route('/recipe/<int:id>', methods=['DELETE'])
 def delete_recipe(id):
-    recipe = Recipe.query.get_or_404(id)
+    recipe = db.get_or_404(Recipe, id)
     db.session.delete(recipe)
     db.session.commit()
     return jsonify({'status': 'success'})
@@ -558,7 +558,7 @@ def delete_recipe(id):
 @bp.route('/recipe/<int:id>/toggle_favorite', methods=['POST'])
 def toggle_favorite(id):
     try:
-        recipe = Recipe.query.get_or_404(id)
+        recipe = db.get_or_404(Recipe, id)
         recipe.is_favorite = not recipe.is_favorite
         db.session.commit()
         return jsonify({
@@ -573,7 +573,7 @@ def toggle_favorite(id):
 @bp.route('/recipe/<int:id>/crop', methods=['POST'])
 def recipe_crop(id):
     from weekmenu.services.images import parse_crop_body, bijsnijden_met_origineel
-    recipe = Recipe.query.get_or_404(id)
+    recipe = db.get_or_404(Recipe, id)
     coords = parse_crop_body(request.get_json(silent=True) or {})
     if coords is None:
         return jsonify({'status': 'error', 'message': 'Ongeldige crop-coördinaten'}), 400
@@ -717,7 +717,7 @@ def get_quick_access_recipes():
 @bp.route('/api/recipe/<int:id>/meal-types', methods=['POST'])
 def set_recipe_meal_types(id):
     """Achteraf taggen vanaf de receptenplanner, zonder het hele formulier."""
-    recipe = Recipe.query.get_or_404(id)
+    recipe = db.get_or_404(Recipe, id)
     data = request.get_json() or {}
     codes = data.get('meal_types')
     if not isinstance(codes, list):

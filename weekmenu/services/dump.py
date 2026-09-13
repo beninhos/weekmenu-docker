@@ -305,7 +305,7 @@ def retry_dump_job(job_id):
     inlezen overgeslagen (zie _accepted_pages), anders krijgt de gebruiker een
     tweede concept voor een recept dat hij al heeft.
     """
-    job = DumpJob.query.get_or_404(job_id)
+    job = db.get_or_404(DumpJob, job_id)
     RecipeDraft.query.filter(RecipeDraft.job_id == job_id,
                              RecipeDraft.status != 'accepted').delete()
     job.status = 'processing'
@@ -329,7 +329,7 @@ def _start_thread(job_id):
 def process_dump_job(app, job_id):
     """Threadworker: één Gemini-call over alle bestanden in de jobmap, drafts opslaan."""
     with app.app_context():
-        job = DumpJob.query.get(job_id)
+        job = db.session.get(DumpJob, job_id)
         try:
             _process(job)
             job.status = 'done'
@@ -339,7 +339,7 @@ def process_dump_job(app, job_id):
             # aangemaakt: de gebruiker zag dan zeven kaarten naast een
             # foutmelding en kon niet weten dat er negen ontbraken.
             db.session.rollback()
-            job = DumpJob.query.get(job_id)
+            job = db.session.get(DumpJob, job_id)
             msg = str(e)
             if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
                 msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'

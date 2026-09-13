@@ -355,7 +355,7 @@ def maatvraag(ing):
 
 def bevestig_maat(ingredient_id, eenheid, waarde, richting, antwoord_eenheid=None):
     """Sla vast wat één stuk is, in het bestaande conversieformaat."""
-    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    ing = db.session.get(Ingredient, ingredient_id) if ingredient_id else None
     if not ing:
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
     if not ing.ah_pkg_qty or not ing.ah_pkg_unit:
@@ -384,7 +384,7 @@ def bevestig_maat(ingredient_id, eenheid, waarde, richting, antwoord_eenheid=Non
 
 def sla_maat_over(ingredient_id, eenheid):
     """'Niet vragen': de berekening blijft staan, het scherm loopt leeg."""
-    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    ing = db.session.get(Ingredient, ingredient_id) if ingredient_id else None
     if not ing:
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
     norm = _norm_unit(eenheid)
@@ -404,7 +404,7 @@ def vraag_maat_toch(ingredient_id, eenheid):
     'Verpakking instellen'. Dit zet het geval gewoon terug tussen de open
     vragen.
     """
-    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    ing = db.session.get(Ingredient, ingredient_id) if ingredient_id else None
     if not ing:
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
     norm = _norm_unit(eenheid)

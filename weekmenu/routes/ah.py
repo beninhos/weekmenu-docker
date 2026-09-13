@@ -198,7 +198,7 @@ def ah_order_detail(order_id):
         in_order = set(order['productIds'])
         seen = set()
         for (ing_id, unit), amount in _build_shopping_dict(year, week).items():
-            ing = Ingredient.query.get(ing_id)
+            ing = db.session.get(Ingredient, ing_id)
             if not ing:
                 continue
             if not ing.ah_product_id:
@@ -242,7 +242,7 @@ def ah_order_apply(order_id):
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/link', methods=['POST'])
 def ah_link_ingredient(ingredient_id):
     data = request.json or {}
-    ing = Ingredient.query.get_or_404(ingredient_id)
+    ing = db.get_or_404(Ingredient, ingredient_id)
     old_product_id = ing.ah_product_id
     ing.ah_product_id = data.get('productId')
     ing.ah_product_name = data.get('title', '')
@@ -271,7 +271,7 @@ def ah_link_ingredient(ingredient_id):
 
 @bp.route('/api/ah/ingredient/<int:ingredient_id>/refresh', methods=['POST'])
 def ah_refresh_ingredient(ingredient_id):
-    ing = Ingredient.query.get_or_404(ingredient_id)
+    ing = db.get_or_404(Ingredient, ingredient_id)
     if not ing.ah_product_id:
         return jsonify({'status': 'error', 'message': 'Geen product gekoppeld'}), 400
     products = ah_search_products(ing.name, size=1)
@@ -313,7 +313,7 @@ def ah_pkg_config(ingredient_id):
     """
     from weekmenu.services.verpakking import conversie_uit_antwoord
     data = request.get_json(force=True) or {}
-    ing = Ingredient.query.get_or_404(ingredient_id)
+    ing = db.get_or_404(Ingredient, ingredient_id)
     ing.ah_pkg_qty = data.get('ah_pkg_qty') or None
     ing.ah_pkg_unit = data.get('ah_pkg_unit') or None
 

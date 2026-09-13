@@ -314,7 +314,7 @@ def set_category(ingredient_id, category):
     from weekmenu.constants import PRODUCT_CATEGORIES
     if category not in PRODUCT_CATEGORIES:
         return {'status': 'error', 'message': 'onbekende categorie'}, 400
-    ing = Ingredient.query.get(ingredient_id)
+    ing = db.session.get(Ingredient, ingredient_id)
     if not ing:
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
     ing.category = category
@@ -328,7 +328,7 @@ def set_bron(ingredient_id, bron):
     codes = {c for c, _ in BRONNEN}
     if bron and bron not in codes:
         return {'status': 'error', 'message': 'onbekende bron'}, 400
-    ing = Ingredient.query.get(ingredient_id)
+    ing = db.session.get(Ingredient, ingredient_id)
     if not ing:
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
     ing.bron = (bron or None) if bron != 'ah' else None

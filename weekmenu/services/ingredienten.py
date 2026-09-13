@@ -143,8 +143,8 @@ def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
     if ah_van_id not in (verliezer_id, winnaar_id):
         ah_van_id = None
 
-    verliezer = Ingredient.query.get(verliezer_id)
-    winnaar = Ingredient.query.get(winnaar_id)
+    verliezer = db.session.get(Ingredient, verliezer_id)
+    winnaar = db.session.get(Ingredient, winnaar_id)
     if not verliezer or not winnaar:
         # De kaart is achterhaald: een eerdere klik heeft dit ingredient al
         # opgeruimd. Een gewone foutmelding zou het scherm alleen de knop
@@ -644,8 +644,8 @@ def leg_omrekening_vast(ingredient_id, ander_id, van, naar, factor):
     dezelfde lijst welke naam je ook houdt, en klopt hij ook als je het paar
     daarna toch apart laat.
     """
-    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
-    ander = Ingredient.query.get(ander_id) if ander_id else None
+    ing = db.session.get(Ingredient, ingredient_id) if ingredient_id else None
+    ander = db.session.get(Ingredient, ander_id) if ander_id else None
     if not ing or not ander:
         return {'status': 'vervallen',
                 'message': 'een van deze twee ingrediënten bestaat niet meer — '
@@ -712,7 +712,7 @@ def koppel_alias(naam, ingredient_id):
     genoeg — die rij zou blijven staan en op de lijst blijven verschijnen.
     Dan is dit een volwaardige samenvoeging, en de klik is de bevestiging.
     """
-    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    ing = db.session.get(Ingredient, ingredient_id) if ingredient_id else None
     if not ing:
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
 
@@ -740,7 +740,7 @@ def koppel_alias(naam, ingredient_id):
 
 def markeer_apart(naam, ingredient_id):
     """'Toch apart': vraag deze spelling nooit meer bij dit ingredient na."""
-    ing = Ingredient.query.get(ingredient_id) if ingredient_id else None
+    ing = db.session.get(Ingredient, ingredient_id) if ingredient_id else None
     if not ing:
         return {'status': 'error', 'message': 'ingredient bestaat niet'}, 404
 
@@ -761,8 +761,8 @@ def markeer_paar_apart(a_id, b_id):
     Beide richtingen, want de kandidatenlijst kan het paar de volgende keer
     andersom voorstellen (de winnaar hangt af van wie de meeste recepten heeft).
     """
-    a = Ingredient.query.get(a_id) if a_id else None
-    b = Ingredient.query.get(b_id) if b_id else None
+    a = db.session.get(Ingredient, a_id) if a_id else None
+    b = db.session.get(Ingredient, b_id) if b_id else None
     if not a or not b:
         # Net als bij voeg_samen: de kaart is achterhaald, en dat hoort hij te
         # zeggen in plaats van de knop stil terug te zetten.

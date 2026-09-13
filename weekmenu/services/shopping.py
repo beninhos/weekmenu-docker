@@ -199,7 +199,7 @@ def build_combined_shopping_list(today=None):
     open_rows, checked_rows = [], []
     cutoff = datetime.now() - timedelta(days=14)
     for (ing_id, unit), r in agg.items():
-        ing = Ingredient.query.get(ing_id)
+        ing = db.session.get(Ingredient, ing_id)
         if not ing:
             continue
         fully_checked = len(r['checked']) == len(r['weeks'])
@@ -257,7 +257,7 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
     not_linked = []
     sent_ingredient_ids = []
     for (ing_id, unit), amount in shopping_dict.items():
-        ing = Ingredient.query.get(ing_id)
+        ing = db.session.get(Ingredient, ing_id)
         if not ing:
             continue
         if not ing.ah_product_id:
