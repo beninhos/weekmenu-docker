@@ -6,7 +6,8 @@ from flask import (Blueprint, current_app, jsonify, redirect, render_template,
 from weekmenu.extensions import db
 from weekmenu.models import Cookbook, DumpJob, Recipe, RecipeDraft, RecipeIngredient
 from weekmenu.services.bereiding import bereiding_naar_html
-from weekmenu.services.dump import retry_dump_job, start_dump_job
+from weekmenu.services.dump import (bereiding_ontbreekt, hoeveelheid_ontbreekt,
+                                     retry_dump_job, start_dump_job)
 from weekmenu.services.pantry import annotate_pantry_status
 from weekmenu.services.recipes import _resolve_or_create_ingredient
 from weekmenu.services.units import _normalize_ri_unit
@@ -112,29 +113,6 @@ def dump_draft(id):
     return jsonify(payload)
 
 
-def _hoeveelheid_ontbreekt(ingredienten):
-    """Regels met een maat maar zonder getal ('g kipfilets').
-
-    Die mogen er niet stilzwijgend door: de kolom recipe_ingredient.amount kan
-    geen leegte bevatten, dus zo'n regel zou als 0 g worden opgeslagen. Op de
-    boodschappenlijst telt hij dan voor niets mee, en niets in de app laat nog
-    zien dat er ooit een getal had moeten staan. Een ingrediënt zonder maat
-    ('olijfolie', 'peper') is iets anders — daar hoort geen hoeveelheid bij.
-    """
-    return [i.get('name', '?') for i in ingredienten
-            if i.get('amount') in (None, '') and (i.get('unit') or '').strip()]
-
-
-def _bereiding_ontbreekt(instructions):
-    """Een concept zonder bereidingstekst zou stappenloos in de database komen.
-
-    De nakijkkaart toont de bereiding niet als hij leeg is en er is verder
-    niets dat dat verraadt, dus dit is dezelfde stille val als de ontbrekende
-    hoeveelheid hierboven.
-    """
-    return not (instructions or '').strip()
-
-
 @bp.route('/dump/draft/<int:id>/accept', methods=['POST'])
 def dump_draft_accept(id):
     d = db.get_or_404(RecipeDraft, id)
@@ -148,7 +126,7 @@ def dump_draft_accept(id):
     cookbook_id = body.get('cookbook_id') or None
 
     ingredienten = json.loads(d.ingredients_json or '[]')
-    ontbreekt = _hoeveelheid_ontbreekt(ingredienten)
+    ontbreekt = hoeveelheid_ontbreekt(ingredienten)
     if ontbreekt:
         return jsonify({
             'status': 'error',
@@ -157,7 +135,7 @@ def dump_draft_accept(id):
                        'boodschappenlijst.'.format(', '.join(ontbreekt[:4])),
         }), 409
 
-    if _bereiding_ontbreekt(d.instructions):
+    if bereiding_ontbreekt(d.instructions):
         return jsonify({
             'status': 'error',
             'message': 'De bereiding ontbreekt. Kies "Aanpassen" en vul '

@@ -509,7 +509,7 @@ def _verwerk_kaarten(texts, annotaties, client, config):
         # Alleen vooraan een bestaande bereiding: zonder deze voorwaarde maakt
         # de kop van een leeg concept een niet-leeg concept, en dan toont de
         # nakijkkaart geen 'bereiding ontbreekt' meer en laat accepteren het
-        # er stil doorheen (_bereiding_ontbreekt in routes/dump.py).
+        # er stil doorheen (bereiding_ontbreekt).
         if nodig and (r['instructions'] or '').strip():
             r['instructions'] = f'Benodigdheden: {nodig}\n' + r['instructions']
         r['meldingen'] += controleer_tegen_tabel(r, rijen)
@@ -659,3 +659,26 @@ def _resolve_image(job_id, photo_page, page_map):
     except Exception:
         current_app.logger.warning('Dump %s: afbeelding voor pagina %s mislukt', job_id, photo_page, exc_info=True)
         return None
+
+
+def hoeveelheid_ontbreekt(ingredienten):
+    """Regels met een maat maar zonder getal ('g kipfilets').
+
+    Die mogen er niet stilzwijgend door: de kolom recipe_ingredient.amount kan
+    geen leegte bevatten, dus zo'n regel zou als 0 g worden opgeslagen. Op de
+    boodschappenlijst telt hij dan voor niets mee, en niets in de app laat nog
+    zien dat er ooit een getal had moeten staan. Een ingrediënt zonder maat
+    ('olijfolie', 'peper') is iets anders — daar hoort geen hoeveelheid bij.
+    """
+    return [i.get('name', '?') for i in ingredienten
+            if i.get('amount') in (None, '') and (i.get('unit') or '').strip()]
+
+
+def bereiding_ontbreekt(instructions):
+    """Een concept zonder bereidingstekst zou stappenloos in de database komen.
+
+    De nakijkkaart toont de bereiding niet als hij leeg is en er is verder
+    niets dat dat verraadt, dus dit is dezelfde stille val als de ontbrekende
+    hoeveelheid hierboven.
+    """
+    return not (instructions or '').strip()
