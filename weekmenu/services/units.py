@@ -5,7 +5,6 @@ from weekmenu.constants import (
     _UNIT_NORMALIZE, _UNIT_CONVERSIONS, _UNIT_BUY_ONE, _SIZE_UNIT_MAP,
     DUTCH_UNITS, _INGREDIENT_RE, _AMOUNT_ONLY_RE, _CATEGORY_KEYWORDS,
 )
-from weekmenu.extensions import db
 
 
 def format_amount(amount):

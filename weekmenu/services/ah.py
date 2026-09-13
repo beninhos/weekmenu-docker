@@ -12,7 +12,7 @@ from weekmenu.services.units import (
 from weekmenu.constants import (
     _AH_LOGIN_BASE, _AH_AUTHORIZE_PATH, _AH_ANON_TOKEN_URL,
     _AH_TOKEN_URL, _AH_REFRESH_URL, _AH_SEARCH_URL,
-    _AH_SHOPPINGLIST_URL, _AH_HEADERS,
+    _AH_HEADERS,
     _AH_CAPTCHA_SITEKEY, _AH_CAPTCHA_PAGE,
     _AH_CLIENT_ID,
 )

@@ -6,7 +6,6 @@ import re
 
 from flask import current_app
 
-from weekmenu.extensions import db  # noqa: F401 — reserved for future write flows
 from weekmenu.models import Settings
 from weekmenu.constants import DUTCH_UNITS
 from weekmenu.services.units import (
