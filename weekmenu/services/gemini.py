@@ -17,6 +17,22 @@ from weekmenu.services.recipes import _suggest_site_cookbook
 _VALID_UNITS = sorted(set(DUTCH_UNITS.values()))
 _UNITS_STR = ', '.join(_VALID_UNITS)
 
+
+def _gemini_fout(e):
+    """Zet een uitzondering om in de {status,message}-payload die de app tonen kan.
+
+    De rate-limit-boodschap onderscheidt zich zodat de gebruiker weet dat een
+    minuut wachten helpt; alle andere fouten krijgen een verkorte melding.
+    """
+    if isinstance(e, json.JSONDecodeError):
+        return {'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}, 400
+    msg = str(e)
+    if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
+        msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
+    else:
+        msg = f'Fout bij verwerken: {msg[:100]}'
+    return {'status': 'error', 'message': msg}, 400
+
 _GEMINI_RECIPE_PROMPT = f"""Extraheer het recept. Geef ALLEEN geldige JSON terug, geen markdown.
 
 {{
@@ -369,15 +385,8 @@ def _llm_fallback_from_html(url, html):
             'cookbook_name': cookbook_info.get('name'),
             'cookbook_exists': cookbook_info.get('exists', False),
         }, 200
-    except json.JSONDecodeError as e:
-        return {'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}, 400
     except Exception as e:
-        msg = str(e)
-        if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
-            msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
-        else:
-            msg = f'Fout bij verwerken: {msg[:100]}'
-        return {'status': 'error', 'message': msg}, 400
+        return _gemini_fout(e)
 
 
 def _extract_from_scraper(url, html, scraper):
@@ -524,12 +533,5 @@ def recipe_from_photos(photos):
             'cookbook_name': None,
         }, 200
 
-    except json.JSONDecodeError as e:
-        return {'status': 'error', 'message': f'Fout in receptgegevens: {str(e)[:100]}'}, 400
     except Exception as e:
-        msg = str(e)
-        if '429' in msg or 'quota' in msg.lower() or 'RESOURCE_EXHAUSTED' in msg:
-            msg = 'Gemini is even niet beschikbaar (rate limit). Probeer het over een minuut opnieuw.'
-        else:
-            msg = f'Fout bij verwerken: {msg[:100]}'
-        return {'status': 'error', 'message': msg}, 400
+        return _gemini_fout(e)
