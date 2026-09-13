@@ -10,7 +10,6 @@ services:
     restart: unless-stopped
     environment:
       - FLASK_APP=app.py
-      - FLASK_ENV=development
       - DATABASE_URL=sqlite:////data/weekmenu.db
       # De sleutels worden bij voorkeur via /settings ingevuld en in de database
       # bewaard; deze omgevingsvariabelen zijn de terugval als dat (nog) niet is
