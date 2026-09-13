@@ -3,8 +3,23 @@ from datetime import datetime
 from weekmenu.extensions import db
 from weekmenu.models import (
     Recipe, MenuItem, CustomShoppingIngredient,
-    ShoppingListExclusion, ShoppingListOverride,
+    ShoppingListExclusion, ShoppingListOverride, ShoppingCheck,
 )
+
+
+def _zet_terug_op_de_lijst(year, week, ingredient_id):
+    """Rutgers regel: 'wat ik afvink gaat van de lijst — tot ik het opnieuw
+    erop zet.' Een recept (opnieuw) plannen is dat 'opnieuw erop zetten': de
+    afvink- én uitsluitstatus van dat ingredient in die week gaat weg, ook als
+    de week al naar de AH is gestuurd. Zonder dit bleef een nieuw gepland
+    recept onzichtbaar zodra de week eerder besteld was (nasi, 13 sep 2026).
+    """
+    ShoppingListExclusion.query.filter_by(
+        year=year, week_number=week, ingredient_id=ingredient_id
+    ).delete()
+    ShoppingCheck.query.filter_by(
+        year=year, week_number=week, ingredient_id=ingredient_id
+    ).delete()
 
 
 def plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_ids):
@@ -40,9 +55,7 @@ def plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_
                     year=year, week_number=week, ingredient_id=ri.ingredient_id
                 ))
         else:
-            ShoppingListExclusion.query.filter_by(
-                year=year, week_number=week, ingredient_id=ri.ingredient_id
-            ).delete()
+            _zet_terug_op_de_lijst(year, week, ri.ingredient_id)
 
     db.session.commit()
 
@@ -95,11 +108,8 @@ def update_week_menu(week, year, menu_data):
         if recipe:
             recipe.usage_count = (recipe.usage_count or 0) + 1
             recipe.last_used = datetime.now()
-            # Verwijder exclusions voor ingrediënten van dit recept
             for ri in recipe.ingredients:
-                ShoppingListExclusion.query.filter_by(
-                    year=year, week_number=week, ingredient_id=ri.ingredient_id
-                ).delete()
+                _zet_terug_op_de_lijst(year, week, ri.ingredient_id)
 
     used_recipe_ids = {pos[2] for pos in new_positions}
     for recipe_id in used_recipe_ids:

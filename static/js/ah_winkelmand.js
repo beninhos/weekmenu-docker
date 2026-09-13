@@ -2,10 +2,7 @@
 // koppelen aan de weekmenu-boodschappenlijst.
 // Vereist utils.js.
 
-const _pageData = JSON.parse(document.getElementById("page-data").textContent);
-
 const state = {
-    year: _pageData.year, week: _pageData.week,
     orders: [], selected: null,
     order: null, needed: [], unlinked: [],
     currentQty: {}, meta: {}, draft: {},
@@ -72,7 +69,7 @@ async function loadOrder(id) {
     const el = document.getElementById('orderDetail');
     el.innerHTML = '<p class="text-sm text-[#6B6B6B]">Order laden…</p>';
     let d;
-    try { d = await (await fetch(`/api/ah/order/${id}?week=${state.week}&year=${state.year}`)).json(); }
+    try { d = await (await fetch(`/api/ah/order/${id}`)).json(); }
     catch (e) { el.innerHTML = '<p class="text-sm text-red-700">Order niet bereikbaar.</p>'; return; }
     if (d.error) { el.innerHTML = `<p class="text-sm text-red-700">${esc(d.error)}</p>`; return; }
 
@@ -132,12 +129,12 @@ function renderDetail() {
     if (state.needed.length) {
         neededHtml = `<div class="ah-fade bg-white border border-[#E8E4DC] rounded-lg p-3">
             <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-[#2C2C2C]">Nog nodig uit je weekmenu (${state.needed.length})</h3>
+                <h3 class="text-sm font-semibold text-[#2C2C2C]">Nog nodig van je boodschappenlijst (${state.needed.length})</h3>
             </div>
             <div class="grid grid-cols-2 gap-2">${state.needed.map(neededCard).join('')}</div>
         </div>`;
     } else {
-        neededHtml = `<div class="bg-white border border-[#E8E4DC] rounded-lg p-3 text-sm text-[#3f7d3f]">✓ Alles uit je weekmenu (week ${state.week}) zit al in deze order.</div>`;
+        neededHtml = `<div class="bg-white border border-[#E8E4DC] rounded-lg p-3 text-sm text-[#3f7d3f]">✓ Alles van je open boodschappenlijst zit al in deze order.</div>`;
     }
 
     const unlinkedHtml = state.unlinked.length
@@ -265,15 +262,6 @@ async function confirmDraft() {
     state.draft = {};
     document.getElementById('orderDetail').style.opacity = '';
     await loadOrder(state.selected);
-}
-
-function changeWeek(delta) {
-    let w = state.week + delta, y = state.year;
-    if (w < 1) { w = 52; y -= 1; }
-    if (w > 53) { w = 1; y += 1; }
-    state.week = w; state.year = y;
-    document.getElementById('weekLabel').textContent = `week ${w}, ${y}`;
-    if (state.selected) loadOrder(state.selected);
 }
 
 loadOrders();

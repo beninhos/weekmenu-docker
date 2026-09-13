@@ -146,12 +146,11 @@ def build_combined_shopping_list(today=None):
     """Combineer de per-week-lijsten van het venster tot één lijst met afvink-status."""
     weeks = window_weeks(today)
     per_week = {}
-    sources_by_ingredient = defaultdict(set)
+    sources_per_week = {}
     for wk in weeks:
         d, srcs = _build_shopping_dict(wk[0], wk[1], with_sources=True)
         per_week[wk] = d
-        for ing_id, names in srcs.items():
-            sources_by_ingredient[ing_id] |= names
+        sources_per_week[wk] = srcs
 
     checks = {}
     for c in ShoppingCheck.query.filter(
@@ -167,6 +166,11 @@ def build_combined_shopping_list(today=None):
 
     agg = {}
     weeks_by_ingredient = {}
+    # Recepthint per ingredient, gesplitst in 'nog open' en 'al afgevinkt':
+    # een open regel noemt alleen de recepten waarvoor je nog moet kopen,
+    # anders staat 'ui' met een recept van drie weken terug erbij.
+    open_sources = defaultdict(set)
+    checked_sources = defaultdict(set)
     for (y, w), d in per_week.items():
         for (ing_id, unit), amount in d.items():
             weeks_by_ingredient.setdefault(ing_id, [])
@@ -179,13 +183,16 @@ def build_combined_shopping_list(today=None):
             row['weeks'].append((y, w))
             row['total_amount'] += amount
             c = checks.get((y, w, ing_id))
+            names = sources_per_week[(y, w)].get(ing_id, set())
             if c:
                 row['checked'].append((y, w))
                 row['via_ah'] = row['via_ah'] or c.via_ah
                 if row['checked_at'] is None or c.checked_at > row['checked_at']:
                     row['checked_at'] = c.checked_at
+                checked_sources[ing_id] |= names
             else:
                 row['open_amount'] += amount
+                open_sources[ing_id] |= names
 
     open_rows, checked_rows = [], []
     cutoff = datetime.now() - timedelta(days=14)
@@ -197,12 +204,12 @@ def build_combined_shopping_list(today=None):
         if fully_checked:
             if r['checked_at'] and r['checked_at'] < cutoff:
                 continue
-            row = _row_base(ing, unit, r['total_amount'], sources_by_ingredient.get(ing_id))
+            row = _row_base(ing, unit, r['total_amount'], checked_sources.get(ing_id))
             row['via_ah'] = r['via_ah']
             row['checked_at'] = r['checked_at']
             checked_rows.append(row)
         else:
-            row = _row_base(ing, unit, r['open_amount'], sources_by_ingredient.get(ing_id))
+            row = _row_base(ing, unit, r['open_amount'], open_sources.get(ing_id))
             qty = 0
             for (y, w) in r['weeks']:
                 if (y, w) in r['checked']:

@@ -26,13 +26,6 @@
         <button onclick="reload()" class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C] border border-[#E8E4DC] rounded px-3 py-1.5 hover:bg-[#FAF8F5]">⟳ Ververs</button>
     </div>
 
-    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] px-4 py-2 flex items-center gap-3 text-sm">
-        <span class="text-[#6B6B6B]">Weekmenu:</span>
-        <button onclick="changeWeek(-1)" class="px-2 py-0.5 rounded hover:bg-white text-[#6B6B6B]">‹</button>
-        <span id="weekLabel" class="font-medium text-[#2C2C2C]">week {{ week }}, {{ year }}</span>
-        <button onclick="changeWeek(1)" class="px-2 py-0.5 rounded hover:bg-white text-[#6B6B6B]">›</button>
-    </div>
-
     <div id="orderTiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px"></div>
 
     <div id="concept"></div>
@@ -43,9 +36,6 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-<script type="application/json" id="page-data">
-{ "year": {{ year }}, "week": {{ week }} }
-</script>
 <script src="{{ url_for('static', filename='js/ah_winkelmand.js') }}"></script>
 {% endblock %}
 

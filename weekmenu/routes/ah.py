@@ -11,7 +11,7 @@ from weekmenu.services.ah import (
     _ah_setting, _ah_clear_tokens, ah_get_access_token, ah_search_products,
     ah_search_with_facets, ah_login_with_password, ah_price_advice,
 )
-from weekmenu.services.units import _parse_product_size, _calc_ah_qty
+from weekmenu.services.units import _parse_product_size
 
 bp = Blueprint('ah', __name__)
 
@@ -172,9 +172,7 @@ def ah_advice():
 
 @bp.route('/ah-winkelmand')
 def ah_winkelmand():
-    import datetime
-    iso = datetime.date.today().isocalendar()
-    return render_template('ah_winkelmand.html', year=iso[0], week=iso[1])
+    return render_template('ah_winkelmand.html')
 
 
 @bp.route('/api/ah/orders')
@@ -185,42 +183,44 @@ def ah_orders():
 
 @bp.route('/api/ah/order/<int:order_id>')
 def ah_order_detail(order_id):
+    """Order-inhoud plus wat er nog ontbreekt.
+
+    'Nog nodig' is de open boodschappenlijst (zelfde bron als /boodschappen),
+    niet 'het weekmenu van de kalenderweek van vandaag': op zondag is dat de
+    week die je net achter de rug hebt, en dan stelde de pagina recepten van
+    vorige week voor als gemist.
+    """
     from weekmenu.services.ah import ah_get_order
-    from weekmenu.services.shopping import _build_shopping_dict
+    from weekmenu.services.shopping import build_combined_shopping_list
     order = ah_get_order(order_id)
     if order is None:
         return jsonify({'error': 'Order niet bereikbaar'}), 502
 
     needed, unlinked = [], []
-    week = request.args.get('week', type=int)
-    year = request.args.get('year', type=int)
-    if week and year:
-        in_order = set(order['productIds'])
-        seen = set()
-        for (ing_id, unit), amount in _build_shopping_dict(year, week).items():
-            ing = db.session.get(Ingredient, ing_id)
-            if not ing:
-                continue
-            if not ing.ah_product_id:
-                if ing.display not in unlinked:
-                    unlinked.append(ing.display)
-                continue
-            if ing.ah_product_id in in_order or ing.ah_product_id in seen:
-                continue
-            seen.add(ing.ah_product_id)
-            needed.append({
-                'ingredientId': ing.id,
-                'productId':    ing.ah_product_id,
-                'name':         ing.display,
-                'productName':  ing.ah_product_name or '',
-                'size':         ing.ah_product_size or '',
-                'price':        ing.ah_product_price or '',
-                'image':        ing.ah_product_image or '',
-                'isBonus':      ing.ah_product_bonus or False,
-                'qty':          _calc_ah_qty(ing, amount, unit),
-            })
-    return jsonify({'order': order, 'needed': needed, 'unlinked': unlinked,
-                    'week': week, 'year': year})
+    in_order = set(order['productIds'])
+    seen = set()
+    for row in build_combined_shopping_list()['open']:
+        if (row.get('bron') or 'ah') != 'ah':
+            continue
+        if not row['ah_product_id']:
+            if row['name'] not in unlinked:
+                unlinked.append(row['name'])
+            continue
+        if row['ah_product_id'] in in_order or row['ah_product_id'] in seen:
+            continue
+        seen.add(row['ah_product_id'])
+        needed.append({
+            'ingredientId': row['ingredient_id'],
+            'productId':    row['ah_product_id'],
+            'name':         row['name'],
+            'productName':  row['ah_product_name'] or '',
+            'size':         row['ah_product_size'] or '',
+            'price':        row['ah_product_price'] or '',
+            'image':        row['ah_product_image'] or '',
+            'isBonus':      row['ah_product_bonus'],
+            'qty':          row['qty'],
+        })
+    return jsonify({'order': order, 'needed': needed, 'unlinked': unlinked})
 
 
 # Toevoegen aan een door de gebruiker geopende order. De app opent of zet
