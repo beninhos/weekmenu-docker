@@ -8,6 +8,7 @@ from weekmenu.models import Cookbook, DumpJob, Recipe, RecipeDraft, RecipeIngred
 from weekmenu.services.bereiding import bereiding_naar_html
 from weekmenu.services.dump import (bereiding_ontbreekt, hoeveelheid_ontbreekt,
                                      retry_dump_job, start_dump_job)
+from weekmenu.services.images import bijsnijden_met_origineel, parse_crop_body
 from weekmenu.services.pantry import annotate_pantry_status
 from weekmenu.services.recipes import _resolve_or_create_ingredient
 from weekmenu.services.units import _normalize_ri_unit
@@ -181,7 +182,6 @@ def dump_draft_reject(id):
 
 @bp.route('/dump/draft/<int:id>/crop', methods=['POST'])
 def dump_draft_crop(id):
-    from weekmenu.services.images import parse_crop_body, bijsnijden_met_origineel
     d = db.get_or_404(RecipeDraft, id)
     coords = parse_crop_body(request.get_json(silent=True) or {})
     if coords is None:

@@ -11,12 +11,16 @@ from weekmenu.extensions import db
 from weekmenu.models import (
     Recipe, Ingredient, IngredientAlias, Cookbook,
     RecipeIngredient, RecipeMealType, Settings, PantryIngredient,
+    RecipeDraft,
 )
 from weekmenu.constants import PRODUCT_CATEGORIES, RECIPE_MEAL_TYPES
 from weekmenu.services.units import (
     _normalize_ingredient, _guess_ingredient_category, _normalize_ri_unit,
 )
 from weekmenu.services.bereiding import bereiding_naar_html
+from weekmenu.services.images import (
+    normaliseer_orientatie, parse_crop_body, bijsnijden_met_origineel,
+)
 from weekmenu.services.recipes import (
     _resolve_or_create_ingredient, _download_site_logo,
 )
@@ -290,9 +294,6 @@ def new_recipe():
     cookbooks = Cookbook.query.order_by(Cookbook.name).all()
 
     if request.method == 'POST':
-        from weekmenu.models import RecipeDraft
-        from weekmenu.services.images import normaliseer_orientatie
-
         draft = None
         draft_id = request.form.get('draft_id')
         if draft_id:
@@ -475,7 +476,6 @@ def edit_recipe(id):
 
         image = request.files.get('image')
         if image and image.filename:
-            from weekmenu.services.images import normaliseer_orientatie
             image_data = image.read()
             ext = os.path.splitext(image.filename)[1].lower() or '.jpg'
             # Zie new_recipe: de EXIF-draai hoort in de pixels te zitten voor
@@ -572,7 +572,6 @@ def toggle_favorite(id):
 
 @bp.route('/recipe/<int:id>/crop', methods=['POST'])
 def recipe_crop(id):
-    from weekmenu.services.images import parse_crop_body, bijsnijden_met_origineel
     recipe = db.get_or_404(Recipe, id)
     coords = parse_crop_body(request.get_json(silent=True) or {})
     if coords is None:

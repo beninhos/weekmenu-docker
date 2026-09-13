@@ -1,7 +1,9 @@
+import hashlib
 import io
 import json
 import os
 import re
+import shutil
 import threading
 import uuid
 
@@ -12,7 +14,8 @@ from weekmenu.models import DumpJob, RecipeDraft
 from weekmenu.services.gemini import (
     _get_gemini_api_key, _sanitize_json, _build_gemini_ingredients, _UNITS_STR,
 )
-from weekmenu.services.ankers import knip_stappen
+from weekmenu.services.ankers import knip_stappen, normaliseer
+from weekmenu.services.images import normaliseer_orientatie
 from weekmenu.services.kaart import (benodigdheden, controleer_tegen_tabel, kaart_invoer,
                                      paren, zonder_tabelregels)
 from weekmenu.services.kaartsignaturen import bereidingstijd, is_voorkant, zonder_logo
@@ -226,7 +229,6 @@ def _bereiding(item, photo_page, page_texts, ingredienten):
 
 def _pagina_met_anker(steps, page_texts, behalve):
     """Paginanummer waar het eerste beginanker wél letterlijk staat, of None."""
-    from weekmenu.services.ankers import normaliseer
     eerste = next((s.get('start') for s in steps if isinstance(s, dict)
                    and isinstance(s.get('start'), str) and s.get('start').strip()), None)
     if not eerste:
@@ -614,8 +616,6 @@ def _pdf_page_jpegs(path, scale=4.0, quality=92):
 
 def _resolve_image(job_id, photo_page, page_map):
     """Kopieer de aangewezen foto of render de PDF-pagina naar static/uploads. Nooit een exception."""
-    import hashlib
-    import shutil
     try:
         if not photo_page or photo_page not in page_map:
             return None
@@ -635,7 +635,6 @@ def _resolve_image(job_id, photo_page, page_map):
             # Gevolg is dat dezelfde bronfoto voortaan een andere naam krijgt
             # dan vóór deze wijziging; bestaande records blijven gewoon naar
             # hun eigen, nog aanwezige bestand wijzen.
-            from weekmenu.services.images import normaliseer_orientatie
             with open(src, 'rb') as fh:
                 data = fh.read()
             data, ext = normaliseer_orientatie(data, os.path.splitext(src)[1] or '.jpg')
