@@ -1,13 +1,10 @@
-// v3: de service worker serveert /static/ cache-first zonder revalidatie en
-// base.html linkt zonder versie-query, dus zonder deze ophoging bereikt de
-// nieuwe crop-JS de browser van de gebruiker nooit.
-// v5: de maatvraag op /ah-producten noemt nu om welk van de twee stuks het
-// gaat, rekent het totaal per verpakking voor en heeft een weg terug uit
-// 'Niet vragen'.
-// v6: de bereiding houdt zijn kopjes na 'Overnemen', en de bijsnijdmodal zit
-// in een eigen bestand (static/js/crop-modal.js) dat draaien niet langer als
-// een uitsnede opvat.
-const CACHE = 'weekmenu-v6';
+// De CACHE-naam wordt bij Flask-opstart vervangen door een hash van
+// static/sw.js + static/js/*.js (zie weekmenu/routes/main.py::sw_js). Elke
+// uitrol met gewijzigde JS levert vanzelf een nieuwe cache-naam op; de oude
+// wordt in de 'activate'-listener hieronder opgeruimd.
+// De 'weekmenu-devel'-waarde hieronder is de vangnetwaarde als de dynamische
+// route om welke reden dan ook faalt en de statische versie wordt geserveerd.
+const CACHE = 'weekmenu-devel';
 const SHELL = [
   '/',
   '/static/favicon.svg',
