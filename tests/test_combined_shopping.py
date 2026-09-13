@@ -189,10 +189,10 @@ def test_extra_add_and_delete(app, client):
                        json={'recipe_id': r.id, 'people_count': 2})
     assert resp.status_code == 200
     qid = resp.get_json()['id']
-    assert QuickAddItem.query.get(qid) is not None
+    assert db.session.get(QuickAddItem, qid) is not None
 
     assert client.delete(f'/api/boodschappen/extra/{qid}').status_code == 200
-    assert QuickAddItem.query.get(qid) is None
+    assert db.session.get(QuickAddItem, qid) is None
 
 
 def test_add_item_current_week_appears_open(app, client):

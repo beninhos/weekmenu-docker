@@ -42,12 +42,12 @@ def test_openstaand_en_afgewezen_verdwijnen_wel(app):
 
 def test_job_gaat_terug_naar_verwerken(app):
     job_id = _job_met_concepten()
-    DumpJob.query.get(job_id).error_message = 'oude fout'
+    db.session.get(DumpJob, job_id).error_message = 'oude fout'
     db.session.commit()
     with patch('weekmenu.services.dump._start_thread') as thread:
         retry_dump_job(job_id)
 
-    job = DumpJob.query.get(job_id)
+    job = db.session.get(DumpJob, job_id)
     assert job.status == 'processing' and job.error_message is None
     thread.assert_called_once_with(job_id)
 
@@ -69,7 +69,7 @@ def test_accepted_pages_negeert_concepten_zonder_pagina(app):
 def test_afgehandelde_pagina_levert_geen_tweede_concept(app, tmp_path):
     """De kern: pagina 1 is al een recept, dus daar komt niets nieuws voor terug."""
     job_id = _job_met_concepten('job-3')
-    job = DumpJob.query.get(job_id)
+    job = db.session.get(DumpJob, job_id)
 
     antwoord = json.dumps([
         {"title": "Recept 1 opnieuw", "yields": 2, "photo_page": 1,
@@ -110,7 +110,7 @@ def test_temperatuur_staat_op_nul(app, tmp_path):
     """Zonder deze instelling gokt het model en wisselt de uitkomst per aanroep."""
     db.session.add(DumpJob(id='job-4', status='processing'))
     db.session.commit()
-    job = DumpJob.query.get('job-4')
+    job = db.session.get(DumpJob, 'job-4')
 
     class _Antwoord:
         text = '[]'

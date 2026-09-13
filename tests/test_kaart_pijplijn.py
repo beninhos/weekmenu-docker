@@ -160,7 +160,7 @@ def test_opnieuw_inlezen_houdt_de_kaartmodus_vast(app):
     with patch('weekmenu.services.dump._start_thread') as thread:
         retry_dump_job('job-retry')
     thread.assert_called_once_with('job-retry')
-    assert DumpJob.query.get('job-retry').mode == 'kaart'
+    assert db.session.get(DumpJob, 'job-retry').mode == 'kaart'
 
     # De modus meteen aflezen: buiten process_dump_job is de job-instantie
     # losgekoppeld van zijn sessie.
@@ -168,7 +168,7 @@ def test_opnieuw_inlezen_houdt_de_kaartmodus_vast(app):
     with patch('weekmenu.services.dump._process', side_effect=lambda job: gezien.append(job.mode)):
         process_dump_job(current_app._get_current_object(), 'job-retry')
     assert gezien == ['kaart']
-    assert DumpJob.query.get('job-retry').status == 'done'
+    assert db.session.get(DumpJob, 'job-retry').status == 'done'
 
 
 def test_boekmodus_waarschuwt_bij_kaarten(app, tmp_path):
@@ -196,17 +196,17 @@ def _upload(client, mode=None):
 
 def test_upload_zonder_modus_is_boek(app, client):
     resp = _upload(client)
-    assert DumpJob.query.get(resp.get_json()['job_id']).mode == 'boek'
+    assert db.session.get(DumpJob, resp.get_json()['job_id']).mode == 'boek'
 
 
 def test_upload_met_kaartmodus_zet_vlag_op_de_job(app, client):
     resp = _upload(client, 'kaart')
-    assert DumpJob.query.get(resp.get_json()['job_id']).mode == 'kaart'
+    assert db.session.get(DumpJob, resp.get_json()['job_id']).mode == 'kaart'
 
 
 def test_onbekende_modus_wordt_boek(app, client):
     resp = _upload(client, 'iets')
-    assert DumpJob.query.get(resp.get_json()['job_id']).mode == 'boek'
+    assert db.session.get(DumpJob, resp.get_json()['job_id']).mode == 'boek'
 
 
 def test_standaard_pagina_overstemt_photo_page_van_het_model(app):

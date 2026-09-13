@@ -353,7 +353,7 @@ def test_bevestigen_via_de_knop(app, client):
                     json={'eenheid': 'stuks', 'waarde': 15, 'richting': 'per_stuk'})
     assert r.status_code == 200
     assert r.get_json()['qty'] == 1
-    assert _calc_ah_qty(Ingredient.query.get(tomaat.id), 10, 'stuks') == 1
+    assert _calc_ah_qty(db.session.get(Ingredient, tomaat.id), 10, 'stuks') == 1
 
 
 def test_niet_vragen_via_de_knop(app, client):
@@ -377,7 +377,7 @@ def test_het_formulier_slaat_de_omgedraaide_vraag_goed_op(app, client):
                           'maat_eenheid': 'stuks', 'maat_waarde': 15,
                           'maat_richting': 'per_stuk'})
     assert r.status_code == 200
-    ing = Ingredient.query.get(tomaat.id)
+    ing = db.session.get(Ingredient, tomaat.id)
     assert ing.ah_conv_unit == 'stuks'
     assert round(ing.ah_conv_factor, 4) == 0.0667
     assert _calc_ah_qty(ing, 10, 'stuks') == 1
@@ -393,7 +393,7 @@ def test_een_leeg_antwoord_wist_de_conversie(app, client):
                           'maat_eenheid': '', 'maat_waarde': None,
                           'maat_richting': 'per_stuk'})
     assert r.status_code == 200
-    ing = Ingredient.query.get(tomaat.id)
+    ing = db.session.get(Ingredient, tomaat.id)
     assert ing.ah_conv_factor is None and ing.ah_conv_unit is None
 
 
@@ -412,7 +412,7 @@ def test_een_negatief_getal_wist_de_conversie_niet(app, client):
 
     assert r.status_code == 400
     assert 'bruikbaar getal' in r.get_json()['message']
-    ing = Ingredient.query.get(tomaat.id)
+    ing = db.session.get(Ingredient, tomaat.id)
     assert (ing.ah_conv_factor, ing.ah_conv_unit) == (0.01, 'stuks')
     assert (ing.ah_pkg_qty, ing.ah_pkg_unit) == (380.0, 'g')
 
@@ -428,7 +428,7 @@ def test_een_nul_via_het_formulier_wist_de_conversie_ook_niet(app, client):
                           'maat_richting': 'per_stuk'})
 
     assert r.status_code == 400
-    assert Ingredient.query.get(tomaat.id).ah_conv_factor == 0.01
+    assert db.session.get(Ingredient, tomaat.id).ah_conv_factor == 0.01
 
 
 def test_een_getal_zonder_recepteenheid_wist_de_conversie_ook_niet(app, client):
@@ -442,7 +442,7 @@ def test_een_getal_zonder_recepteenheid_wist_de_conversie_ook_niet(app, client):
                           'maat_richting': 'per_stuk'})
 
     assert r.status_code == 400
-    assert Ingredient.query.get(tomaat.id).ah_conv_factor == 0.01
+    assert db.session.get(Ingredient, tomaat.id).ah_conv_factor == 0.01
 
 
 def test_het_formulier_zegt_hetzelfde_als_de_bevestig_knop(app, client):
@@ -493,7 +493,7 @@ def test_een_verpakking_in_centiliters_houdt_zijn_maat(app, client):
                           'maat_antwoord_eenheid': 'ml'})
 
     assert r.status_code == 200
-    ing = Ingredient.query.get(slagroom.id)
+    ing = db.session.get(Ingredient, slagroom.id)
     assert (ing.ah_conv_unit, ing.ah_conv_factor) == ('scheutje', 0.5)
 
 
@@ -599,7 +599,7 @@ def test_het_formulier_stuurt_het_veld_zoals_het_erin_staat(app, client):
                           'maat_eenheid': 'stuks', 'maat_waarde': '15',
                           'maat_richting': 'per_stuk'})
     assert r.status_code == 200
-    assert round(Ingredient.query.get(tomaat.id).ah_conv_factor, 4) == 0.0667
+    assert round(db.session.get(Ingredient, tomaat.id).ah_conv_factor, 4) == 0.0667
 
     # Een nul uit datzelfde veld is geen antwoord en wist de maat dus niet.
     r = client.post(f'/api/ah/ingredient/{tomaat.id}/pkg-config',
@@ -607,7 +607,7 @@ def test_het_formulier_stuurt_het_veld_zoals_het_erin_staat(app, client):
                           'maat_eenheid': 'stuks', 'maat_waarde': '0',
                           'maat_richting': 'per_stuk'})
     assert r.status_code == 400
-    assert round(Ingredient.query.get(tomaat.id).ah_conv_factor, 4) == 0.0667
+    assert round(db.session.get(Ingredient, tomaat.id).ah_conv_factor, 4) == 0.0667
 
 
 def test_nan_en_oneindig_wissen_de_maat_niet():

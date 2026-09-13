@@ -124,7 +124,7 @@ def test_v11_ruimt_oude_categorieen_op_in_ingredienten_en_drafts(client, app):
     db.session.expire_all()
 
     assert _cat('venkelzaad') in PRODUCT_CATEGORIES
-    items = json.loads(RecipeDraft.query.get(draft.id).ingredients_json)
+    items = json.loads(db.session.get(RecipeDraft, draft.id).ingredients_json)
     assert items[0]['category'] == 'Groente, Fruit & Aardappelen'          # herzien
     assert items[1]['category'] == 'Kruiden & Specerijen'  # ongemoeid
 

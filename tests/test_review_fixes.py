@@ -300,7 +300,7 @@ def test_v14_voegt_spookingredient_samen_met_het_echte(client, app):
         conn.commit()
     db.session.expire_all()
 
-    assert Ingredient.query.get(spook_id) is None
+    assert db.session.get(Ingredient, spook_id) is None
     assert RecipeIngredient.query.filter_by(ingredient_id=echt_id).count() == 1
     assert RecipeIngredient.query.filter_by(ingredient_id=spook_id).count() == 0
 
@@ -316,7 +316,7 @@ def test_v14_hernoemt_als_het_echte_nog_niet_bestaat(client, app):
         conn.commit()
     db.session.expire_all()
 
-    bewaard = Ingredient.query.get(spook_id)
+    bewaard = db.session.get(Ingredient, spook_id)
     assert bewaard is not None and bewaard.name == 'sjalot'
     assert bewaard.display_name == 'sjalot'
 
@@ -329,4 +329,4 @@ def test_v14_laat_gewone_namen_met_haakjes_met_rust(client, app):
         _migrate_v14(conn)
         conn.commit()
     db.session.expire_all()
-    assert Ingredient.query.get(ing.id).name == 'koriander (vers)'
+    assert db.session.get(Ingredient, ing.id).name == 'koriander (vers)'

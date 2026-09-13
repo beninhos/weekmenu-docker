@@ -68,14 +68,14 @@ def test_categorie_van_bestaand_ingredient_is_te_corrigeren(client, app):
     r, ing = _make_recipe(category='Overig')
     client.post(f'/recipe/{r.id}/edit',
                 data=_edit_form(ing, 'Oliën, Sauzen & Smaakmakers', ''))
-    assert Ingredient.query.get(ing.id).category == 'Oliën, Sauzen & Smaakmakers'
+    assert db.session.get(Ingredient, ing.id).category == 'Oliën, Sauzen & Smaakmakers'
 
 
 def test_onbekende_categorie_wordt_niet_overgenomen(client, app):
     r, ing = _make_recipe(category='Overig')
     client.post(f'/recipe/{r.id}/edit',
                 data=_edit_form(ing, 'Soepen, Sauzen & Kruiden', ''))
-    assert Ingredient.query.get(ing.id).category == 'Overig'
+    assert db.session.get(Ingredient, ing.id).category == 'Overig'
 
 
 def test_uitvinken_haalt_alleen_ingredienten_van_dit_recept_uit_de_voorraad(client, app):

@@ -73,7 +73,7 @@ def test_samenvoegen_haalt_receptregels_van_beide_kanten_bij_elkaar(app):
 
     assert code == 200
     assert payload['recepten_verplaatst'] == 1
-    assert Ingredient.query.get(verliezer.id) is None
+    assert db.session.get(Ingredient, verliezer.id) is None
     assert RecipeIngredient.query.filter_by(ingredient_id=winnaar.id).count() == 2
 
 
@@ -211,7 +211,7 @@ def test_samenvoegen_weigert_een_onbekend_ingredient_en_laat_niets_half_achter(a
     payload, code = voeg_samen(verliezer.id, 999999)
 
     assert code == 404
-    assert Ingredient.query.get(verliezer.id) is not None
+    assert db.session.get(Ingredient, verliezer.id) is not None
     assert RecipeIngredient.query.filter_by(ingredient_id=verliezer.id).count() == 1
 
 
@@ -1042,7 +1042,7 @@ def test_zelfde_product_voegt_samen_als_de_spelling_al_een_eigen_rij_is(app):
 
     assert code == 200
     assert payload['samengevoegd'] is True
-    assert Ingredient.query.get(los_id) is None
+    assert db.session.get(Ingredient, los_id) is None
     assert RecipeIngredient.query.filter_by(ingredient_id=kast.id).count() == 1
 
 
@@ -1071,7 +1071,7 @@ def test_endpoint_voegt_samen(client, app):
 
     assert resp.status_code == 200
     assert resp.get_json()['status'] == 'ok'
-    assert Ingredient.query.get(verliezer_id) is None
+    assert db.session.get(Ingredient, verliezer_id) is None
 
 
 def test_endpoint_slaat_een_paar_over(client, app):
@@ -1323,7 +1323,7 @@ def test_de_koppeling_van_de_verliezer_kan_blijven(app):
 
     voeg_samen(netje.id, los.id, ah_van_id=netje_id)
 
-    ing = Ingredient.query.get(los.id)
+    ing = db.session.get(Ingredient, los.id)
     assert (ing.ah_product_id, ing.ah_pkg_qty) == (519646, 4.0)
     regel = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
              if 'limoen' in x['name'].lower()][0]
@@ -1335,7 +1335,7 @@ def test_zonder_keuze_blijft_de_koppeling_van_de_naam_die_je_houdt(app):
 
     voeg_samen(netje.id, los.id)
 
-    assert Ingredient.query.get(los.id).ah_product_id == 231211
+    assert db.session.get(Ingredient, los.id).ah_product_id == 231211
 
 
 def test_het_antwoord_vertelt_welke_ah_koppeling_bleef(app):
@@ -1366,7 +1366,7 @@ def _gehakt_drieluik(nummer):
 
 
 def _koppeling(ing_id):
-    ing = Ingredient.query.get(ing_id)
+    ing = db.session.get(Ingredient, ing_id)
     return ing.ah_product_id, ing.ah_pkg_qty, ing.ah_product_price
 
 
@@ -1395,7 +1395,7 @@ def test_endpoint_geeft_de_ah_keuze_door(client, app):
                              'ah_van_id': netje.id})
 
     assert resp.status_code == 200
-    assert Ingredient.query.get(los.id).ah_product_id == 519646
+    assert db.session.get(Ingredient, los.id).ah_product_id == 519646
 
 
 # ── weggeklikte weekregels komen terug ───────────────────────────────────
@@ -1447,8 +1447,8 @@ def test_de_omrekening_is_ook_het_antwoord_op_de_maatvraag(app):
 
     leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
 
-    assert (Ingredient.query.get(kop.id).ah_conv_factor,
-            Ingredient.query.get(kop.id).ah_conv_unit) == (4.0, 'stuks')
+    assert (db.session.get(Ingredient, kop.id).ah_conv_factor,
+            db.session.get(Ingredient, kop.id).ah_conv_unit) == (4.0, 'stuks')
     voeg_samen(bosui.id, kop.id)
     voeg_samen(uitjes.id, kop.id)
     regel = [x for x in build_combined_shopping_list(today=VANDAAG)['open']
@@ -1465,8 +1465,8 @@ def test_een_bestaand_antwoord_op_de_maatvraag_blijft_staan(app):
 
     leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
 
-    assert Ingredient.query.get(kop.id).ah_conv_factor == 6.0
-    assert Ingredient.query.get(uitjes.id).ah_conv_factor == 4.0
+    assert db.session.get(Ingredient, kop.id).ah_conv_factor == 6.0
+    assert db.session.get(Ingredient, uitjes.id).ah_conv_factor == 4.0
 
 
 def test_zonder_verpakking_in_die_eenheid_blijft_de_maat_leeg(app):
@@ -1479,7 +1479,7 @@ def test_zonder_verpakking_in_die_eenheid_blijft_de_maat_leeg(app):
 
     leg_omrekening_vast(kop.id, uitjes.id, 'bosje', 'stuks', '4')
 
-    assert Ingredient.query.get(kop.id).ah_conv_factor is None
+    assert db.session.get(Ingredient, kop.id).ah_conv_factor is None
 
 
 def test_ook_toch_apart_zegt_dat_het_voorstel_vervallen_is(app):

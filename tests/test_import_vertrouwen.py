@@ -18,7 +18,7 @@ from weekmenu.services.ocr import _clean_ocr_text
 
 def _concept(app, ingredienten, status='pending', job_id='job-v',
             instructions='Stap 1. Doe iets.'):
-    if not DumpJob.query.get(job_id):
+    if not db.session.get(DumpJob, job_id):
         db.session.add(DumpJob(id=job_id, status='done'))
     d = RecipeDraft(job_id=job_id, name='Proefrecept', source_page=1, status=status,
                     instructions=instructions,
@@ -38,7 +38,7 @@ def test_ontbrekende_hoeveelheid_blokkeert_opslaan(client, app):
     assert resp.status_code == 409
     assert 'kipfilets' in resp.get_json()['message']
     assert Recipe.query.count() == 0
-    assert RecipeDraft.query.get(d.id).status == 'pending'
+    assert db.session.get(RecipeDraft, d.id).status == 'pending'
 
 
 def test_ingredient_zonder_maat_mag_wel_zonder_getal(app, client):
@@ -71,7 +71,7 @@ def test_lege_bereiding_blokkeert_opslaan(app, client):
     assert resp.status_code == 409
     assert 'bereiding' in resp.get_json()['message'].lower()
     assert Recipe.query.count() == 0
-    assert RecipeDraft.query.get(d.id).status == 'pending'
+    assert db.session.get(RecipeDraft, d.id).status == 'pending'
 
 
 def test_witruimte_bereiding_telt_ook_als_leeg(app, client):
@@ -186,4 +186,4 @@ def test_mislukte_batch_laat_geen_halve_oogst_achter(app, tmp_path):
         process_dump_job(app, 'job-half')
 
     assert RecipeDraft.query.filter_by(job_id='job-half').count() == 0
-    assert DumpJob.query.get('job-half').status == 'error'
+    assert db.session.get(DumpJob, 'job-half').status == 'error'

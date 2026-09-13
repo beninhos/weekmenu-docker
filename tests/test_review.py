@@ -69,7 +69,7 @@ def test_categorie_wijzigen_via_de_api(client, app):
     resp = client.post(f'/api/ingredient/{ing.id}/category',
                        json={'category': 'Groente, Fruit & Aardappelen'})
     assert resp.get_json()['category'] == 'Groente, Fruit & Aardappelen'
-    assert Ingredient.query.get(ing.id).category == 'Groente, Fruit & Aardappelen'
+    assert db.session.get(Ingredient, ing.id).category == 'Groente, Fruit & Aardappelen'
 
 
 def test_onbekende_categorie_wordt_geweigerd(client, app):
@@ -77,7 +77,7 @@ def test_onbekende_categorie_wordt_geweigerd(client, app):
     resp = client.post(f'/api/ingredient/{ing.id}/category',
                        json={'category': 'Soepen, Sauzen & Kruiden'})
     assert resp.status_code == 400
-    assert Ingredient.query.get(ing.id).category == 'Dranken'
+    assert db.session.get(Ingredient, ing.id).category == 'Dranken'
 
 
 def test_pagina_rendert_en_staat_op_de_voorraadpagina(client, app):
@@ -93,18 +93,18 @@ def test_bron_zetten_en_terugdraaien(client, app):
     ing = _ing('polenta', 'Pasta, Rijst & Wereldkeuken')
     assert client.post(f'/api/ingredient/{ing.id}/bron',
                        json={'bron': 'toko'}).get_json()['bron'] == 'toko'
-    assert Ingredient.query.get(ing.id).bron == 'toko'
+    assert db.session.get(Ingredient, ing.id).bron == 'toko'
     # 'ah' betekent gewoon bij de AH, en dat slaan we op als leeg
     assert client.post(f'/api/ingredient/{ing.id}/bron',
                        json={'bron': 'ah'}).get_json()['bron'] == 'ah'
-    assert Ingredient.query.get(ing.id).bron is None
+    assert db.session.get(Ingredient, ing.id).bron is None
 
 
 def test_onbekende_bron_wordt_geweigerd(client, app):
     ing = _ing('polenta', 'Pasta, Rijst & Wereldkeuken')
     assert client.post(f'/api/ingredient/{ing.id}/bron',
                        json={'bron': 'gamma'}).status_code == 400
-    assert Ingredient.query.get(ing.id).bron is None
+    assert db.session.get(Ingredient, ing.id).bron is None
 
 
 def test_niet_ah_items_krijgen_een_eigen_blok_op_de_lijst(client, app):

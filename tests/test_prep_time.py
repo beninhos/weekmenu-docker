@@ -35,12 +35,12 @@ def test_modelvelden_bestaan(app):
     d = RecipeDraft(job_id='k', name='Kaart', prep_time=40, back_image_path='static/uploads/x.jpg')
     db.session.add(d)
     db.session.commit()
-    assert DumpJob.query.get('k').mode == 'kaart'
+    assert db.session.get(DumpJob, 'k').mode == 'kaart'
     db.session.add(DumpJob(id='l', status='done'))
     db.session.commit()
-    assert DumpJob.query.get('l').mode == 'boek'
-    assert Recipe.query.get(r.id).prep_time == 40
-    assert RecipeDraft.query.get(d.id).back_image_path == 'static/uploads/x.jpg'
+    assert db.session.get(DumpJob, 'l').mode == 'boek'
+    assert db.session.get(Recipe, r.id).prep_time == 40
+    assert db.session.get(RecipeDraft, d.id).back_image_path == 'static/uploads/x.jpg'
 
 
 def test_nieuw_recept_bewaart_bereidingstijd(app, client):
@@ -63,7 +63,7 @@ def test_bewerken_wijzigt_bereidingstijd(app, client):
     db.session.commit()
     client.post(f'/recipe/{r.id}/edit', data={'name': 'Oud', 'serves': '', 'page': '',
                                                'prep_time': '25'})
-    assert Recipe.query.get(r.id).prep_time == 25
+    assert db.session.get(Recipe, r.id).prep_time == 25
 
 
 def test_accepteren_neemt_bereidingstijd_over(app, client):
@@ -74,7 +74,7 @@ def test_accepteren_neemt_bereidingstijd_over(app, client):
     db.session.commit()
     resp = client.post(f'/dump/draft/{d.id}/accept', json={})
     assert resp.status_code == 200
-    assert Recipe.query.get(resp.get_json()['recipe_id']).prep_time == 35
+    assert db.session.get(Recipe, resp.get_json()['recipe_id']).prep_time == 35
 
 
 def test_serialize_draft_en_recipe_geven_prep_time(app, client):
