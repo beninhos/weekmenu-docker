@@ -225,15 +225,9 @@ def ah_order_detail(order_id):
 
 # Toevoegen aan een door de gebruiker geopende order. De app opent of zet
 # zelf nooit een order door — dat doet de gebruiker in de AH-app.
-_AH_ORDER_WRITE_ENABLED = True
-
-
 @bp.route('/api/ah/order/<int:order_id>/apply', methods=['POST'])
 def ah_order_apply(order_id):
     from weekmenu.services.ah import ah_add_to_open_order, ah_get_order
-    if not _AH_ORDER_WRITE_ENABLED:
-        return jsonify({'status': 'error',
-                        'message': 'Bewerken van bestellingen staat uit.'}), 403
     data = request.get_json(force=True) or {}
     items = data.get('items', [])
     if not items:
