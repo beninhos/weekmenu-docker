@@ -4,7 +4,7 @@ import os
 
 from weekmenu.services.ankers import knip_stappen, normaliseer
 from weekmenu.services.dump import parse_batch_response
-from weekmenu.services.ocr import _clean_ocr_text
+from weekmenu.services.ocr import clean_ocr_text
 
 PAGINA = """KIP MET RIJST
 2 kipfilets
@@ -337,7 +337,7 @@ def test_echte_pagina_met_ingredientenlijst_door_de_bereiding():
     """
     pad = os.path.join(os.path.dirname(__file__), 'fixtures', 'kookboek_p5.json')
     f = json.load(open(pad, encoding='utf-8'))
-    ocr = _clean_ocr_text(f['ocr'])                 # zoals _process de tekst aanlevert
+    ocr = clean_ocr_text(f['ocr'])                 # zoals _process de tekst aanlevert
     tekst, meldingen = knip_stappen(ocr, f['steps'], ingredienten=f['ingredienten'])
     genorm = normaliseer(ocr).replace('\n', ' ')
     stappen = tekst.split('\n')

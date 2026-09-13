@@ -272,7 +272,7 @@ def _regels(annotation):
 _FRACTIONS = '½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞'
 
 
-def _clean_ocr_text(text):
+def clean_ocr_text(text):
     """Ruim herkenbare OCR-artefacten op vóór het model de tekst ziet.
 
     Een verdubbeld breukteken ('½½ el ketjap') komt in geen enkel recept voor.
@@ -305,5 +305,5 @@ def pages_as_labelled_text(texts):
     """
     blokken = []
     for index, text in enumerate(texts, 1):
-        blokken.append(f'--- Pagina {index} ---\n{_clean_ocr_text(text).strip()}')
+        blokken.append(f'--- Pagina {index} ---\n{clean_ocr_text(text).strip()}')
     return '\n\n'.join(blokken)

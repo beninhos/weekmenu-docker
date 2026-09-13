@@ -19,7 +19,7 @@ from weekmenu.services.images import normaliseer_orientatie
 from weekmenu.services.kaart import (controleer_tegen_tabel, kaart_invoer,
                                      paren, zonder_tabelregels)
 from weekmenu.services.kaartsignaturen import benodigdheden, bereidingstijd, is_voorkant, zonder_logo
-from weekmenu.services.ocr import (_clean_ocr_text, lees_paginas, lees_paginas_met_annotaties,
+from weekmenu.services.ocr import (clean_ocr_text, lees_paginas, lees_paginas_met_annotaties,
                                    pages_as_labelled_text)
 
 _ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/avif'}
@@ -420,7 +420,7 @@ def _process(job):
         if _warn_if_truncated(response):
             meldingen.append('Het antwoord van Gemini was afgekapt; er kunnen recepten '
                              'ontbreken. Probeer het opnieuw of splits de batch.')
-        recipes = parse_batch_response(response.text, [_clean_ocr_text(t) for t in texts])
+        recipes = parse_batch_response(response.text, [clean_ocr_text(t) for t in texts])
         verwacht = len(images) - len(zonder_tekst)
         # Vangnet: kaarten in boekmodus leveren twee halve recepten per kaart op.
         kaarten = [n for n, t in enumerate(texts, 1) if is_voorkant(t)]
@@ -475,8 +475,8 @@ def _verwerk_kaarten(texts, annotaties, client, config):
     recipes = []
     for paar in paren_lijst:
         voor, achter, rijen = paar['voor'], paar['achter'], paar['rijen']
-        voortekst = _clean_ocr_text(texts[voor - 1])
-        achtertekst = _clean_ocr_text(texts[achter - 1])
+        voortekst = clean_ocr_text(texts[voor - 1])
+        achtertekst = clean_ocr_text(texts[achter - 1])
         achter_zonder_tabel = zonder_tabelregels(achtertekst, rijen)
         gecombineerd = voortekst.strip() + '\n' + achter_zonder_tabel.strip()
         response = client.models.generate_content(

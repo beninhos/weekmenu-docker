@@ -13,7 +13,7 @@ import pytest
 from weekmenu.extensions import db
 from weekmenu.models import DumpJob, Recipe, RecipeDraft, RecipeIngredient
 from weekmenu.services.dump import _eerste_getal, parse_batch_response
-from weekmenu.services.ocr import _clean_ocr_text
+from weekmenu.services.ocr import clean_ocr_text
 
 
 def _concept(app, ingredienten, status='pending', job_id='job-v',
@@ -152,7 +152,7 @@ def test_recept_zonder_ingredientenlijst_kost_de_batch_niet(app):
     ('12 komkommer', '12 komkommer'),     # geen breukteken: niet aan zitten
 ])
 def test_breukartefacten_opruimen(ruw, schoon):
-    assert _clean_ocr_text(ruw) == schoon
+    assert clean_ocr_text(ruw) == schoon
 
 
 # ── Losse hoofdletter I die een 1 hoort te zijn ─────────────────────────
@@ -165,7 +165,7 @@ def test_breukartefacten_opruimen(ruw, schoon):
     ('bak I minuut per kant', 'bak 1 minuut per kant'),  # ook midden in de zin
 ])
 def test_losse_hoofdletter_i_wordt_1(ruw, schoon):
-    assert _clean_ocr_text(ruw) == schoon
+    assert clean_ocr_text(ruw) == schoon
 
 
 # ── Een mislukte batch laat niets half achter ──────────────────────────
