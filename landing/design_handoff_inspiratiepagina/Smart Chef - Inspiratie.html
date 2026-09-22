@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>Smart Chef · Inspiratie</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<template id="__bundler_thumbnail" data-bg-color="#F9F7F3">
+  <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+    <rect width="512" height="512" fill="#F9F7F3"/>
+    <rect x="36" y="36" width="440" height="440" rx="96" fill="#F9F7F3" stroke="#2C2C2C" stroke-width="16"/>
+    <path d="M96 240C96 240 128 384 256 384C384 384 416 240 416 240" stroke="#2C2C2C" stroke-width="40" stroke-linecap="round" fill="none"/>
+    <path d="M160 208C160 208 192 144 256 144C320 144 352 208 352 208" stroke="#8B4513" stroke-width="32" stroke-linecap="round" fill="none"/>
+  </svg>
+</template>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#F9F7F3;
+    --paper:#FFFFFF;
+    --ink:#1C1A16;
+    --ink-2:#4A463E;
+    --ink-3:#8A8478;
+    --line:#E8E4DC;
+    --line-2:#D8D3C8;
+    --accent:#2D5016;        /* olive green - seasonal */
+    --accent-soft:#EDF1E4;
+    --warn:#8B4513;          /* warm rust - overproduction */
+    --warn-soft:#F5E8DC;
+    --chip:#F2EEE6;
+    --serif:'DM Serif Display', 'Playfair Display', Georgia, serif;
+    --sans:'Inter', system-ui, sans-serif;
+    --mono:'DM Mono', ui-monospace, monospace;
+  }
+  html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%;display:block}
+
+  .page{min-width:1280px;max-width:1440px;margin:0 auto}
+
+  /* ——— Top bar ——— */
+  .topbar{
+    display:flex;align-items:center;gap:32px;
+    padding:18px 40px;border-bottom:1px solid var(--line);
+    background:var(--bg);position:sticky;top:0;z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-size:22px;letter-spacing:-0.01em}
+  .brand-mark{
+    width:34px;height:34px;border-radius:9px;
+    display:block;background:var(--paper);border:1.5px solid var(--ink);
+    padding:3px;
+  }
+  .brand-mark img{width:100%;height:100%;display:block}
+  .nav{display:flex;gap:28px;font-size:13px;color:var(--ink-2)}
+  .nav a{padding:6px 0;position:relative}
+  .nav a.active{color:var(--ink);font-weight:500}
+  .nav a.active::after{content:"";position:absolute;left:0;right:0;bottom:-19px;height:2px;background:var(--ink)}
+  .top-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+  .search{
+    display:flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);
+    border-radius:999px;padding:8px 14px;width:320px;color:var(--ink-3);font-size:13px;
+  }
+  .kbd{
+    margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--ink-3);
+    background:var(--chip);padding:2px 6px;border-radius:4px;border:1px solid var(--line);
+  }
+  .icon-btn{
+    width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--paper);
+    display:grid;place-items:center;color:var(--ink-2);position:relative;cursor:pointer;
+  }
+  .icon-btn .dot{position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--warn)}
+  .avatar{
+    width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#D9C9A8,#B9A177);
+    color:#4A3A1E;font-weight:600;font-size:13px;display:grid;place-items:center;
+  }
+
+  /* ——— Hero / page header ——— */
+  .hero{padding:40px 40px 28px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:end;border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+  .eyebrow .bullet{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:middle;transform:translateY(-1px)}
+  h1.display{font-family:var(--serif);font-weight:400;font-size:64px;line-height:1.02;letter-spacing:-0.02em;margin-top:14px}
+  h1.display em{font-style:italic;color:var(--accent)}
+  .hero-lede{font-size:15px;line-height:1.6;color:var(--ink-2);max-width:440px;margin-top:18px}
+  .hero-meta{display:flex;gap:32px;margin-top:24px;font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.08em;text-transform:uppercase}
+  .hero-meta b{display:block;font-family:var(--serif);font-size:28px;color:var(--ink);letter-spacing:-.01em;font-weight:400;margin-bottom:4px;text-transform:none}
+
+  .season-card{
+    background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:24px;
+    position:relative;overflow:hidden;
+  }
+  .season-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .season-head .eyebrow{color:var(--accent)}
+  .season-title{font-family:var(--serif);font-size:22px;letter-spacing:-0.01em}
+  .season-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .seasonpick{
+    border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--bg);
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .seasonpick .ph{aspect-ratio:1;border-radius:8px;overflow:hidden;position:relative}
+  .seasonpick .name{font-size:12px;font-weight:600}
+  .seasonpick .meta{font-family:var(--mono);font-size:10px;color:var(--ink-3);display:flex;justify-content:space-between}
+  .seasonpick .meta .score{color:var(--accent);font-weight:500}
+
+  /* ——— Layout ——— */
+  .layout{display:grid;grid-template-columns:240px 1fr;gap:40px;padding:32px 40px 60px}
+
+  /* ——— Sidebar ——— */
+  .side h3{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:22px 0 10px;font-weight:500}
+  .side h3:first-child{margin-top:0}
+  .facet{display:flex;align-items:center;justify-content:space-between;padding:7px 0;font-size:13px;color:var(--ink-2);cursor:pointer}
+  .facet:hover{color:var(--ink)}
+  .facet .count{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .facet input{accent-color:var(--ink);margin-right:10px}
+  .facet.on{color:var(--ink);font-weight:500}
+  .slider-row{padding:8px 0}
+  .slider-row .label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:8px}
+  .slider{height:3px;background:var(--line);border-radius:3px;position:relative}
+  .slider::after{content:"";position:absolute;left:0;right:28%;top:0;bottom:0;background:var(--ink);border-radius:3px}
+  .slider .handle{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:var(--paper);border:2px solid var(--ink);transform:translate(-50%,-50%)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;color:var(--ink-2);background:var(--paper);cursor:pointer}
+  .chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .apply{display:block;width:100%;margin-top:18px;background:var(--ink);color:var(--bg);border:none;padding:10px;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer}
+  .reset{display:block;width:100%;margin-top:8px;background:transparent;color:var(--ink-3);border:none;padding:8px;font-size:12px;font-family:var(--mono);cursor:pointer}
+
+  /* ——— Main column ——— */
+  .toolbar{display:flex;align-items:center;gap:14px;margin-bottom:24px;flex-wrap:wrap}
+  .pill-row{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{
+    font-family:var(--sans);font-size:13px;padding:8px 14px;border-radius:999px;
+    border:1px solid var(--line);background:var(--paper);color:var(--ink-2);cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;
+  }
+  .pill.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .pill .swatch{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .pill.warn .swatch{background:var(--warn)}
+  .sort{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+  .sort .select{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:7px 12px;font-family:var(--sans);font-size:13px;display:inline-flex;align-items:center;gap:6px}
+
+  .result-count{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px;display:flex;align-items:center;gap:14px}
+  .result-count .sep{width:24px;height:1px;background:var(--line-2)}
+
+  /* ——— Featured strip ——— */
+  .featured{
+    display:grid;grid-template-columns:1.25fr 1fr;gap:28px;
+    background:var(--paper);border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-bottom:40px;
+  }
+  .featured .ph{aspect-ratio:4/3;position:relative}
+  .featured-body{padding:34px 34px 30px;display:flex;flex-direction:column;gap:16px}
+  .featured-body .eyebrow{color:var(--accent)}
+  .featured-body h2{font-family:var(--serif);font-size:38px;line-height:1.08;letter-spacing:-0.015em;font-weight:400}
+  .featured-body p{font-size:14px;line-height:1.6;color:var(--ink-2);max-width:440px}
+  .byline{display:flex;align-items:center;gap:10px;margin-top:auto;font-size:13px;color:var(--ink-2)}
+  .byline .a{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#BFA98A,#8F7A5C)}
+  .byline .divider{width:1px;height:14px;background:var(--line-2)}
+  .byline .dot{width:3px;height:3px;border-radius:50%;background:var(--ink-3)}
+  .featured-stats{display:flex;gap:24px;padding-top:16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.08em;text-transform:uppercase}
+  .featured-stats b{display:block;font-family:var(--serif);font-weight:400;font-size:22px;color:var(--ink);margin-bottom:2px;text-transform:none;letter-spacing:-0.01em}
+
+  /* ——— Recipe grid ——— */
+  .section-head{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 20px}
+  .section-head h2{font-family:var(--serif);font-size:30px;font-weight:400;letter-spacing:-0.01em}
+  .section-head .sub{font-size:13px;color:var(--ink-3)}
+  .section-head .link{font-family:var(--mono);font-size:11px;color:var(--ink-2);letter-spacing:.08em;text-transform:uppercase}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+
+  .recipe{display:flex;flex-direction:column;gap:12px;cursor:pointer}
+  .recipe .ph{aspect-ratio:4/3;border-radius:14px;overflow:hidden;position:relative;border:1px solid var(--line)}
+  .ribbon{
+    position:absolute;top:12px;left:12px;
+    display:inline-flex;align-items:center;gap:6px;
+    background:var(--paper);border:1px solid var(--line);
+    font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    padding:5px 10px;border-radius:999px;color:var(--ink-2);
+  }
+  .ribbon .swatch{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .ribbon.warn .swatch{background:var(--warn)}
+  .ribbon.warn{color:var(--warn)}
+  .bookmark{
+    position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;
+    background:var(--paper);border:1px solid var(--line);display:grid;place-items:center;color:var(--ink-2);
+  }
+  .price-tag{
+    position:absolute;bottom:12px;left:12px;
+    background:rgba(28,26,22,.88);color:var(--bg);
+    font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:999px;
+    backdrop-filter:blur(6px);display:inline-flex;align-items:center;gap:8px;
+  }
+  .price-tag .slash{opacity:.45}
+
+  .recipe .tagline{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:8px}
+  .recipe h3{font-family:var(--serif);font-size:22px;line-height:1.15;letter-spacing:-0.01em;font-weight:400}
+  .recipe .by{font-size:13px;color:var(--ink-2)}
+  .recipe .stats{display:flex;gap:16px;font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.05em;margin-top:2px}
+  .recipe .stats span{display:inline-flex;align-items:center;gap:5px}
+
+  /* ——— Placeholder style (striped SVG) ——— */
+  .ph{background:var(--chip);display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-align:center;padding:8px}
+  .ph.green{background:#E6EADB}
+  .ph.olive{background:#DDE1CE}
+  .ph.blush{background:#F0E2D8}
+  .ph.rust {background:#EBDDCF}
+  .ph.sand {background:#EAE2D0}
+  .ph.forest{background:#D3DBC4}
+  .ph.cream{background:#F0EADA}
+  .ph.clay{background:#E6D7C8}
+  .ph::before{
+    content:"";position:absolute;inset:0;
+    background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.04) 0 1px,transparent 1px 14px);
+    pointer-events:none;
+  }
+  .ph > span{position:relative;z-index:1;max-width:70%}
+
+  /* ——— Curated collections row ——— */
+  .collections{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin:56px 0 40px}
+  .collection{
+    border:1px solid var(--line);border-radius:16px;background:var(--paper);overflow:hidden;
+    display:flex;flex-direction:column;cursor:pointer;
+  }
+  .collection .ph{aspect-ratio:16/11;position:relative}
+  .collection-body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:6px}
+  .collection .count{font-family:var(--mono);font-size:10px;color:var(--ink-3);letter-spacing:.1em;text-transform:uppercase}
+  .collection h4{font-family:var(--serif);font-size:20px;font-weight:400;letter-spacing:-0.01em;line-height:1.2}
+  .collection .by{font-size:12px;color:var(--ink-2)}
+
+  /* ——— Footer ——— */
+  .pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin:40px 0 10px}
+  .page-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-family:var(--mono);font-size:12px;color:var(--ink-2);display:grid;place-items:center;cursor:pointer}
+  .page-btn.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+  footer{border-top:1px solid var(--line);padding:32px 40px;display:flex;justify-content:space-between;color:var(--ink-3);font-size:12px;font-family:var(--mono);letter-spacing:.06em}
+</style>
+</head>
+<body data-screen-label="01 Inspiratie Community">
+<div class="page">
+
+  <!-- ————— Top bar ————— -->
+  <div class="topbar">
+    <a class="brand" href="#">
+      <div class="brand-mark"><img src="assets/favicon.svg" alt=""></div>
+      Smart Chef
+    </a>
+    <nav class="nav">
+      <a href="#">Mijn week</a>
+      <a href="#">Recepten</a>
+      <a href="#" class="active">Inspiratie</a>
+      <a href="#">Boodschappen</a>
+      <a href="#">Voorraad</a>
+    </nav>
+    <div class="top-right">
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        Zoek recepten, ingrediënten, koks…
+        <span class="kbd">⌘ K</span>
+      </div>
+      <div class="icon-btn" title="Meldingen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="dot"></span>
+      </div>
+      <div class="avatar">EV</div>
+    </div>
+  </div>
+
+  <!-- ————— Hero ————— -->
+  <section class="hero">
+    <div>
+      <div class="eyebrow"><span class="bullet"></span>Inspiratie · week 16 · 2026</div>
+      <h1 class="display">Koken met <em>wat nu groeit</em>, niet wat je gewend bent.</h1>
+      <p class="hero-lede">Recepten uit de community, gesorteerd op seizoen, overproductie en wat deze week in de folder ligt. Kopieer een recept naar je eigen collectie met één klik — jouw aanpassingen blijven van jou.</p>
+      <div class="hero-meta">
+        <div><b>2 314</b>Publieke recepten</div>
+        <div><b>187</b>Nieuw deze week</div>
+        <div><b>42%</b>Nu in seizoen</div>
+      </div>
+    </div>
+
+    <aside class="season-card">
+      <div class="season-head">
+        <div class="eyebrow"><span class="bullet"></span>Nu in seizoen · NL</div>
+        <div class="season-title">April</div>
+      </div>
+      <div class="season-grid">
+        <div class="seasonpick">
+          <div class="ph green"><span>asperge&nbsp;foto</span></div>
+          <div class="name">Witte asperge</div>
+          <div class="meta"><span>piek</span><span class="score">98</span></div>
+        </div>
+        <div class="seasonpick">
+          <div class="ph forest"><span>spinazie&nbsp;foto</span></div>
+          <div class="name">Spinazie</div>
+          <div class="meta"><span>piek</span><span class="score">94</span></div>
+        </div>
+        <div class="seasonpick">
+          <div class="ph olive"><span>rabarber&nbsp;foto</span></div>
+          <div class="name">Rabarber</div>
+          <div class="meta"><span>start</span><span class="score">82</span></div>
+        </div>
+        <div class="seasonpick">
+          <div class="ph blush"><span>radijs&nbsp;foto</span></div>
+          <div class="name">Radijs</div>
+          <div class="meta"><span>piek</span><span class="score">91</span></div>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <!-- ————— Main layout ————— -->
+  <div class="layout">
+
+    <!-- ——— Sidebar ——— -->
+    <aside class="side">
+      <h3>Filter</h3>
+
+      <label class="facet on"><span><input type="checkbox" checked>In seizoen</span><span class="count">982</span></label>
+      <label class="facet"><span><input type="checkbox">Overproductie deze week</span><span class="count">147</span></label>
+      <label class="facet on"><span><input type="checkbox" checked>In de folder</span><span class="count">312</span></label>
+      <label class="facet"><span><input type="checkbox">Vegetarisch</span><span class="count">864</span></label>
+      <label class="facet"><span><input type="checkbox">Veganistisch</span><span class="count">291</span></label>
+
+      <h3>Bereidingstijd</h3>
+      <div class="slider-row">
+        <div class="label"><span>0 min</span><span>≤ 45 min</span></div>
+        <div class="slider"><div class="handle" style="left:0"></div><div class="handle" style="left:72%"></div></div>
+      </div>
+
+      <h3>Prijs per portie</h3>
+      <div class="slider-row">
+        <div class="label"><span>€1,50</span><span>€4,50</span></div>
+        <div class="slider"><div class="handle" style="left:0"></div><div class="handle" style="left:68%"></div></div>
+      </div>
+
+      <h3>Supermarkt</h3>
+      <div class="chips">
+        <div class="chip on">Albert Heijn</div>
+        <div class="chip on">Jumbo</div>
+        <div class="chip">Picnic</div>
+        <div class="chip">Plus</div>
+        <div class="chip">Lidl</div>
+        <div class="chip">ALDI</div>
+      </div>
+
+      <h3>Dieet</h3>
+      <div class="chips">
+        <div class="chip">Glutenvrij</div>
+        <div class="chip">Lactosevrij</div>
+        <div class="chip">Notenvrij</div>
+        <div class="chip">Low-carb</div>
+      </div>
+
+      <h3>Door</h3>
+      <label class="facet"><span><input type="checkbox">Vertrouwde koks</span><span class="count">56</span></label>
+      <label class="facet"><span><input type="checkbox">Door jou gevolgd</span><span class="count">12</span></label>
+
+      <button class="apply">Filters toepassen</button>
+      <button class="reset">alles wissen</button>
+    </aside>
+
+    <!-- ——— Main content ——— -->
+    <main>
+
+      <!-- Toolbar / context pills -->
+      <div class="toolbar">
+        <div class="pill-row">
+          <div class="pill active">Alles</div>
+          <div class="pill"><span class="swatch"></span>Seizoen</div>
+          <div class="pill warn"><span class="swatch"></span>Overproductie</div>
+          <div class="pill">Onder €3/portie</div>
+          <div class="pill">≤ 30 min</div>
+          <div class="pill">Familie (4p)</div>
+          <div class="pill">One-pot</div>
+        </div>
+        <div class="sort">
+          Sorteren
+          <div class="select">Meest relevant
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-count">
+        2 314 recepten<span class="sep"></span>
+        gesorteerd op <span style="color:var(--ink)">relevantie voor week 16</span><span class="sep"></span>
+        312 matchen je aangesloten supermarkten
+      </div>
+
+      <!-- Featured -->
+      <article class="featured">
+        <div class="ph green">
+          <span>full-bleed food shot — aspergeschotel,<br>plat geschoten, overhead</span>
+          <div class="ribbon"><span class="swatch"></span>piek&nbsp;seizoen · aanbevolen</div>
+          <div class="price-tag">€ 3,20<span class="slash">/</span>portie · 4 personen</div>
+        </div>
+        <div class="featured-body">
+          <div class="eyebrow"><span class="bullet"></span>Redactiekeuze · door Smart Chef</div>
+          <h2>Witte asperges met ei, beurre noisette &amp; bieslook</h2>
+          <p>Klassiek, maar dan zonder de ham. Kernrecept voor april: drie ingrediënten die tegelijk in hun piekseizoen zitten, eenvoudig te splitsen voor twee of acht personen. Seizoensindex 98/100.</p>
+          <div class="byline">
+            <div class="a"></div>
+            <span><b style="color:var(--ink);font-weight:600">Maartje de Wit</b> · 4.8 ★ (214)</span>
+            <span class="divider"></span>
+            <span>35 min</span>
+            <span class="dot"></span>
+            <span>720 kcal</span>
+            <span class="dot"></span>
+            <span>1 214 keer bewaard</span>
+          </div>
+          <div class="featured-stats">
+            <div><b>98</b>Seizoensindex</div>
+            <div><b>€3,20</b>Per portie</div>
+            <div><b>AH · Jumbo</b>Beschikbaar</div>
+            <div><b>-18%</b>Folderkorting Jumbo</div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Section: trending -->
+      <div class="section-head">
+        <div>
+          <h2>Wat de community deze week kookt</h2>
+          <div class="sub">Meest bewaard, getest en opnieuw gekookt — week 13 t/m 16</div>
+        </div>
+        <a class="link" href="#">alles bekijken →</a>
+      </div>
+
+      <div class="grid">
+        <!-- Card 1 -->
+        <article class="recipe">
+          <div class="ph forest">
+            <span>spinazie-ricotta<br>cannelloni, close-up</span>
+            <div class="ribbon"><span class="swatch"></span>seizoen · 94</div>
+            <div class="bookmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="price-tag">€ 2,80/portie</div>
+          </div>
+          <div class="tagline">vegetarisch · ovenschotel</div>
+          <h3>Spinazie-ricotta cannelloni met citroen</h3>
+          <div class="by">door <b style="font-weight:600">Sanne K.</b> · 4.7 ★ (182)</div>
+          <div class="stats">
+            <span>○ 45 min</span><span>○ 4 pers.</span><span>○ 614 kcal</span>
+          </div>
+        </article>
+
+        <!-- Card 2 -->
+        <article class="recipe">
+          <div class="ph rust">
+            <span>rabarber-crumble,<br>warm uit oven</span>
+            <div class="ribbon warn"><span class="swatch"></span>overproductie NL</div>
+            <div class="bookmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="price-tag">€ 1,60/portie</div>
+          </div>
+          <div class="tagline">dessert · 1 pan</div>
+          <h3>Rabarber-crumble met havermout &amp; kardemom</h3>
+          <div class="by">door <b style="font-weight:600">Joris V.</b> · 4.9 ★ (96)</div>
+          <div class="stats">
+            <span>○ 40 min</span><span>○ 6 pers.</span><span>○ 380 kcal</span>
+          </div>
+        </article>
+
+        <!-- Card 3 -->
+        <article class="recipe">
+          <div class="ph blush">
+            <span>radijs-bulgur salade,<br>lepel in kom</span>
+            <div class="ribbon"><span class="swatch"></span>seizoen · 91</div>
+            <div class="bookmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="price-tag">€ 2,40/portie</div>
+          </div>
+          <div class="tagline">lunch · koud · 20 min</div>
+          <h3>Radijs-bulgur salade met tahindressing</h3>
+          <div class="by">door <b style="font-weight:600">Tess B.</b> · 4.6 ★ (64)</div>
+          <div class="stats">
+            <span>○ 20 min</span><span>○ 2 pers.</span><span>○ 520 kcal</span>
+          </div>
+        </article>
+
+        <!-- Card 4 -->
+        <article class="recipe">
+          <div class="ph olive">
+            <span>tuinbonen-risotto,<br>bovenaanzicht</span>
+            <div class="ribbon"><span class="swatch"></span>seizoen · 88</div>
+            <div class="bookmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="price-tag">€ 3,10/portie</div>
+          </div>
+          <div class="tagline">vegetarisch · 1 pan</div>
+          <h3>Tuinbonen-risotto met munt &amp; pecorino</h3>
+          <div class="by">door <b style="font-weight:600">Maartje de Wit</b> · 4.8 ★ (131)</div>
+          <div class="stats">
+            <span>○ 35 min</span><span>○ 4 pers.</span><span>○ 680 kcal</span>
+          </div>
+        </article>
+
+        <!-- Card 5 -->
+        <article class="recipe">
+          <div class="ph sand">
+            <span>linzenstoof met <br>geroosterde wortel</span>
+            <div class="ribbon warn"><span class="swatch"></span>folder · –22% AH</div>
+            <div class="bookmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="price-tag">€ 1,95/portie</div>
+          </div>
+          <div class="tagline">veganistisch · meal-prep</div>
+          <h3>Marokkaanse linzenstoof met ras el hanout</h3>
+          <div class="by">door <b style="font-weight:600">Daan H.</b> · 4.7 ★ (203)</div>
+          <div class="stats">
+            <span>○ 55 min</span><span>○ 6 pers.</span><span>○ 490 kcal</span>
+          </div>
+        </article>
+
+        <!-- Card 6 -->
+        <article class="recipe">
+          <div class="ph cream">
+            <span>citroen-yoghurt cake,<br>aangesneden</span>
+            <div class="ribbon"><span class="swatch"></span>klassieker</div>
+            <div class="bookmark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></div>
+            <div class="price-tag">€ 0,90/portie</div>
+          </div>
+          <div class="tagline">bakken · 8 punten</div>
+          <h3>Citroen-yoghurtcake met olijfolie</h3>
+          <div class="by">door <b style="font-weight:600">Roos L.</b> · 4.9 ★ (412)</div>
+          <div class="stats">
+            <span>○ 60 min</span><span>○ 8 pers.</span><span>○ 320 kcal</span>
+          </div>
+        </article>
+      </div>
+
+      <!-- Collections -->
+      <div class="section-head" style="margin-top:64px">
+        <div>
+          <h2>Samengestelde collecties</h2>
+          <div class="sub">Door koks en redactie — niet door een algoritme</div>
+        </div>
+        <a class="link" href="#">alle collecties →</a>
+      </div>
+
+      <div class="collections" style="margin-top:0">
+        <article class="collection">
+          <div class="ph green"><span>aspergeweken<br>coverbeeld</span></div>
+          <div class="collection-body">
+            <div class="count">24 recepten</div>
+            <h4>Aspergeweken '26</h4>
+            <div class="by">door redactie · 1 412 volgers</div>
+          </div>
+        </article>
+        <article class="collection">
+          <div class="ph rust"><span>goedkoop<br>en goed</span></div>
+          <div class="collection-body">
+            <div class="count">38 recepten</div>
+            <h4>Onder €2,50 per portie</h4>
+            <div class="by">door Daan H. · 892 volgers</div>
+          </div>
+        </article>
+        <article class="collection">
+          <div class="ph clay"><span>folder<br>mei</span></div>
+          <div class="collection-body">
+            <div class="count">16 recepten</div>
+            <h4>Wat deze week in de folder ligt</h4>
+            <div class="by">auto-samengesteld · wekelijks</div>
+          </div>
+        </article>
+        <article class="collection">
+          <div class="ph forest"><span>weeknight<br>veggie</span></div>
+          <div class="collection-body">
+            <div class="count">52 recepten</div>
+            <h4>Doordeweekse veggie, ≤30 min</h4>
+            <div class="by">door Maartje de Wit · 2 104 volgers</div>
+          </div>
+        </article>
+      </div>
+
+      <!-- Section: Pagination -->
+      <div class="pagination">
+        <div class="page-btn">‹</div>
+        <div class="page-btn active">1</div>
+        <div class="page-btn">2</div>
+        <div class="page-btn">3</div>
+        <div class="page-btn">4</div>
+        <div class="page-btn">…</div>
+        <div class="page-btn">97</div>
+        <div class="page-btn">›</div>
+      </div>
+
+    </main>
+  </div>
+
+  <footer>
+    <div>SMART CHEF · V 0.4.2 · INSPIRATIE</div>
+    <div>SEIZOENSDATA · CBS + AGF.NL · BIJGEWERKT 12 APR 2026</div>
+    <div>MADE IN MEPPEL</div>
+  </footer>
+
+</div>
+</body>
+</html>

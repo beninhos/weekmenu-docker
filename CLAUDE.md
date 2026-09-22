@@ -7,7 +7,7 @@ Een single-user Flask-app die het weekmenu plant, boodschappenlijsten samenstelt
 ## Waarom, in één zin per subsysteem
 
 - **`/week/<jaar>/<week>`**: het weekmenu. Recepten koppelen aan dagen, keer aantal personen, dat bepaalt de rest.
-- **`/boodschappen`**: aggregeert alle receptregels van de week naar één lijst, filtert wat in de voorraadkast staat, mergt varianten van hetzelfde ingredient, en stuurt op verzoek naar AH.
+- **`/boodschappen`**: aggregeert de receptregels van de **lopende** weken naar één lijst, filtert wat in de voorraadkast staat, mergt varianten van hetzelfde ingredient, en stuurt op verzoek naar AH. Een week die geweest is doet niet meer mee; wat er gekocht is staat in het bestel-log.
 - **`/dump`**: kookboekfoto's of receptkaarten opnemen. Cloud Vision leest de tekst, Gemini structureert het naar recept-JSON, de gebruiker keurt goed op de nakijkkaart. Twee modi: **boek** (één pagina = één recept) en **kaart** (twee pagina's = één recept, tabel is leidend).
 - **`/twijfelgevallen`**: waar de app twee ingrediënten als vermoedelijke variant ziet (Bosui/Lente-Ui), of een categorie afwijkt van wat de gokker zegt. Één klik voegt samen of markeert als "apart".
 - **`/ah-producten`**: per ingredient een AH-product koppelen zodat "Stuur naar AH" weet welk product te bestellen.
@@ -22,8 +22,8 @@ Driedeling **routes → services → models**. Één richting, geen cyclus.
 weekmenu/
 ├── routes/         # HTTP-schil, dun. Blueprints per domein.
 ├── services/       # De business-logica. Praten met models + elkaar.
-├── models.py       # SQLAlchemy — 15 tabellen.
-├── migrations.py   # v1..v20, additief, draaien op elke opstart.
+├── models.py       # SQLAlchemy — 21 tabellen.
+├── migrations.py   # v1..v22, additief, draaien op elke opstart.
 ├── constants.py    # Categorieën, eenheidstabellen, AH-endpoint-URLs.
 ├── extensions.py   # db-object, geïmporteerd waar nodig — breekt de cyclus.
 └── __init__.py     # create_app(), context-processor, __version__.
@@ -39,7 +39,8 @@ weekmenu/
 - `services/kaart.py` + `services/kaartsignaturen.py`: alles wat merkspecifiek is aan een receptkaart (HelloFresh-logo, "Zelf toevoegen"-kop, "Bereidingstijd: N min"). Merkloos ontwerp: een nieuw merk is een nieuw dict in `MERKEN`, geen nieuwe code.
 - `services/verpakking.py`: de vraag "1 tomaat weegt hoeveel gram" — brug tussen telbare recepteenheid en gewichtsverpakking.
 - `services/pantry.py`: voorraadhints + review-lijsten voor `/twijfelgevallen`.
-- `services/shopping.py`: aggregatie van receptregels van een week naar de boodschappenlijst.
+- `services/shopping.py`: aggregatie van receptregels naar de boodschappenlijst. `window_weeks()` geeft alle geplande weken, `lopende_weken()` de weken waarin een zijdelingse wijziging nog mag doorwerken — die tweede is de grens tussen 'nog mee bezig' en 'geweest'.
+- `services/bestellingen.py`: het bestel-log. Eén pot per week, AH-regels teruggelezen uit de order (niet wat de app stuurde), handmatig afgevinkte regels in dezelfde pot.
 - `services/ah.py`: AH-API-client — tokens, product-search, prijsadvies, order-write.
 - `services/gemini.py`: Gemini-integratie voor URL- en foto-imports (los van de OCR-dump).
 
@@ -50,9 +51,9 @@ weekmenu/
 - **Docstrings**: waarom-gedreven, verwijzen naar échte metingen ("gemeten op 22 pagina's: 252 van 252 ankers exact"). Geen ceremoniële one-liners.
 - **Private prefix `_`**: hard voor helpers die niemand buiten het bestand hoort te importeren. Als iets `_` heet én van buiten wordt geïmporteerd, is een van beide fout.
 - **Template-data doorgeven aan JS**: `<script type="application/json" id="data-x">{{ x|tojson }}</script>` + `JSON.parse(document.getElementById('data-x').textContent)`. **Niet** `window.__DATA` — vervuilt de namespace.
-- **Migraties**: `weekmenu/migrations.py` bevat 20 versies achter `schema_version`-guards. Nieuw = `_migrate_vN()` erbij, oude nooit wijzigen. Migraties zijn additief; ze rollen niet terug.
+- **Migraties**: `weekmenu/migrations.py` bevat 22 versies achter `schema_version`-guards. Nieuw = `_migrate_vN()` erbij, oude nooit wijzigen. Migraties zijn additief; ze rollen niet terug.
 - **AH-tokens en API-sleutels**: via `/settings` in de database (of via env-var als fallback). Nooit hardcoden.
-- **Testen**: `pytest`, ~544 tests, Nederlandse gedragsnamen (`test_zondag_valt_niet_buiten_de_printmarge`). Fixtures in `tests/conftest.py`, mocks op de netwerkrand (Cloud Vision, Gemini, AH). In-memory sqlite, geen echte DB-writes.
+- **Testen**: `pytest`, ~574 tests, Nederlandse gedragsnamen (`test_zondag_valt_niet_buiten_de_printmarge`). Fixtures in `tests/conftest.py`, mocks op de netwerkrand (Cloud Vision, Gemini, AH). In-memory sqlite, geen echte DB-writes.
 
 ## Ontwikkelen en draaien
 
@@ -80,8 +81,8 @@ De dev-container draait als `app:1000` (matcht host-user beninho), heeft eigen `
 
 **Debug-mode**: aan (`app.py:6` — `debug=True`), maar `use_reloader=False`. De Werkzeug-PIN-console is toegankelijk bij een crash; **kritiek**: reloader mág niet aan want dat fork-t Flask en breekt de `herstel_verloren_jobs()`-supervisor plus de `threading.Lock` in `services/ah.py`.
 
-**Version**: `0.7.0-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
-- **patch** (0.7.x): bugfixes zonder gedragsverandering
+**Version**: `0.8.0-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
+- **patch** (0.8.x): bugfixes zonder gedragsverandering
 - **minor** (0.x.0): substantiële refactors, nieuwe features, kwaliteitssprongen
 - **major** (x.0.0): incompatible schema-migraties of API-breuk (niet van toepassing zolang de app single-user is)
 
@@ -114,7 +115,7 @@ De dev-container draait als `app:1000` (matcht host-user beninho), heeft eigen `
 
 ## Waar de scherven van eerdere sessies liggen
 
-- **Geheugen**: `~/.claude/projects/-pool-apps-weekmenu-planner/memory/` bevat de geschiedenis van eerdere sessies (OCR-routekeuze, DB-schema-migraties, opruimingen). Lees `MEMORY.md` als index.
+- **Geheugen**: twee mappen, allebei met een eigen `MEMORY.md` als index. `~/.claude/projects/-pool-apps-weekmenu-planner/memory/` is het archief tot 13 sep 2026 (OCR-routekeuze, DB-schema-migraties, opruimingen); `~/.claude/projects/-pool-apps-weekmenu/memory/` is waar nieuwe sessies schrijven.
 - **Scratchpad** (per sessie): tijdelijke metingen, database-backups met sha256, audit-rapporten. Nooit in git.
 - **Landing-pagina**: `landing/` is untracked (opzettelijk). Rutgers eigen landing-experiment; buiten scope voor de app-refactor.
 

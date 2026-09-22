@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartChef</title>
+<meta name="description" content="Fotografeer een recept uit je kookboek. SmartChef herkent de ingrediënten en zet ze automatisch op je boodschappenlijst.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Karla:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ---------- tokens ---------- */
+  :root {
+    --bg: #efeee2;
+    --surface: #f8f7ef;
+    --surface-2: #eeece0;
+    --ink: #262019;
+    --ink-soft: #59503f;
+    --ink-faint: #837a67;
+    --line: #dad5c4;
+    --teal: #2e5c55;
+    --teal-strong: #1f433d;
+    --teal-ink: #f6f4ea;
+    --rust: #b8501c;
+    --rust-strong: #963f14;
+    --rust-soft: #f1dcc9;
+    --rust-soft-line: #e3bd9a;
+    --shadow: 20 15 8;
+
+    --font-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
+    --font-body: "Karla", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1812;
+      --surface: #242019;
+      --surface-2: #2c271e;
+      --ink: #ede8db;
+      --ink-soft: #b7af9c;
+      --ink-faint: #8b8371;
+      --line: #3a342a;
+      --teal: #7cbdb2;
+      --teal-strong: #9bd0c6;
+      --teal-ink: #16302c;
+      --rust: #e2884f;
+      --rust-strong: #f0a06e;
+      --rust-soft: #3a2a1e;
+      --rust-soft-line: #5a3f2a;
+      --shadow: 0 0 0;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1b1812;
+    --surface: #242019;
+    --surface-2: #2c271e;
+    --ink: #ede8db;
+    --ink-soft: #b7af9c;
+    --ink-faint: #8b8371;
+    --line: #3a342a;
+    --teal: #7cbdb2;
+    --teal-strong: #9bd0c6;
+    --teal-ink: #16302c;
+    --rust: #e2884f;
+    --rust-strong: #f0a06e;
+    --rust-soft: #3a2a1e;
+    --rust-soft-line: #5a3f2a;
+    --shadow: 0 0 0;
+  }
+
+  /* ---------- base ---------- */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-family: var(--font-display); color: var(--ink); margin: 0; text-wrap: balance; }
+  p { margin: 0; }
+  a { color: var(--teal-strong); }
+  ::selection { background: var(--rust-soft); color: var(--ink); }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- header ---------- */
+  header.site {
+    padding: 28px 0 0;
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+    flex: none;
+  }
+  .brand-name {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: 56px 0 64px;
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 56px;
+    align-items: center;
+  }
+  .hero h1 {
+    font-size: clamp(2.1rem, 3.6vw, 3rem);
+    font-weight: 600;
+    line-height: 1.14;
+    letter-spacing: -0.01em;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--teal);
+  }
+  .hero-sub {
+    margin-top: 20px;
+    max-width: 46ch;
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+  }
+  .hero-cta {
+    margin-top: 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.98rem;
+    padding: 13px 22px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  }
+  .btn-primary {
+    background: var(--teal);
+    color: var(--teal-ink);
+  }
+  .btn-primary:hover { background: var(--teal-strong); }
+  .btn-primary:active { transform: translateY(1px); }
+  .hero-note {
+    font-size: 0.88rem;
+    color: var(--ink-faint);
+  }
+
+  /* ---------- recipe-card visual ---------- */
+  .card-demo {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 26px 26px 22px;
+    box-shadow: 0 18px 40px -22px rgba(var(--shadow) / 0.35);
+    font-family: var(--font-mono);
+    font-size: 0.92rem;
+  }
+  .card-demo-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--font-body);
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .card-demo-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.05rem;
+  }
+  .card-demo-serves {
+    color: var(--ink-faint);
+    font-size: 0.85rem;
+  }
+  .ing-line {
+    display: flex;
+    gap: 10px;
+    padding: 5px 0;
+    color: var(--ink-soft);
+    align-items: baseline;
+  }
+  .ing-amt {
+    min-width: 3.2em;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .ing-line.flagged {
+    position: relative;
+    color: var(--ink);
+    background: var(--rust-soft);
+    margin: 3px -10px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--rust-soft-line);
+  }
+  .ing-line.flagged .ing-amt { color: var(--rust-strong); font-weight: 600; }
+  .flag-note {
+    margin-top: 10px;
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    color: var(--rust-strong);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .flag-note svg { flex: none; margin-top: 2px; }
+
+  /* ---------- steps ---------- */
+  .steps {
+    padding: 8px 0 64px;
+    border-top: 1px solid var(--line);
+  }
+  .steps-head {
+    padding-top: 56px;
+    max-width: 60ch;
+  }
+  .steps-head h2 {
+    font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+    font-weight: 600;
+  }
+  .steps-grid {
+    margin-top: 36px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+  }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 26px 24px;
+  }
+  .step-num {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--teal);
+    letter-spacing: 0.04em;
+  }
+  .step h3 {
+    margin-top: 10px;
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+  .step p {
+    margin-top: 10px;
+    color: var(--ink-soft);
+    font-size: 0.96rem;
+  }
+
+  /* ---------- signup ---------- */
+  .signup {
+    padding: 8px 0 72px;
+  }
+  .signup-panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 40px;
+    display: grid;
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 40px;
+  }
+  .signup-copy h2 {
+    font-size: clamp(1.5rem, 2.2vw, 1.8rem);
+    font-weight: 600;
+  }
+  .signup-copy p {
+    margin-top: 14px;
+    color: var(--ink-soft);
+    max-width: 42ch;
+  }
+  .field {
+    margin-bottom: 18px;
+  }
+  .field label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .field input[type="email"] {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+  }
+  .field input[type="email"]:focus,
+  .radio-row input:focus-visible,
+  .btn:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+  }
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .radio-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .radio-row input { margin-top: 3px; accent-color: var(--teal); }
+  .radio-row span { font-size: 0.95rem; color: var(--ink-soft); }
+  .radio-row input:checked ~ span { color: var(--ink); }
+  .other-text {
+    margin-top: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+  }
+  .signup-privacy {
+    margin-top: 16px;
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+  }
+  #thanks {
+    display: none;
+    text-align: center;
+    padding: 30px 10px;
+  }
+  #thanks h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+  }
+  #thanks p {
+    margin-top: 10px;
+    color: var(--ink-soft);
+  }
+
+  /* ---------- footer ---------- */
+  footer.site {
+    border-top: 1px solid var(--line);
+    padding: 26px 0 40px;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 36px; }
+    .steps-grid { grid-template-columns: 1fr; }
+    .signup-panel { grid-template-columns: 1fr; padding: 28px 22px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="28" height="28" rx="6" stroke="var(--teal)" stroke-width="1.6"/>
+        <path d="M8 10.5H22M8 15H22M8 19.5H17" stroke="var(--teal)" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="21" cy="19.5" r="2.3" fill="var(--rust)"/>
+      </svg>
+      <span class="brand-name">SmartChef</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-inner" style="display:contents;">
+      <div>
+        <h1>Van kookboek naar boodschappenlijst — <em>zonder dat jij het hoeft te bedenken.</em></h1>
+        <p class="hero-sub">Fotografeer een recept uit je kookboek. SmartChef herkent de ingrediënten en zet ze automatisch op je boodschappenlijst — met de juiste hoeveelheden, niet gegokt.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#aanmelden">Zet mij op de wachtlijst</a>
+          <span class="hero-note">Gratis, geen creditcard. Je hoort het eerst als het klaar is.</span>
+        </div>
+      </div>
+
+      <div class="card-demo" aria-hidden="true">
+        <div class="card-demo-head">
+          <span class="card-demo-title">Linzensoep met komijn</span>
+          <span class="card-demo-serves">4 personen</span>
+        </div>
+        <div class="ing-line"><span class="ing-amt">400 g</span><span>rode linzen</span></div>
+        <div class="ing-line"><span class="ing-amt">1 st</span><span>ui, gesnipperd</span></div>
+        <div class="ing-line flagged"><span class="ing-amt">½ tl</span><span>komijnzaad</span></div>
+        <div class="ing-line"><span class="ing-amt">2 el</span><span>olijfolie</span></div>
+        <div class="ing-line"><span class="ing-amt">1 l</span><span>groentebouillon</span></div>
+        <div class="flag-note">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.2 13 12.4H1L7 1.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M7 5.4V8.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="7" cy="10.3" r="0.75" fill="currentColor"/></svg>
+          <span>Vision twijfelde over dit getal — check 'm tegen de foto voor je opslaat.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="steps">
+    <div class="wrap">
+      <div class="steps-head">
+        <h2>Zo werkt het</h2>
+      </div>
+      <div class="steps-grid">
+        <div class="step">
+          <span class="step-num">01</span>
+          <h3>Fotografeer een recept</h3>
+          <p>Open de app en maak een foto van een pagina uit je kookboek, een receptenkaart, of plak een link naar een recept dat je online vond.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">02</span>
+          <h3>Wij lezen 'm uit</h3>
+          <p>De ingrediënten en hoeveelheden worden herkend — inclusief breuken als ½ en ¼, letterlijk overgenomen uit de tekst, niet gegokt door een model.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">03</span>
+          <h3>Automatisch op je lijst</h3>
+          <p>Je boodschappenlijst wordt bijgewerkt. Wat je al in de kast hebt staan, wordt er meteen uitgefilterd.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="signup" id="aanmelden">
+    <div class="wrap">
+      <div class="signup-panel">
+        <div class="signup-copy">
+          <h2>Zet mij op de wachtlijst</h2>
+          <p>We bouwen SmartChef nu voor een kleine groep proefgebruikers. Meld je aan en we sturen een uitnodiging zodra er plek is.</p>
+        </div>
+
+        <div>
+          <form
+            id="waitlist-form"
+            action="https://formspree.io/f/VUL_HIER_JE_FORMSPREE_ID_IN"
+            method="POST"
+          >
+            <input type="hidden" name="_next" value="?success=1#aanmelden">
+            <input type="hidden" name="_subject" value="Nieuwe aanmelding SmartChef-wachtlijst">
+
+            <div class="field">
+              <label for="email">E-mailadres</label>
+              <input type="email" id="email" name="email" required placeholder="jij@voorbeeld.nl" autocomplete="email">
+            </div>
+
+            <div class="field">
+              <label for="persona-1">Wat past het best bij jou?</label>
+              <div class="radio-group" role="radiogroup" aria-label="Wat past het best bij jou?">
+                <label class="radio-row">
+                  <input type="radio" id="persona-1" name="persona" value="Let bewust op wat ik eet" required>
+                  <span>Ik let bewust op wat ik eet</span>
+                </label>
+                <label class="radio-row">
+                  <input type="radio" id="persona-2" name="persona" value="Kook snel tussendoor, weinig tijd">
+                  <span>Ik kook vaak snel tussendoor, met weinig tijd</span>
+                </label>
+                <label class="radio-row">
+                  <input type="radio" id="persona-3" name="persona" value="Anders">
+                  <span>Anders, namelijk:</span>
+                </label>
+              </div>
+              <input type="text" class="other-text" id="persona-other" name="persona_toelichting" placeholder="Vertel het ons kort" style="display:none;">
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Zet mij op de wachtlijst</button>
+            <p class="signup-privacy">Je e-mailadres gebruiken we alleen om je uit te nodigen voor de proef. Geen nieuwsbrief, geen doorverkoop.</p>
+          </form>
+
+          <div id="thanks">
+            <h3>Je staat op de lijst.</h3>
+            <p>Bedankt! We laten van ons horen zodra er plek is om mee te doen.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap" style="display:flex; justify-content:space-between; width:100%; gap:16px; flex-wrap:wrap;">
+    <span>© 2026 SmartChef</span>
+    <span>Vragen? <a href="mailto:hallo@smartchef.example">hallo@smartchef.example</a></span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var otherRadio = document.getElementById('persona-3');
+    var otherText = document.getElementById('persona-other');
+    document.querySelectorAll('input[name="persona"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        otherText.style.display = otherRadio.checked ? 'block' : 'none';
+      });
+    });
+
+    if (location.search.indexOf('success=1') !== -1) {
+      var form = document.getElementById('waitlist-form');
+      var thanks = document.getElementById('thanks');
+      if (form) form.style.display = 'none';
+      if (thanks) thanks.style.display = 'block';
+    }
+  })();
+</script>
+
+</body>
+</html>
