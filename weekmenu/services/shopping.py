@@ -340,4 +340,4 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
     if not_linked:
         msg += f'. {len(not_linked)} nog niet gekoppeld (overgeslagen): {", ".join(not_linked[:5])}'
     return ({'status': 'success', 'sent': sent, 'not_linked': not_linked,
-             'message': msg}, 200, sent_ingredient_ids)
+             'order_id': order_id, 'message': msg}, 200, sent_ingredient_ids)

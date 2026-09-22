@@ -263,3 +263,56 @@ class ShoppingCheck(db.Model):
     ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
     checked_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)
     via_ah        = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class Bestelling(db.Model):
+    """Wat er voor een week echt gehaald is — één pot per week.
+
+    Los van de boodschappenlijst, die alleen over lopende weken gaat. De lijst
+    vergeet; dit onthoudt. Rutger: 'ik heb geen actieve historie nodig, alleen
+    het stuk voor de analyse achteraf, door te loggen wat echt besteld is.'
+
+    De AH-regels komen uit de order zelf (ah_get_order), niet uit wat de app
+    heeft doorgestuurd: wat je uiteindelijk krijgt wijkt af zodra het magazijn
+    iets niet heeft. Wat je bij de markt of de slager haalt en met de hand
+    afvinkt gaat in dezelfde pot, zonder prijs.
+    """
+    __tablename__ = 'bestelling'
+    __table_args__ = (
+        db.UniqueConstraint('year', 'week_number', name='uq_bestelling_week'),
+    )
+    id            = db.Column(db.Integer, primary_key=True)
+    year          = db.Column(db.Integer, nullable=False)
+    week_number   = db.Column(db.Integer, nullable=False)
+    ah_order_id   = db.Column(db.Integer, nullable=True)
+    orderstatus   = db.Column(db.String(40), nullable=True)
+    bezorgdatum   = db.Column(db.String(40), nullable=True)
+    totaal        = db.Column(db.Float, nullable=True)
+    besparing     = db.Column(db.Float, nullable=True)
+    aangemaakt_op = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    bijgewerkt_op = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    regels        = db.relationship('BestellingRegel', backref='bestelling',
+                                    cascade='all, delete-orphan', lazy='selectin')
+
+
+class BestellingRegel(db.Model):
+    """Eén product uit een bestelling.
+
+    ingredient_id mag leeg zijn: wat je in de AH-app zelf aan de order toevoegt
+    kent de app niet als ingredient, en dat is juist interessant om terug te zien.
+    """
+    __tablename__ = 'bestelling_regel'
+    id             = db.Column(db.Integer, primary_key=True)
+    bestelling_id  = db.Column(db.Integer, db.ForeignKey('bestelling.id'), nullable=False)
+    bron           = db.Column(db.String(20), nullable=False, default='ah')
+    ingredient_id  = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=True)
+    ah_product_id  = db.Column(db.Integer, nullable=True)
+    titel          = db.Column(db.String(200), nullable=False, default='')
+    merk           = db.Column(db.String(100), nullable=True)
+    maat           = db.Column(db.String(50), nullable=True)
+    aantal         = db.Column(db.Float, nullable=False, default=1)
+    eenheid        = db.Column(db.String(20), nullable=True)
+    prijs          = db.Column(db.Float, nullable=True)
+    was_prijs      = db.Column(db.Float, nullable=True)
+    bonus          = db.Column(db.Boolean, default=False, nullable=False)
+    ingredient     = db.relationship('Ingredient')

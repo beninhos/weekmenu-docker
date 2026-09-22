@@ -679,6 +679,52 @@ def _migrate_v21(conn):
         print(f'[migratie v21] {gezet} regels uit voorbije weken afgesloten')
 
 
+def _migrate_v22(conn):
+    """Bestel-log: wat er per week echt gehaald is.
+
+    De boodschappenlijst gaat sinds v21 alleen nog over lopende weken en
+    vergeet de rest. Voor 'wat kocht ik eigenlijk, en wat kostte het' is dat te
+    weinig, dus krijgt dat een eigen plek -- los van de lijst, zodat het
+    opruimen van de een de ander niet raakt.
+    """
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS bestelling (
+            id INTEGER PRIMARY KEY,
+            year INTEGER NOT NULL,
+            week_number INTEGER NOT NULL,
+            ah_order_id INTEGER,
+            orderstatus VARCHAR(40),
+            bezorgdatum VARCHAR(40),
+            totaal FLOAT,
+            besparing FLOAT,
+            aangemaakt_op DATETIME NOT NULL,
+            bijgewerkt_op DATETIME NOT NULL,
+            UNIQUE (year, week_number)
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS bestelling_regel (
+            id INTEGER PRIMARY KEY,
+            bestelling_id INTEGER NOT NULL REFERENCES bestelling(id),
+            bron VARCHAR(20) NOT NULL DEFAULT 'ah',
+            ingredient_id INTEGER REFERENCES ingredient(id),
+            ah_product_id INTEGER,
+            titel VARCHAR(200) NOT NULL DEFAULT '',
+            merk VARCHAR(100),
+            maat VARCHAR(50),
+            aantal FLOAT NOT NULL DEFAULT 1,
+            eenheid VARCHAR(20),
+            prijs FLOAT,
+            was_prijs FLOAT,
+            bonus BOOLEAN NOT NULL DEFAULT 0
+        )
+    """))
+    conn.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_bestelling_regel_bestelling '
+        'ON bestelling_regel (bestelling_id)'))
+
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -736,8 +782,10 @@ def migrate_db():
             _migrate_v20(conn)
         if current < 21:
             _migrate_v21(conn)
+        if current < 22:
+            _migrate_v22(conn)
 
-        target = 21
+        target = 22
         if current < target:
             if row:
                 conn.execute(

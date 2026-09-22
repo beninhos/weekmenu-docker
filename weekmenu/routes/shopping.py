@@ -79,24 +79,44 @@ def _set_checks(ingredient_id, checked, via_ah=False, data=None, commit=True):
     weeks = data['weeks_by_ingredient'].get(ingredient_id)
     if not weeks:
         return False
+    nieuw_afgevinkt = []
     for (y, w) in weeks:
         existing = ShoppingCheck.query.filter_by(
             year=y, week_number=w, ingredient_id=ingredient_id).first()
         if checked and not existing:
             db.session.add(ShoppingCheck(year=y, week_number=w,
                                          ingredient_id=ingredient_id, via_ah=via_ah))
+            nieuw_afgevinkt.append((y, w))
         elif not checked and existing:
             db.session.delete(existing)
     if commit:
         db.session.commit()
-    return True
+    return nieuw_afgevinkt if checked else True
+
+
+def _log_handmatig(row, weken):
+    """Wat je zelf afvinkt gaat in dezelfde pot als de AH-order van die week.
+
+    Anders mist het log juist de slager, de markt en alles wat nooit aan een
+    AH-product is gekoppeld -- en dat is de helft van de vraag 'wat kocht ik nou'.
+    """
+    from weekmenu.services.bestellingen import leg_handmatig_vast
+    for (y, w) in weken:
+        leg_handmatig_vast(y, w, row['ingredient_id'], row['amount'],
+                           row['unit'], row.get('bron'))
 
 
 @bp.route('/api/boodschappen/item/<int:ingredient_id>/check', methods=['POST'])
 def boodschappen_check(ingredient_id):
     body = request.get_json(silent=True) or {}
-    if not _set_checks(ingredient_id, bool(body.get('checked', True))):
+    checked = bool(body.get('checked', True))
+    data = build_combined_shopping_list()
+    row = next((r for r in data['open'] if r['ingredient_id'] == ingredient_id), None)
+    weken = _set_checks(ingredient_id, checked, data=data)
+    if weken is False:
         return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
+    if checked and row and weken:
+        _log_handmatig(row, weken)
     return jsonify({'status': 'success'})
 
 
@@ -125,9 +145,14 @@ def boodschappen_remove(ingredient_id):
 @bp.route('/api/boodschappen/check-all', methods=['POST'])
 def boodschappen_check_all():
     data = build_combined_shopping_list()
+    per_regel = []
     for row in data['open']:
-        _set_checks(row['ingredient_id'], True, data=data, commit=False)
+        per_regel.append((row, _set_checks(row['ingredient_id'], True,
+                                           data=data, commit=False)))
     db.session.commit()
+    for row, weken in per_regel:
+        if weken:
+            _log_handmatig(row, weken)
     return jsonify({'status': 'success', 'checked': len(data['open'])})
 
 
@@ -143,12 +168,34 @@ def boodschappen_send_to_ah():
         if (row.get('bron') or 'ah') != 'ah':
             continue
         open_dict[(row['ingredient_id'], row['unit'])] = row['amount']
+    weken = {wk for row in data['open']
+             for wk in data['weeks_by_ingredient'].get(row['ingredient_id'], [])}
     payload, status, sent_ids = send_dict_to_ah(open_dict, qty_overrides)
     if status == 200 and payload.get('status') == 'success' and sent_ids:
         for ing_id in sent_ids:
             _set_checks(ing_id, True, via_ah=True, data=data, commit=False)
         db.session.commit()
+        _leg_de_bestelling_vast(payload.get('order_id'), weken)
     return jsonify(payload), status
+
+
+def _leg_de_bestelling_vast(order_id, weken):
+    """Lees terug wat er nu echt in de order staat en bewaar dat per week.
+
+    Niet wat de app heeft doorgestuurd: zodra het magazijn iets niet heeft wijkt
+    de order af, en juist die werkelijkheid is waar je achteraf naar kijkt. De
+    snapshot wordt later nog ververst als je de winkelmand opent, want tot de
+    sluitingstijd kan de order nog veranderen.
+    """
+    if not order_id or not weken:
+        return
+    from weekmenu.services.ah import ah_get_order
+    from weekmenu.services.bestellingen import leg_ah_order_vast
+    order = ah_get_order(order_id)
+    if not order:
+        return
+    for (y, w) in weken:
+        leg_ah_order_vast(y, w, order)
 
 
 @bp.route('/api/boodschappen/extra', methods=['POST'])

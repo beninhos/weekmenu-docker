@@ -16,6 +16,22 @@ from weekmenu.services.units import _parse_product_size
 bp = Blueprint('ah', __name__)
 
 
+
+def _ververs_de_bestelling(order_id, order):
+    """Bijwerken wat we van deze order bewaren, nu we hem toch ophalen.
+
+    Tot de sluitingstijd kan er nog van alles veranderen -- jij voegt iets toe
+    in de AH-app, het magazijn laat iets vallen. Elke keer dat je je winkelmand
+    opent is dus een gratis moment om het log gelijk te trekken met de
+    werkelijkheid. Alleen voor weken die deze order al kennen: uit een los
+    order-id valt niet af te leiden bij welke week hij hoort.
+    """
+    from weekmenu.models import Bestelling
+    from weekmenu.services.bestellingen import leg_ah_order_vast
+    for pot in Bestelling.query.filter_by(ah_order_id=order_id).all():
+        leg_ah_order_vast(pot.year, pot.week_number, order)
+
+
 @bp.route('/api/ah/connect', methods=['POST'])
 def ah_connect():
     import requests as _req
@@ -195,6 +211,7 @@ def ah_order_detail(order_id):
     order = ah_get_order(order_id)
     if order is None:
         return jsonify({'error': 'Order niet bereikbaar'}), 502
+    _ververs_de_bestelling(order_id, order)
 
     needed, unlinked = [], []
     in_order = set(order['productIds'])
