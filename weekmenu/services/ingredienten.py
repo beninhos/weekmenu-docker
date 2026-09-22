@@ -164,8 +164,8 @@ def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
     try:
         # Eerst de weken vastleggen waarin de verliezer op de lijst stond, want
         # zodra zijn receptregels verhuisd zijn is dat niet meer te zien.
-        weken_verliezer = _weken_op_de_lijst(verliezer_id)
-        weken_winnaar = _weken_op_de_lijst(winnaar_id)
+        weken_verliezer = weken_op_de_lijst(verliezer_id)
+        weken_winnaar = weken_op_de_lijst(winnaar_id)
 
         # Dan de betekenis van de regels vastzetten, vóór de conversietabellen
         # samengaan — anders leest de winnaar ze met zijn eigen omrekening.
@@ -404,7 +404,7 @@ def _blijft_staan(oud, eigen_voorkeur, samen_conv, samen_voorkeur):
     return None
 
 
-def _weken_op_de_lijst(ingredient_id):
+def weken_op_de_lijst(ingredient_id):
     """De (jaar, week)-paren waarin dit ingredient op de boodschappenlijst stond."""
     weken = set()
     recepten = {ri.recipe_id for ri

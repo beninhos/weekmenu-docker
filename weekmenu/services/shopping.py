@@ -120,6 +120,35 @@ def window_weeks(today=None):
     return sorted(weken)
 
 
+def lopende_weken(today=None):
+    """De weken waar een zijdelingse wijziging nog in mag doorwerken.
+
+    Een week loopt nog als er iets open staat, of als hij niet achter ons ligt.
+    Die tweede helft is nodig omdat 'alles afgevinkt' niet hetzelfde is als
+    'klaar': heb je deze week alles afgevinkt en haal je dan iets uit de
+    voorraad, dan heb je het alsnog nodig. Andersom is een week van twee
+    maanden terug waarin niets meer open staat echt geweest, en hoort een
+    receptwijziging daar niets meer te openen -- dat was de kapsalon van week 32.
+
+    De kalender beantwoordt hier alleen de vraag 'ligt deze week achter ons'.
+    Hij bepaalt nooit voor welke week de lijst geldt; dat blijft window_weeks.
+    """
+    iso = (today or date.today()).isocalendar()
+    nu = (iso[0], iso[1])
+    checks = {(c.year, c.week_number, c.ingredient_id)
+              for c in ShoppingCheck.query.all()}
+    weken = set()
+    for (y, w) in window_weeks():
+        if (y, w) >= nu:
+            weken.add((y, w))
+            continue
+        for (ing_id, _unit) in _build_shopping_dict(y, w):
+            if (y, w, ing_id) not in checks:
+                weken.add((y, w))
+                break
+    return weken
+
+
 def _row_base(ing, unit, amount, recipe_names=None):
     from weekmenu.constants import CATEGORY_BG
     api_color = ing.ah_product_color or ''

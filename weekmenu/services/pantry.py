@@ -37,11 +37,28 @@ def add_to_pantry(ingredient_id):
 
 
 def remove_from_pantry(ingredient_id):
-    """Remove an ingredient from the pantry (idempotent)."""
+    """Iets uit de kast halen zet het terug op de lijst van de lopende weken.
+
+    'Ik heb het toch niet in huis' is een toevoeg-gebaar. Zolang het in de
+    voorraad stond viel het buiten de lijst en bleef een oud vinkje eronder
+    liggen; zonder opruimen landt de regel dus meteen in het dichtgeklapte
+    afgevinkt-blok. Weken die al geweest zijn blijven dicht.
+    """
+    from weekmenu.services.ingredienten import weken_op_de_lijst
+    from weekmenu.services.menu import stem_af_op_de_week
+    from weekmenu.services.shopping import lopende_weken
+
     p = PantryIngredient.query.filter_by(ingredient_id=ingredient_id).first()
-    if p:
-        db.session.delete(p)
-        db.session.commit()
+    if not p:
+        return {'status': 'success'}
+
+    db.session.delete(p)
+    db.session.commit()
+
+    nog_open = lopende_weken()
+    for (jaar, week) in weken_op_de_lijst(ingredient_id):
+        stem_af_op_de_week(jaar, week, ingredient_id, nog_open)
+    db.session.commit()
     return {'status': 'success'}
 
 

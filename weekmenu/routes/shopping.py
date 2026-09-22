@@ -158,10 +158,18 @@ def boodschappen_extra_add():
     if not recipe:
         return jsonify({'status': 'error', 'message': 'Recept niet gevonden'}), 404
     iso = date.today().isocalendar()
-    qi = QuickAddItem(recipe_id=recipe.id,
-                      people_count=body.get('people_count') or recipe.serves or 4,
-                      year=iso[0], week_number=iso[1])
-    db.session.add(qi)
+    personen = body.get('people_count') or recipe.serves or 4
+    # Hetzelfde recept nog eens toevoegen in dezelfde week is 'laat me opnieuw
+    # kijken', geen tweede portie: stapelen verdubbelde stil de hoeveelheden
+    # juist in het gebaar waarmee je ze wilde controleren.
+    qi = QuickAddItem.query.filter_by(
+        recipe_id=recipe.id, year=iso[0], week_number=iso[1]).first()
+    if qi:
+        qi.people_count = personen
+    else:
+        qi = QuickAddItem(recipe_id=recipe.id, people_count=personen,
+                          year=iso[0], week_number=iso[1])
+        db.session.add(qi)
     # Toevoegen is 'opnieuw erop zetten', net als plannen: een eerder afgevinkt
     # of weggehaald ingredient hoort weer open te staan. Zonder dit verdween een
     # zojuist toegevoegd recept regelrecht in het afgevinkt-blok, of helemaal.

@@ -11,9 +11,10 @@ from weekmenu.extensions import db
 from weekmenu.models import (
     Recipe, Ingredient, IngredientAlias, Cookbook,
     RecipeIngredient, RecipeMealType, Settings, PantryIngredient,
-    RecipeDraft,
+    RecipeDraft, MenuItem, QuickAddItem,
 )
 from weekmenu.constants import PRODUCT_CATEGORIES, RECIPE_MEAL_TYPES
+from weekmenu.services.shopping import lopende_weken
 from weekmenu.services.units import (
     _normalize_ingredient, _guess_ingredient_category, _normalize_ri_unit,
 )
@@ -334,8 +335,13 @@ def _resolveer_cookbook_id():
     return new_cb.id
 
 
-def _lees_ingredient_rijen(recipe):
-    """Voeg RecipeIngredient-rijen toe uit request.form; sync pantry en meal_types."""
+def _lees_ingredient_rijen(recipe, nog_open=None):
+    """Voeg RecipeIngredient-rijen toe uit request.form; sync pantry en meal_types.
+
+    `nog_open` is de uitkomst van lopende_weken() van VOOR de wijziging. Meet je
+    hem achteraf, dan telt het zojuist toegevoegde ingredient zelf als open regel
+    en verklaart een afgeronde week zichzelf weer lopend.
+    """
     ingredient_ids = request.form.getlist('ingredient_id[]')
     ingredient_names = request.form.getlist('ingredient[]')
     amounts = request.form.getlist('amount[]')
@@ -372,6 +378,34 @@ def _lees_ingredient_rijen(recipe):
     db.session.commit()
     _sync_pantry(pantry_scope, pantry_wanted)
     _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
+    _laat_de_geplande_weken_kloppen(recipe, nog_open)
+
+
+def _laat_de_geplande_weken_kloppen(recipe, nog_open=None):
+    """Een gewijzigd recept verandert de boodschappen van elke week waarin het staat.
+
+    In een week waarvoor je nog boodschappen moet doen hoort de wijziging
+    zichtbaar te worden -- anders pas je het recept aan en verandert er niets.
+    In een week die geweest is hoort hij dicht te blijven: een ingredient dat je
+    nu toevoegt heeft daar nooit een vinkje gehad en zou als losse regel uit
+    augustus op de lijst verschijnen.
+    """
+    from weekmenu.services.menu import stem_af_op_de_week
+
+    weken = {(mi.year, mi.week_number) for mi
+             in MenuItem.query.filter_by(recipe_id=recipe.id).all()
+             if not mi.skip_shopping_list}
+    weken |= {(qi.year, qi.week_number) for qi
+              in QuickAddItem.query.filter_by(recipe_id=recipe.id).all()}
+    if not weken:
+        return
+
+    if nog_open is None:
+        nog_open = lopende_weken()
+    for (jaar, week) in weken:
+        for ri in recipe.ingredients:
+            stem_af_op_de_week(jaar, week, ri.ingredient_id, nog_open)
+    db.session.commit()
 
 
 @bp.route('/recipe/new', methods=['GET', 'POST'])
@@ -453,8 +487,12 @@ def edit_recipe(id):
             # beeld hoort er niet meer bij.
             recipe.original_image_path = None
 
+        # Vastleggen welke weken nog lopen voordat de oude regels sneuvelen:
+        # daarna is de week van dit recept per definitie leeg en zou elke
+        # afgeronde week zich weer lopend verklaren.
+        nog_open = lopende_weken()
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
-        _lees_ingredient_rijen(recipe)
+        _lees_ingredient_rijen(recipe, nog_open)
 
         return redirect(url_for('recipes.receptenplanner'))
 

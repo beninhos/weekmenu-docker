@@ -27,6 +27,37 @@ def zet_terug_op_de_lijst(year, week, ingredient_id):
     ).delete()
 
 
+def houd_de_week_afgerond(year, week, ingredient_id):
+    """De tegenhanger: zorg dat dit ingredient die week afgevinkt staat.
+
+    Een recept bewerken voegt zijn regels toe aan elke week waarin het gepland
+    staat, ook aan weken waarvoor je allang boodschappen hebt gedaan. Een nieuw
+    ingredient heeft daar nooit een vinkje gehad en komt dus open te staan --
+    een regel uit augustus, met de recepthint van toen. Voor een week die
+    geweest is geldt hetzelfde als voor de rest: er wordt niets meer gekocht.
+    """
+    bestaat = ShoppingCheck.query.filter_by(
+        year=year, week_number=week, ingredient_id=ingredient_id
+    ).first()
+    if not bestaat:
+        db.session.add(ShoppingCheck(year=year, week_number=week,
+                                     ingredient_id=ingredient_id))
+
+
+def stem_af_op_de_week(year, week, ingredient_id, lopende_weken):
+    """Een zijdelingse wijziging laat een week niet van status wisselen.
+
+    Leeft de week nog, dan hoort de wijziging zichtbaar te worden. Is hij
+    afgerond, dan blijft hij dicht. `lopende_weken` komt van
+    services.shopping.lopende_weken() en wordt door de aanroeper een keer
+    opgehaald -- per ingredient opnieuw bouwen kost de hele lijst.
+    """
+    if (year, week) in lopende_weken:
+        zet_terug_op_de_lijst(year, week, ingredient_id)
+    else:
+        houd_de_week_afgerond(year, week, ingredient_id)
+
+
 def plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_ids):
     """Plan een recept op een specifieke dag/maaltijd met ingredient-selectie."""
     recipe = db.get_or_404(Recipe, recipe_id)
