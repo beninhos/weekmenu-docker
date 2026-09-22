@@ -607,6 +607,78 @@ def _migrate_v20(conn):
                          {'t': nieuw, 'i': rij_id})
 
 
+
+def _migrate_v21(conn):
+    """Voorbije weken eenmalig afsluiten: geen actieve historie meer.
+
+    Sinds de boodschappenlijst geen tijdvenster meer heeft (4aca699) telt elke
+    week die ooit gepland is voor altijd mee. Een regel die in zo'n week nooit
+    is afgevinkt blijft daardoor eeuwig open, en een besluit dat later sneuvelt
+    -- zoals de uitsluiting die bij het samenvoegen van varianten verdwijnt --
+    laat een regel uit augustus zomaar weer opduiken, compleet met recepthint
+    van toen (kipgehakt uit de kapsalon van week 32, gezien 20 sep 2026).
+
+    Rutgers regel: 'afgevinkt is afgevinkt, ik heb geen actieve historie nodig.'
+    Deze migratie trekt die streep eenmalig: alles wat een voorbije week nog
+    aanleverde krijgt een vinkje, ook wat toen was weggeklikt of in de voorraad
+    stond -- voor een week die geweest is betekenen die allemaal hetzelfde: er
+    wordt niets meer voor gekocht. De huidige week en alles wat verderop
+    gepland staat blijven onaangeroerd.
+
+    checked_at wordt de maandag van die week, niet nu: met 'nu' zouden alle
+    afgesloten weken in een klap in het afgevinkt-blok verschijnen, dat de
+    laatste veertien dagen toont.
+
+    Eenmalig en op de datum van draaien -- daarna is afsluiten gewoon afvinken,
+    en dat is een gebeurtenis, geen kalender.
+    """
+    from datetime import date
+
+    iso = date.today().isocalendar()
+    nu = (iso[0], iso[1])
+
+    levert_aan = conn.execute(text("""
+        SELECT mi.year, mi.week_number, ri.ingredient_id
+          FROM menu_item mi
+          JOIN recipe_ingredient ri ON ri.recipe_id = mi.recipe_id
+         WHERE COALESCE(mi.skip_shopping_list, 0) = 0
+        UNION
+        SELECT qi.year, qi.week_number, ri.ingredient_id
+          FROM quick_add_item qi
+          JOIN recipe_ingredient ri ON ri.recipe_id = qi.recipe_id
+        UNION
+        SELECT ci.year, ci.week_number, ci.ingredient_id
+          FROM custom_shopping_ingredient ci
+    """)).fetchall()
+
+    bestaat = {(r[0], r[1], r[2]) for r in conn.execute(
+        text('SELECT year, week_number, ingredient_id FROM shopping_check')).fetchall()}
+
+    gezet = 0
+    for jaar, week, ingredient_id in levert_aan:
+        if jaar is None or week is None or ingredient_id is None:
+            continue
+        if (jaar, week) >= nu:
+            continue
+        if (jaar, week, ingredient_id) in bestaat:
+            continue
+        try:
+            maandag = date.fromisocalendar(jaar, week, 1)
+        except ValueError:                  # week 53 in een jaar dat er geen heeft
+            continue
+        conn.execute(
+            text("""INSERT INTO shopping_check
+                        (year, week_number, ingredient_id, checked_at, via_ah)
+                    VALUES (:j, :w, :i, :t, 0)"""),
+            {'j': jaar, 'w': week, 'i': ingredient_id, 't': f'{maandag} 12:00:00'}
+        )
+        bestaat.add((jaar, week, ingredient_id))
+        gezet += 1
+
+    if gezet:
+        print(f'[migratie v21] {gezet} regels uit voorbije weken afgesloten')
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -662,8 +734,10 @@ def migrate_db():
             _migrate_v19(conn)
         if current < 20:
             _migrate_v20(conn)
+        if current < 21:
+            _migrate_v21(conn)
 
-        target = 20
+        target = 21
         if current < target:
             if row:
                 conn.execute(
