@@ -7,12 +7,17 @@ from weekmenu.models import (
 )
 
 
-def _zet_terug_op_de_lijst(year, week, ingredient_id):
+def zet_terug_op_de_lijst(year, week, ingredient_id):
     """Rutgers regel: 'wat ik afvink gaat van de lijst — tot ik het opnieuw
-    erop zet.' Een recept (opnieuw) plannen is dat 'opnieuw erop zetten': de
-    afvink- én uitsluitstatus van dat ingredient in die week gaat weg, ook als
-    de week al naar de AH is gestuurd. Zonder dit bleef een nieuw gepland
+    erop zet.' Elk gebaar waarmee hij iets op de lijst zet — plannen, een los
+    recept toevoegen, een los item toevoegen — is dat 'opnieuw erop zetten':
+    de afvink- én uitsluitstatus van dat ingredient in die week gaat weg, ook
+    als de week al naar de AH is gestuurd. Zonder dit bleef een nieuw gepland
     recept onzichtbaar zodra de week eerder besteld was (nasi, 13 sep 2026).
+
+    Alleen de week die je aanraakt, nooit alle weken: gemeten op 20 sep 2026
+    haalde de weekloze variant de ui van de al gekochte vorige week terug op
+    de lijst en telde hij 200 g bij de 100 g van deze week op.
     """
     ShoppingListExclusion.query.filter_by(
         year=year, week_number=week, ingredient_id=ingredient_id
@@ -55,7 +60,7 @@ def plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_
                     year=year, week_number=week, ingredient_id=ri.ingredient_id
                 ))
         else:
-            _zet_terug_op_de_lijst(year, week, ri.ingredient_id)
+            zet_terug_op_de_lijst(year, week, ri.ingredient_id)
 
     db.session.commit()
 
@@ -113,7 +118,7 @@ def update_week_menu(week, year, menu_data):
             recipe.usage_count = (recipe.usage_count or 0) + 1
             recipe.last_used = datetime.now()
         for ri in recipe.ingredients:
-            _zet_terug_op_de_lijst(year, week, ri.ingredient_id)
+            zet_terug_op_de_lijst(year, week, ri.ingredient_id)
 
     used_recipe_ids = {pos[1] for pos in new_positions}
     for recipe_id in used_recipe_ids:

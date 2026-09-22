@@ -141,3 +141,107 @@ def test_alles_afvinken_bouwt_de_lijst_een_keer_en_vinkt_alles_af(app, client, m
     assert len(calls) == 1, 'per regel de hele lijst opnieuw bouwen duurde 6 s op de echte data'
     assert ShoppingCheck.query.filter_by(ingredient_id=ing2.id).count() == 2  # week 38 én 39
     assert build_combined_shopping_list()['open'] == []
+
+
+# ── Opnieuw toevoegen vanaf de boodschappenlijst zelf ──────────────────────
+# Dezelfde regel geldt voor de gebaren op /boodschappen: afvinken of weghalen
+# is geen blijvend oordeel. Rutger haalt een regel juist weg om hem opnieuw toe
+# te voegen en zo te controleren wat er nodig is; dat gebaar moet altijd werken.
+
+def _iso():
+    from datetime import date
+    return date.today().isocalendar()
+
+
+def test_los_recept_toevoegen_zet_afgevinkt_ingredient_weer_open(app, client):
+    r, ing = _mk_recipe('Mexicaanse soep', 'tortillachips', 200)
+    jaar, week = _iso()[0], _iso()[1]
+    db.session.add(ShoppingCheck(year=jaar, week_number=week, ingredient_id=ing.id))
+    db.session.commit()
+
+    assert client.post('/api/boodschappen/extra',
+                       json={'recipe_id': r.id, 'people_count': 4}).status_code == 200
+
+    assert ing.id in _open_ids(build_combined_shopping_list())
+
+
+def test_los_recept_toevoegen_haalt_de_uitsluiting_van_zijn_ingredient_weg(app, client):
+    r, ing = _mk_recipe('Mexicaanse soep', 'jalapeno', 1, unit='stuks')
+    jaar, week = _iso()[0], _iso()[1]
+    db.session.add(ShoppingListExclusion(year=jaar, week_number=week, ingredient_id=ing.id))
+    db.session.commit()
+
+    assert client.post('/api/boodschappen/extra',
+                       json={'recipe_id': r.id, 'people_count': 4}).status_code == 200
+
+    assert ing.id in _open_ids(build_combined_shopping_list())
+
+
+def test_afvinken_en_opnieuw_toevoegen_is_gewoon_een_rondje(app, client):
+    r, ing = _mk_recipe('Mexicaanse soep', 'cheddar', 100)
+    qid = client.post('/api/boodschappen/extra',
+                      json={'recipe_id': r.id, 'people_count': 4}).get_json()['id']
+    assert ing.id in _open_ids(build_combined_shopping_list())
+
+    client.post(f'/api/boodschappen/item/{ing.id}/check', json={'checked': True})
+    assert ing.id not in _open_ids(build_combined_shopping_list())
+
+    client.delete(f'/api/boodschappen/extra/{qid}')
+    client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 4})
+
+    assert ing.id in _open_ids(build_combined_shopping_list())
+
+
+def test_weggehaalde_regel_komt_terug_door_het_recept_opnieuw_toe_te_voegen(app, client):
+    r, ing = _mk_recipe('Mexicaanse soep', 'verse koriander', 1, unit='stuks')
+    qid = client.post('/api/boodschappen/extra',
+                      json={'recipe_id': r.id, 'people_count': 4}).get_json()['id']
+
+    client.post(f'/api/boodschappen/item/{ing.id}/remove')
+    assert ing.id not in _open_ids(build_combined_shopping_list())
+
+    client.delete(f'/api/boodschappen/extra/{qid}')
+    client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 4})
+
+    assert ing.id in _open_ids(build_combined_shopping_list())
+
+
+def test_handmatig_item_opnieuw_toevoegen_na_afvinken_staat_weer_open(app, client):
+    ing = Ingredient(name='limoen', display_name='Limoen', category='groente')
+    db.session.add(ing)
+    db.session.commit()
+    jaar, week = _iso()[0], _iso()[1]
+    pad = f'/api/shopping-list/{jaar}/{week}/add-item'
+
+    assert client.post(pad, json={'ingredient_id': ing.id, 'amount': 2,
+                                  'unit': 'stuks'}).status_code == 200
+    client.post(f'/api/boodschappen/item/{ing.id}/check', json={'checked': True})
+    assert ing.id not in _open_ids(build_combined_shopping_list())
+
+    assert client.post(pad, json={'ingredient_id': ing.id, 'amount': 2,
+                                  'unit': 'stuks'}).status_code == 200
+
+    assert ing.id in _open_ids(build_combined_shopping_list())
+
+
+def test_opnieuw_toevoegen_laat_de_boodschappen_van_een_andere_week_afgevinkt(app, client):
+    """Terugzetten geldt voor de week die je aanraakt, niet voor alle weken.
+
+    Zonder deze grens haalt één nieuw recept de ui van vorige week — allang
+    gekocht en afgevinkt — weer op de lijst, en telt hij de hoeveelheid erbij op.
+    """
+    oud, ing = _mk_recipe('Nasi', 'ui', 200)
+    vorige = 37 if _iso()[1] != 37 else 36
+    db.session.add(MenuItem(day_of_week=1, meal_type='diner', recipe_id=oud.id,
+                            week_number=vorige, year=_iso()[0]))
+    db.session.add(ShoppingCheck(year=_iso()[0], week_number=vorige,
+                                 ingredient_id=ing.id, via_ah=True))
+    db.session.commit()
+
+    nieuw, _ = _mk_recipe('Chili', 'ui', 100)
+    client.post('/api/boodschappen/extra', json={'recipe_id': nieuw.id, 'people_count': 4})
+
+    row = next(x for x in build_combined_shopping_list()['open']
+               if x['ingredient_id'] == ing.id)
+    assert row['amount'] == 100, 'de al gekochte ui van de vorige week hoort niet mee te tellen'
+    assert row['recipes'] == ['Chili']

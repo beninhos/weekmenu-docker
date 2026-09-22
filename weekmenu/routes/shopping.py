@@ -14,7 +14,9 @@ from weekmenu.services.shopping import (
     send_dict_to_ah, build_combined_shopping_list,
 )
 from weekmenu.services.units import _normalize_ri_unit
-from weekmenu.services.menu import clear_shopping_list as _clear_shopping_list
+from weekmenu.services.menu import (
+    clear_shopping_list as _clear_shopping_list, zet_terug_op_de_lijst,
+)
 
 bp = Blueprint('shopping', __name__)
 
@@ -160,6 +162,11 @@ def boodschappen_extra_add():
                       people_count=body.get('people_count') or recipe.serves or 4,
                       year=iso[0], week_number=iso[1])
     db.session.add(qi)
+    # Toevoegen is 'opnieuw erop zetten', net als plannen: een eerder afgevinkt
+    # of weggehaald ingredient hoort weer open te staan. Zonder dit verdween een
+    # zojuist toegevoegd recept regelrecht in het afgevinkt-blok, of helemaal.
+    for ri in recipe.ingredients:
+        zet_terug_op_de_lijst(iso[0], iso[1], ri.ingredient_id)
     db.session.commit()
     return jsonify({'status': 'success', 'id': qi.id})
 
@@ -248,9 +255,7 @@ def add_shopping_item(year, week):
     raw_unit = data.get('unit', 'stuks')
     unit, amount = _normalize_ri_unit(ing, raw_unit, raw_amount)
 
-    ShoppingListExclusion.query.filter_by(
-        year=year, week_number=week, ingredient_id=ingredient_id
-    ).delete()
+    zet_terug_op_de_lijst(year, week, ingredient_id)
 
     existing = CustomShoppingIngredient.query.filter_by(
         year=year, week_number=week, ingredient_id=ingredient_id
