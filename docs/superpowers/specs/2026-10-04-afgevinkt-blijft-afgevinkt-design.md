@@ -95,11 +95,13 @@ groter. Daarmee vervalt `zet_terug_op_de_lijst` op vier van de vijf plekken
   mee en de server maakt een tweede QuickAddItem. Staat het recept die week al
   in het weekmenu (niet als los recept), dan vraagt + Recept niets en komt het
   erbij: dat was de echte chili-week (dinsdag gepland, extra set via + Recept).
-- **Recept bewerken** (`routes/recipes.py`) en **uit de voorraad halen**
-  (`services/pantry.py`) blijven via `stem_af_op_de_week` lopen:
-  - lopende week: bewerken doet niets extra (de groei verschijnt vanzelf);
-  - afgeronde week: `houd_de_week_afgerond` vult afgevinkt aan tot wat nodig
-    is, zodat er niets uit augustus opduikt.
+- **Recept bewerken** (`routes/recipes.py::_laat_de_geplande_weken_kloppen`):
+  sinds 7486c95 (0.8.2-beta) slaat bewerken lopende weken al over en roept het
+  voor afgeronde weken `houd_de_week_afgerond` aan. Dat blijft zo; in het
+  nieuwe model vult `houd_de_week_afgerond` afgevinkt aan tot wat nodig is,
+  zodat er niets uit augustus opduikt.
+- **Uit de voorraad halen** (`services/pantry.py`) is de enige die nog via
+  `stem_af_op_de_week` loopt; zie Uitzondering.
 - **Varianten samenvoegen** (`_wis_weekbesluiten`): ✕ en aantal-overrides van
   de verliezer vervallen, zoals nu. Vinkjes zijn een feit ("ligt al in de
   kar") en worden per eenheid opgeteld bij die van de winnaar. Dat vervangt de
