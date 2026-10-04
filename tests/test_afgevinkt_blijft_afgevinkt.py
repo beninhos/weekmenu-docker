@@ -347,3 +347,50 @@ def test_gekocht_blijft_in_huis_als_het_losse_recept_weg_en_terug_komt(app, clie
     client.delete(f'/api/boodschappen/extra/{qid}')
     client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 12})
     assert _open('kidneybonen') == 0
+
+
+# ── Recept bewerken: gekocht is gekocht ───────────────────────────────────
+
+def _bewerk(client, r, regels):
+    return client.post(f'/recipe/{r.id}/edit', data={
+        'name': r.name, 'page': '', 'serves': str(r.serves), 'cookbook': '', 'url': '',
+        'instructions': '', 'ingredient[]': [n for n, _, _ in regels],
+        'ingredient_id[]': ['' for _ in regels], 'amount[]': [str(h) for _, h, _ in regels],
+        'unit[]': [u for _, _, u in regels], 'category[]': ['overig' for _ in regels],
+        'preparation[]': ['' for _ in regels], 'pantry_flag[]': ['0' for _ in regels]})
+
+
+def test_meer_van_een_gekocht_ingredient_zet_niets_op_de_lijst(app, client):
+    r = _recept('Patatje', [('aardappelen', 1000, 'g')])
+    _plan(r, 2)
+    client.post('/api/boodschappen/check-all')
+    assert _bewerk(client, r, [('aardappelen', 1500, 'g')]).status_code == 302
+    assert _open('aardappelen') == 0
+
+
+def test_half_gekocht_groeit_alleen_het_open_deel_mee(app, client):
+    r = _chili()
+    _plan(r, 2)
+    client.post('/api/boodschappen/check-all')
+    _plan(r, 12, dag=6)
+    _bewerk(client, r, [('kidneybonen', 1.5, 'blik'), ('rundergehakt', 200, 'g')])
+    assert _open('kidneybonen') == 9
+
+
+def test_een_nieuw_ingredient_verschijnt_ook_als_een_ander_recept_het_al_kocht(app, client):
+    soep = _recept('Soep', [('ui', 1, 'stuks')])
+    chili = _chili()
+    _plan(soep, 2)
+    _plan(chili, 2, dag=3)
+    client.post('/api/boodschappen/check-all')
+    _bewerk(client, chili, [('kidneybonen', 1, 'blik'), ('rundergehakt', 200, 'g'),
+                            ('ui', 1, 'stuks')])
+    assert _open('ui') == 1
+
+
+def test_recept_inkorten_zet_niets_terug(app, client):
+    r = _chili()
+    _plan(r, 2)
+    client.post('/api/boodschappen/check-all')
+    _bewerk(client, r, [('kidneybonen', 0.5, 'blik'), ('rundergehakt', 200, 'g')])
+    assert _open('kidneybonen') == 0 and _open('rundergehakt') == 0

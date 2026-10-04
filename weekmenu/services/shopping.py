@@ -185,6 +185,22 @@ def _week_stand(jaar, week, omr, checks, excls):
     return stand, bronnen
 
 
+def weken_van_recept(recipe):
+    """De weken waarin dit recept boodschappen levert."""
+    weken = {(mi.year, mi.week_number) for mi in
+             MenuItem.query.filter_by(recipe_id=recipe.id).all() if not mi.skip_shopping_list}
+    weken |= {(qi.year, qi.week_number) for qi in
+              QuickAddItem.query.filter_by(recipe_id=recipe.id).all()}
+    return weken
+
+
+def momentopname(recipe):
+    """Wat de weken van dit recept nodig hadden, vlak voor een bewerking."""
+    omr = omrekening()
+    return {'ingredienten': {ri.ingredient_id for ri in recipe.ingredients},
+            'nodig': {wk: week_nodig(wk[0], wk[1], omr)[0] for wk in weken_van_recept(recipe)}}
+
+
 def window_weeks():
     """Alle weken waarvoor iets gepland staat. Welke daarvan nog iets open
     hebben rekent build_combined_shopping_list uit: wat afgevinkt of weggehaald

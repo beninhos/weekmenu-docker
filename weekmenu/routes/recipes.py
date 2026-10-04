@@ -11,10 +11,13 @@ from weekmenu.extensions import db
 from weekmenu.models import (
     Recipe, Ingredient, IngredientAlias, Cookbook,
     RecipeIngredient, RecipeMealType, Settings, PantryIngredient,
-    RecipeDraft, MenuItem, QuickAddItem,
+    RecipeDraft,
 )
 from weekmenu.constants import PRODUCT_CATEGORIES, RECIPE_MEAL_TYPES
-from weekmenu.services.shopping import lopende_weken
+from weekmenu.services import afgehandeld
+from weekmenu.services.shopping import (
+    lopende_weken, momentopname, omrekening, week_nodig, weken_van_recept,
+)
 from weekmenu.services.units import (
     _normalize_ingredient, _guess_ingredient_category, _normalize_ri_unit,
 )
@@ -335,7 +338,7 @@ def _resolveer_cookbook_id():
     return new_cb.id
 
 
-def _lees_ingredient_rijen(recipe, nog_open=None):
+def _lees_ingredient_rijen(recipe, nog_open=None, voor=None):
     """Voeg RecipeIngredient-rijen toe uit request.form; sync pantry en meal_types.
 
     `nog_open` is de uitkomst van lopende_weken() van VOOR de wijziging. Meet je
@@ -378,38 +381,39 @@ def _lees_ingredient_rijen(recipe, nog_open=None):
     db.session.commit()
     _sync_pantry(pantry_scope, pantry_wanted)
     _sync_meal_types(recipe, request.form.getlist('meal_type[]'))
-    _laat_de_geplande_weken_kloppen(recipe, nog_open)
+    _laat_de_geplande_weken_kloppen(recipe, nog_open, voor)
 
 
-def _laat_de_geplande_weken_kloppen(recipe, nog_open=None):
-    """Een gewijzigd recept zet niets terug op de lijst.
+def _laat_de_geplande_weken_kloppen(recipe, nog_open=None, voor=None):
+    """Een gewijzigd recept zet niets extra op de lijst van wat al gekocht is.
 
     Rutger, 4 okt 2026: 'alleen ingrediënten toevoegen als ik iets op het menu
-    plan.' Wat in een lopende week al afgevinkt of weggehaald is, blijft dat;
-    een ingredient dat er nieuw bij komt heeft nooit een vinkje gehad en staat
-    vanzelf open. Eerder zette bewerken alle regels van het recept terug: het
-    inkorten van Patatje oorlog haalde de al gekochte ui en aardappelen terug,
-    en via die gedeelde regels ook het deel van de zuurkoolstamppot.
-    In een week die geweest is hoort hij dicht te blijven: een ingredient dat je
-    nu toevoegt zou daar als losse regel uit augustus op de lijst verschijnen.
+    plan', en gekocht is gekocht, ook als hij het recept groter maakt. Het
+    inkorten van Patatje oorlog zette eerder de al gekochte ui en aardappelen
+    terug. In een lopende week groeit het al afgehandelde deel daarom naar
+    rato mee (`voor` is de momentopname van vlak voor de bewerking); een
+    ingredient dat nieuw in het recept komt staat gewoon open. Een week die
+    geweest is gaat dicht: anders verschijnt een regel uit augustus.
     """
-    from weekmenu.services import afgehandeld
-
-    weken = {(mi.year, mi.week_number) for mi
-             in MenuItem.query.filter_by(recipe_id=recipe.id).all()
-             if not mi.skip_shopping_list}
-    weken |= {(qi.year, qi.week_number) for qi
-              in QuickAddItem.query.filter_by(recipe_id=recipe.id).all()}
+    weken = weken_van_recept(recipe)
     if not weken:
         return
-
     if nog_open is None:
         nog_open = lopende_weken()
-    for (jaar, week) in weken:
-        if (jaar, week) in nog_open:
+    omr = omrekening()
+    for wk in weken:
+        if wk not in nog_open:
+            for ri in recipe.ingredients:
+                afgehandeld.sluit_af(wk[0], wk[1], ri.ingredient_id)
             continue
-        for ri in recipe.ingredients:
-            afgehandeld.sluit_af(jaar, week, ri.ingredient_id)
+        if voor is None:
+            continue
+        oud = voor['nodig'].get(wk, {})
+        for (ing, eenheid), hoeveel in week_nodig(wk[0], wk[1], omr)[0].items():
+            if ing in voor['ingredienten']:
+                afgehandeld.groei_mee(wk[0], wk[1], ing, eenheid,
+                                      hoeveel - oud.get((ing, eenheid), 0),
+                                      oud.get((ing, eenheid), 0))
     db.session.commit()
 
 
@@ -496,8 +500,9 @@ def edit_recipe(id):
         # daarna is de week van dit recept per definitie leeg en zou elke
         # afgeronde week zich weer lopend verklaren.
         nog_open = lopende_weken()
+        voor = momentopname(recipe)
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
-        _lees_ingredient_rijen(recipe, nog_open)
+        _lees_ingredient_rijen(recipe, nog_open, voor)
 
         return redirect(url_for('recipes.receptenplanner'))
 
