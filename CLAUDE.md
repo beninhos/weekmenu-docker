@@ -23,7 +23,7 @@ weekmenu/
 ├── routes/         # HTTP-schil, dun. Blueprints per domein.
 ├── services/       # De business-logica. Praten met models + elkaar.
 ├── models.py       # SQLAlchemy — 21 tabellen.
-├── migrations.py   # v1..v22, additief, draaien op elke opstart.
+├── migrations.py   # v1..v23, additief, draaien op elke opstart.
 ├── constants.py    # Categorieën, eenheidstabellen, AH-endpoint-URLs.
 ├── extensions.py   # db-object, geïmporteerd waar nodig — breekt de cyclus.
 └── __init__.py     # create_app(), context-processor, __version__.
@@ -39,7 +39,8 @@ weekmenu/
 - `services/kaart.py` + `services/kaartsignaturen.py`: alles wat merkspecifiek is aan een receptkaart (HelloFresh-logo, "Zelf toevoegen"-kop, "Bereidingstijd: N min"). Merkloos ontwerp: een nieuw merk is een nieuw dict in `MERKEN`, geen nieuwe code.
 - `services/verpakking.py`: de vraag "1 tomaat weegt hoeveel gram" — brug tussen telbare recepteenheid en gewichtsverpakking.
 - `services/pantry.py`: voorraadhints + review-lijsten voor `/twijfelgevallen`.
-- `services/shopping.py`: aggregatie van receptregels naar de boodschappenlijst. `window_weeks()` geeft alle geplande weken, `lopende_weken()` de weken waarin een zijdelingse wijziging nog mag doorwerken — die tweede is de grens tussen 'nog mee bezig' en 'geweest'.
+- `services/shopping.py`: aggregatie van receptregels naar de boodschappenlijst. Per week: `open = nodig − afgevinkt − weggehaald` (`week_nodig`, `_week_stand`). `window_weeks()` geeft alle geplande weken, `lopende_weken()` de weken waarin een zijdelingse wijziging nog mag doorwerken — die tweede is de grens tussen 'nog mee bezig' en 'geweest'.
+- `services/afgehandeld.py`: wat er per week per ingredient al afgevinkt of weggehaald is, als hoeveelheid per eenheid (NULL = alles). Toevoegen raakt dit nooit aan: wat afgevinkt is blijft afgevinkt, alleen het nieuwe komt op de lijst (Rutger, 4 okt 2026). Uitzonderingen: uit de voorraad halen zet terug, een voorbije week wordt afgesloten, en recept bewerken laat het afgehandelde deel naar rato meegroeien.
 - `services/bestellingen.py`: het bestel-log. Eén pot per week, AH-regels teruggelezen uit de order (niet wat de app stuurde), handmatig afgevinkte regels in dezelfde pot.
 - `services/ah.py`: AH-API-client — tokens, product-search, prijsadvies, order-write.
 - `services/gemini.py`: Gemini-integratie voor URL- en foto-imports (los van de OCR-dump).
@@ -51,9 +52,9 @@ weekmenu/
 - **Docstrings**: waarom-gedreven, verwijzen naar échte metingen ("gemeten op 22 pagina's: 252 van 252 ankers exact"). Geen ceremoniële one-liners.
 - **Private prefix `_`**: hard voor helpers die niemand buiten het bestand hoort te importeren. Als iets `_` heet én van buiten wordt geïmporteerd, is een van beide fout.
 - **Template-data doorgeven aan JS**: `<script type="application/json" id="data-x">{{ x|tojson }}</script>` + `JSON.parse(document.getElementById('data-x').textContent)`. **Niet** `window.__DATA` — vervuilt de namespace.
-- **Migraties**: `weekmenu/migrations.py` bevat 22 versies achter `schema_version`-guards. Nieuw = `_migrate_vN()` erbij, oude nooit wijzigen. Migraties zijn additief; ze rollen niet terug.
+- **Migraties**: `weekmenu/migrations.py` bevat 23 versies achter `schema_version`-guards. Nieuw = `_migrate_vN()` erbij, oude nooit wijzigen. Migraties zijn additief; ze rollen niet terug.
 - **AH-tokens en API-sleutels**: via `/settings` in de database (of via env-var als fallback). Nooit hardcoden.
-- **Testen**: `pytest`, ~574 tests, Nederlandse gedragsnamen (`test_zondag_valt_niet_buiten_de_printmarge`). Fixtures in `tests/conftest.py`, mocks op de netwerkrand (Cloud Vision, Gemini, AH). In-memory sqlite, geen echte DB-writes.
+- **Testen**: `pytest`, ~600 tests, Nederlandse gedragsnamen (`test_zondag_valt_niet_buiten_de_printmarge`). Fixtures in `tests/conftest.py`, mocks op de netwerkrand (Cloud Vision, Gemini, AH). In-memory sqlite, geen echte DB-writes.
 
 ## Ontwikkelen en draaien
 
@@ -81,7 +82,7 @@ De dev-container draait als `app:1000` (matcht host-user beninho), heeft eigen `
 
 **Debug-mode**: aan (`app.py:6` — `debug=True`), maar `use_reloader=False`. De Werkzeug-PIN-console is toegankelijk bij een crash; **kritiek**: reloader mág niet aan want dat fork-t Flask en breekt de `herstel_verloren_jobs()`-supervisor plus de `threading.Lock` in `services/ah.py`.
 
-**Version**: `0.8.2-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
+**Version**: `0.9.0-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
 - **patch** (0.8.x): bugfixes zonder gedragsverandering
 - **minor** (0.x.0): substantiële refactors, nieuwe features, kwaliteitssprongen
 - **major** (x.0.0): incompatible schema-migraties of API-breuk (niet van toepassing zolang de app single-user is)
