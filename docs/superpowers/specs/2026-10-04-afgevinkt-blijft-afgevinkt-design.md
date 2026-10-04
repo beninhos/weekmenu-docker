@@ -26,8 +26,9 @@ koos hij hetzelfde: weg is weg.
 | Wat je doet | Wat er gebeurt |
 |---|---|
 | Afvinken, ✕, alles afvinken, naar de AH sturen | Weg van de lijst, zoals nu. Blijft weg, ook als er later iets bijkomt. |
-| Iets toevoegen: plannen, + Recept, + Los item, personen erbij, recept bewerken | Alleen de extra hoeveelheid komt op de lijst. |
-| Personen eraf, recept uit het weekmenu | Er verschijnt niets; wat al afgevinkt is blijft afgevinkt. |
+| Iets toevoegen: plannen, + Recept, + Los item, personen erbij | Alleen de extra hoeveelheid komt op de lijst. |
+| Een gepland recept bewerken | Van wat al gekocht of weggehaald is komt niets extra op de lijst ("gekocht is gekocht", Rutger 4 okt). Een ingrediënt dat nieuw in het recept komt, verschijnt wel. |
+| Personen eraf, recept uit het weekmenu, recept inkorten | Er verschijnt niets; wat al afgevinkt is blijft afgevinkt. |
 | Een recept toevoegen dat die week al als los recept op de lijst staat (via het weekmenu, de receptenplanner of + Recept) | De app vraagt: "Is dit dezelfde maaltijd?" Ja: één keer op de lijst (weekmenu neemt het losse recept over; bij + Recept wordt het aantal personen aangepast). Nee: komt erbij. |
 | Per ongeluk afgevinkt of weggehaald | Onderin bij "Afgevinkt" staat de regel, met "weggehaald" of "via AH" erbij. Eén tik zet hem terug. |
 
@@ -48,7 +49,9 @@ Per week, per ingrediënt, per eenheid:
 
 Toevoegen raakt afgevinkt en weggehaald niet aan; het maakt alleen "nodig"
 groter. Daarmee vervalt `zet_terug_op_de_lijst` op vier van de vijf plekken
-(zie Uitzondering).
+(zie Uitzondering). Recept bewerken is de ene plek die afgevinkt en
+weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
+(zie Gebaren).
 
 ## Datamodel (migratie v23, additief)
 
@@ -97,9 +100,22 @@ groter. Daarmee vervalt `zet_terug_op_de_lijst` op vier van de vijf plekken
   erbij: dat was de echte chili-week (dinsdag gepland, extra set via + Recept).
 - **Recept bewerken** (`routes/recipes.py::_laat_de_geplande_weken_kloppen`):
   sinds 7486c95 (0.8.2-beta) slaat bewerken lopende weken al over en roept het
-  voor afgeronde weken `houd_de_week_afgerond` aan. Dat blijft zo; in het
-  nieuwe model vult `houd_de_week_afgerond` afgevinkt aan tot wat nodig is,
-  zodat er niets uit augustus opduikt.
+  voor afgeronde weken `houd_de_week_afgerond` aan. In het nieuwe model:
+  - afgeronde week: `houd_de_week_afgerond` vult afgevinkt aan tot wat nodig
+    is, zodat er niets uit augustus opduikt;
+  - lopende week: zonder ingreep zou de rekenregel een grotere hoeveelheid
+    vanzelf als open tonen. Daarom groeit het al afgehandelde deel mee: stond
+    het ingrediënt al in het recept en wordt het meer, dan krijgt afgevinkt er
+    `extra × (afgevinkt ÷ nodig vóór de wijziging)` bij en weggehaald op
+    dezelfde manier, samen ten hoogste het hele extra (per week, per eenheid).
+    Volledig gekocht → niets open; niets gekocht → het hele extra open; half
+    gekocht → alleen de helft van het extra open (het nog niet gekochte deel
+    volgt het nieuwe recept). Rekenvoorbeeld chili-week, recept +50%
+    kidneybonen: nodig 7 → 10,5, afgevinkt 1 → 1,5, open 6 → 9. Is het ingrediënt
+    nieuw in het recept, dan geen aanvulling: het verschijnt, ook als een
+    ander recept die week hetzelfde ingrediënt al gekocht had. Minder in het
+    recept: niets aanpassen. Hiervoor geeft de bewerkroute de oude
+    hoeveelheden per ingrediënt mee aan `_laat_de_geplande_weken_kloppen`.
 - **Uit de voorraad halen** (`services/pantry.py`) is de enige die nog via
   `stem_af_op_de_week` loopt; zie Uitzondering.
 - **Varianten samenvoegen** (`_wis_weekbesluiten`): ✕ en aantal-overrides van
@@ -157,7 +173,11 @@ in Nederlandse gedragsnamen:
 - plannen met uitgevinkt ingrediënt → alleen dat recept-deel weggehaald;
 - "zelfde maaltijd?" ja/nee, via weekmenu, receptenplanner en + Recept;
 - afvinken laat de aantal-override van die week vervallen;
-- recept bewerken in een lopende en in een afgeronde week;
+- recept bewerken in een lopende week: meer aardappelen in gekocht Patatje
+  oorlog → niets open; half gekocht → half extra open; nieuw ingrediënt →
+  open, ook als een ander recept dat ingrediënt die week al gekocht had;
+  inkorten → niets terug;
+- recept bewerken in een afgeronde week → niets open;
 - uit de voorraad halen (uitzondering);
 - samenvoegen: vinkjes opgeteld, ✕ van de verliezer weg;
 - migratie v23: open lijst identiek voor en na, op een fixture met vinkjes,
