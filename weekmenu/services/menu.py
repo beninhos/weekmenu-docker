@@ -24,17 +24,19 @@ def stem_af_op_de_week(year, week, ingredient_id, lopende_weken):
         afgehandeld.sluit_af(year, week, ingredient_id)
 
 
-def _neem_over(neem_over, week, year):
+def _neem_over(neem_over, week, year, recept_ids):
     """'Zelfde maaltijd': het losse recept gaat op in het weekmenu.
 
-    Alleen een los recept uit dezelfde week; een id uit een andere week wordt
-    genegeerd, anders verdwijnt een extra set van een andere week stil.
+    Alleen een los recept uit dezelfde week, van een recept dat nu echt in het
+    menu staat. Anders verdwijnt een extra set stil: van een andere week, of
+    omdat het vak na 'Ja' weer leeg of anders werd voor het opslaan.
     """
     ids = [int(i) for i in neem_over or ()]
-    if ids:
+    if ids and recept_ids:
         QuickAddItem.query.filter(QuickAddItem.id.in_(ids),
                                   QuickAddItem.year == year,
-                                  QuickAddItem.week_number == week).delete(
+                                  QuickAddItem.week_number == week,
+                                  QuickAddItem.recipe_id.in_(recept_ids)).delete(
                                       synchronize_session=False)
 
 
@@ -72,7 +74,7 @@ def plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_
             ing, eenheid, hoeveel = bijdrage_van_regel(ri, recipe.serves, people_count, omr)
             afgehandeld.haal_weg(year, week, ing, {eenheid: hoeveel})
 
-    _neem_over(neem_over, week, year)
+    _neem_over(neem_over, week, year, {recipe_id})
     db.session.commit()
 
 
@@ -121,7 +123,7 @@ def update_week_menu(week, year, menu_data, neem_over=()):
             recipe.usage_count = (recipe.usage_count or 0) + 1
         recipe.last_used = datetime.now()
 
-    _neem_over(neem_over, week, year)
+    _neem_over(neem_over, week, year, gebruikt)
     db.session.commit()
 
 

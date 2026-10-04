@@ -52,10 +52,13 @@ def remove_from_pantry(ingredient_id):
     if not p:
         return {'status': 'success'}
 
+    # Meten vóór het weghalen: daarna levert het ingredient in elke oude week
+    # weer iets aan, en verklaart die week zich lopend (ketjap manis opende op
+    # de live-data week 33 t/m 41).
+    nog_open = lopende_weken()
     db.session.delete(p)
     db.session.commit()
 
-    nog_open = lopende_weken()
     for (jaar, week) in weken_op_de_lijst(ingredient_id):
         stem_af_op_de_week(jaar, week, ingredient_id, nog_open)
     db.session.commit()

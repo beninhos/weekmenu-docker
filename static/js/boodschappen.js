@@ -86,13 +86,13 @@ async function addExtra() {
     if (!recipeId) { alert('Kies een recept uit de suggesties'); return; }
     const people = parseInt(document.getElementById('extraPeople').value) || 4;
     // Staat dit recept deze week al als los recept op de lijst? Dan vragen:
-    // zelfde maaltijd past het aantal aan, anders komt er een tweede bij.
-    let erbij = false;
-    const los = losRecept(_pageData.losseRecepten, recipeId, _pageData.year, _pageData.week);
-    if (los) {
-        const naam = (RECIPES.find(r => r.id === recipeId) || {}).name || los.recipe_name;
-        erbij = (await vraagZelfdeMaaltijd(naam, los.people_count)) !== 'zelfde';
-    }
+    // zelfde maaltijd past het aantal aan, 'komt erbij' maakt een tweede, en
+    // wegklikken voegt niets toe.
+    const naam = (RECIPES.find(r => r.id === recipeId) || {}).name;
+    const { keuze } = await kiesBijLosRecept(_pageData.losseRecepten, recipeId,
+                                             _pageData.year, _pageData.week, naam);
+    if (keuze === 'annuleer') return;
+    const erbij = keuze === 'erbij';
     const resp = await fetch('/api/boodschappen/extra', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -130,7 +130,13 @@ async function sendToAh() {
     if (resp.ok && data.status === 'success') location.reload(); else btn.disabled = false;
 }
 
+// Een tweede tik op ✕ terwijl de eerste nog loopt doet niets: het kruisje
+// legt de open hoeveelheid vast, en twee keer is dubbel.
+const _bezig = new Set();
+
 async function excludeItem(ingredientId) {
+    if (_bezig.has(ingredientId)) return;
+    _bezig.add(ingredientId);
     await fetch(`/api/boodschappen/item/${ingredientId}/remove`, { method: 'POST' });
     location.reload();
 }

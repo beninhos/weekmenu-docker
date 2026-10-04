@@ -94,6 +94,7 @@ def _log_handmatig(row, weken):
 
 
 @bp.route('/api/boodschappen/item/<int:ingredient_id>/check', methods=['POST'])
+@afgehandeld.een_tegelijk
 def boodschappen_check(ingredient_id):
     body = request.get_json(silent=True) or {}
     data = build_combined_shopping_list()
@@ -118,6 +119,7 @@ def boodschappen_check(ingredient_id):
 
 
 @bp.route('/api/boodschappen/item/<int:ingredient_id>/remove', methods=['POST'])
+@afgehandeld.een_tegelijk
 def boodschappen_remove(ingredient_id):
     """✕: wat nu open staat hoeft niet gekocht te worden.
 
@@ -135,6 +137,7 @@ def boodschappen_remove(ingredient_id):
 
 
 @bp.route('/api/boodschappen/item/<int:ingredient_id>/terugzetten', methods=['POST'])
+@afgehandeld.een_tegelijk
 def boodschappen_terugzetten(ingredient_id):
     """Een weggehaalde regel terug op de lijst; alleen de weken die het blok toont."""
     weken = build_combined_shopping_list()['weggehaald_weken'].get(ingredient_id, [])
@@ -147,6 +150,7 @@ def boodschappen_terugzetten(ingredient_id):
 
 
 @bp.route('/api/boodschappen/check-all', methods=['POST'])
+@afgehandeld.een_tegelijk
 def boodschappen_check_all():
     data = build_combined_shopping_list()
     per_ingredient = {}
@@ -161,6 +165,7 @@ def boodschappen_check_all():
 
 
 @bp.route('/api/boodschappen/send-to-ah', methods=['POST'])
+@afgehandeld.een_tegelijk
 def boodschappen_send_to_ah():
     body = request.get_json(silent=True) or {}
     qty_overrides = {int(k): v for k, v in body.get('qty_overrides', {}).items()}
@@ -203,6 +208,7 @@ def _leg_de_bestelling_vast(order_id, weken):
 
 
 @bp.route('/api/boodschappen/extra', methods=['POST'])
+@afgehandeld.een_tegelijk
 def boodschappen_extra_add():
     body = request.get_json(silent=True) or {}
     recipe = db.session.get(Recipe, body.get('recipe_id') or 0)
@@ -272,6 +278,7 @@ def update_shopping_qty(year, week, ingredient_id):
 
 
 @bp.route('/api/shopping-list/<int:year>/<int:week>/add-item', methods=['POST'])
+@afgehandeld.een_tegelijk
 def add_shopping_item(year, week):
     data = request.get_json(force=True) or {}
     ingredient_id = data.get('ingredient_id')
@@ -286,8 +293,10 @@ def add_shopping_item(year, week):
     raw_unit = data.get('unit', 'stuks')
     unit, amount = _normalize_ri_unit(ing, raw_unit, raw_amount)
 
+    # Alleen optellen bij een los item in dezelfde eenheid: 2 stuks sjalot plus
+    # 500 g werd anders '502 stuks'. De tabel staat twee rijen per week toe.
     existing = CustomShoppingIngredient.query.filter_by(
-        year=year, week_number=week, ingredient_id=ingredient_id
+        year=year, week_number=week, ingredient_id=ingredient_id, unit=unit
     ).first()
     if existing:
         existing.amount = existing.amount + amount

@@ -76,11 +76,13 @@ function fillDayDates(week, year) {
 const teOvernemen = new Set();
 
 // Een vak kreeg een recept: staat het deze week al als los recept op de
-// boodschappenlijst, vraag dan of het dezelfde maaltijd is.
+// boodschappenlijst, vraag dan of het dezelfde maaltijd is. Het recept staat
+// al in het vak, dus wegklikken laat het erbij komen.
 async function vraagBijLosRecept(recipeId, naam) {
-    const los = losRecept(_pageData.losseRecepten, recipeId, _pageData.year, _pageData.week);
-    if (!los || teOvernemen.has(los.id)) return;
-    if ((await vraagZelfdeMaaltijd(naam, los.people_count)) === 'zelfde') teOvernemen.add(los.id);
+    const nogTeVragen = _pageData.losseRecepten.filter(q => !teOvernemen.has(q.id));
+    const { keuze, los } = await kiesBijLosRecept(nogTeVragen, recipeId,
+                                                  _pageData.year, _pageData.week, naam);
+    if (keuze === 'zelfde') teOvernemen.add(los.id);
 }
 
 const updateMenu = async () => {

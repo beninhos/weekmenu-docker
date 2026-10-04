@@ -461,3 +461,120 @@ def test_het_afgevinkt_blok_toont_weggehaald_met_een_terugzetknop(app, client):
     client.post(f'/api/boodschappen/item/{_ing("rundergehakt").id}/remove')
     html = client.get('/boodschappen').get_data(as_text=True)
     assert 'weggehaald</span>' in html and 'terugzetten(%d)' % _ing('rundergehakt').id in html
+
+
+# ── Bevindingen uit de eindreview ─────────────────────────────────────────
+
+def test_aantal_personen_van_een_recept_wijzigen_opent_geen_oude_weken(app, client):
+    # Review: serves 2 -> 1 opende op de live-kopie 13 regels uit week 13-38.
+    r = _chili()
+    _plan(r, 2, week=13, jaar=2026)
+    afgehandeld.vink_af(2026, 13, _ing('kidneybonen').id, {'blik': 1})
+    afgehandeld.vink_af(2026, 13, _ing('rundergehakt').id, {'g': 200})
+    _plan(r, 2)
+    client.post('/api/boodschappen/check-all')
+    db.session.commit()
+    r.serves = 2
+    resp = client.post(f'/recipe/{r.id}/edit', data={
+        'name': r.name, 'page': '', 'serves': '1', 'cookbook': '', 'url': '',
+        'instructions': '', 'ingredient[]': ['kidneybonen', 'rundergehakt'],
+        'ingredient_id[]': ['', ''], 'amount[]': ['1', '200'], 'unit[]': ['blik', 'g'],
+        'category[]': ['overig', 'overig'], 'preparation[]': ['', ''],
+        'pantry_flag[]': ['0', '0']})
+    assert resp.status_code == 302
+    assert _open('kidneybonen') == 0
+    assert _open('rundergehakt') == 0
+
+
+def test_uit_de_voorraad_halen_laat_een_oude_week_met_een_leeg_vinkje_dicht(app, client):
+    # Review: ketjap manis uit de voorraad zette op de live-kopie 12,75 el op de
+    # lijst uit week 33-41; de omzetting had zijn oude vinkjes {} gemaakt.
+    from weekmenu.models import PantryIngredient
+    r = _recept('Nasi', [('ketjap', 3, 'el')])
+    _plan(r, 2, week=33, jaar=2026)
+    _plan(r, 2)
+    ketjap = _ing('ketjap')
+    db.session.add(PantryIngredient(ingredient_id=ketjap.id))
+    db.session.add(ShoppingCheck(year=2026, week_number=33, ingredient_id=ketjap.id,
+                                 hoeveelheden='{}', checked_at=datetime(2026, 8, 10, 12)))
+    db.session.commit()
+
+    assert client.delete(f'/api/pantry/{ketjap.id}').status_code == 200
+
+    assert _open('ketjap') == 3     # alleen deze week
+
+
+def test_vullen_laat_een_oude_week_dicht_voor_iets_wat_toen_niet_nodig_was(app):
+    # Een vinkje van voor v23 op iets wat in de voorraad stond: in een voorbije
+    # week blijft het 'alles', anders gaat die week open zodra het de kast uit gaat.
+    r = _recept('Nasi', [('ketjap', 3, 'el')])
+    _plan(r, 2, week=33, jaar=2026)
+    from weekmenu.models import PantryIngredient
+    db.session.add(PantryIngredient(ingredient_id=_ing('ketjap').id))
+    db.session.add(ShoppingCheck(year=2026, week_number=33, ingredient_id=_ing('ketjap').id))
+    db.session.add(ShoppingCheck(year=JAAR, week_number=WEEK, ingredient_id=_ing('ketjap').id))
+    db.session.commit()
+    _vlag()
+    afgehandeld.vul_hoeveelheden_aan()
+    oud = ShoppingCheck.query.filter_by(week_number=33).one()
+    nu = ShoppingCheck.query.filter_by(week_number=WEEK).one()
+    assert afgehandeld.lees(oud) is afgehandeld.ALLES
+    assert afgehandeld.lees(nu) == {}
+
+
+def test_twee_keer_snel_op_het_kruisje_tikken_haalt_het_maar_een_keer_weg(app, monkeypatch):
+    # Review: twee overlappende ✕-verzoeken legden 400 g weg terwijl er 200 g
+    # open stond; een later gepland recept met 200 g gehakt viel daardoor weg.
+    import threading
+    import time
+    from weekmenu.routes import shopping as route
+    r = _chili()
+    _plan(r, 2)
+    gehakt = _ing('rundergehakt').id
+    echt = route.build_combined_shopping_list
+
+    def traag(*a, **kw):
+        lijst = echt(*a, **kw)
+        time.sleep(0.2)          # beide verzoeken lezen dezelfde stand
+        return lijst
+
+    monkeypatch.setattr(route, 'build_combined_shopping_list', traag)
+    statussen = []
+    draden = [threading.Thread(target=lambda: statussen.append(app.test_client().post(
+        f'/api/boodschappen/item/{gehakt}/remove').status_code)) for _ in range(2)]
+    for d in draden:
+        d.start()
+        time.sleep(0.03)
+    for d in draden:
+        d.join()
+
+    assert sorted(statussen) == [200, 404]
+    db.session.expire_all()
+    assert afgehandeld.lees(ShoppingListExclusion.query.one()) == {'g': 200}
+
+
+def test_een_los_item_in_een_andere_eenheid_telt_niet_op_bij_de_oude(app, client):
+    # Review: 2 stuks sjalot, ✕, dan 500 g erbij gaf '500 stuks' (rij 502 stuks).
+    sjalot = _ing('sjalot')
+    pad = f'/api/shopping-list/{JAAR}/{WEEK}/add-item'
+    client.post(pad, json={'ingredient_id': sjalot.id, 'amount': 2, 'unit': 'stuks'})
+    client.post(f'/api/boodschappen/item/{sjalot.id}/remove')
+    client.post(pad, json={'ingredient_id': sjalot.id, 'amount': 500, 'unit': 'g'})
+    rijen = [(x['amount'], x['unit']) for x in build_combined_shopping_list()['open']
+             if x['ingredient_id'] == sjalot.id]
+    assert rijen == [(500, 'g')]
+
+
+def test_overnemen_kan_alleen_als_dat_recept_echt_in_het_menu_staat(app, client):
+    # Review: 'Ja' gezegd en het vak leeggemaakt voor het opslaan, of een ander
+    # recept: dan verdween het losse recept stil van de lijst.
+    chili, soep = _chili(), _recept('Soep', [('bouillon', 1, 'l')])
+    qid = client.post('/api/boodschappen/extra',
+                      json={'recipe_id': chili.id, 'people_count': 12}).get_json()['id']
+    client.post('/update_menu', json={
+        'week': WEEK, 'year': JAAR, 'neem_los_recept_over': [qid],
+        'menu': [{'day': 6, 'meals': {'diner': {'recipe_id': soep.id, 'people_count': 2}}}]})
+    client.post('/api/planner/plan', json={
+        'recipe_id': soep.id, 'day': 5, 'meal_type': 'diner', 'week': WEEK, 'year': JAAR,
+        'people_count': 2, 'ingredient_ids': [], 'neem_los_recept_over': [qid]})
+    assert QuickAddItem.query.count() == 1

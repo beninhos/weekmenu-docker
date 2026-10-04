@@ -363,10 +363,15 @@ async function confirmPlanning() {
   };
 
   // Staat dit recept die week al als los recept op de lijst? Dan vragen.
-  const los = losRecept(_plannerCfg.losse_recepten, active.id, payload.year, payload.week);
-  if (los && (await vraagZelfdeMaaltijd(active.name, los.people_count)) === 'zelfde') {
-    payload.neem_los_recept_over = [los.id];
+  // Wegklikken is annuleren: dan wordt er niets gepland.
+  const { keuze, los } = await kiesBijLosRecept(_plannerCfg.losse_recepten, active.id,
+                                                payload.year, payload.week, active.name);
+  if (keuze === 'annuleer') {
+    btn.disabled    = false;
+    btn.textContent = 'Bevestigen';
+    return;
   }
+  if (keuze === 'zelfde') payload.neem_los_recept_over = [los.id];
 
   try {
     const resp = await fetch('/api/planner/plan', {

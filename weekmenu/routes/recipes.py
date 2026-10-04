@@ -482,6 +482,14 @@ def edit_recipe(id):
     cookbooks = Cookbook.query.order_by(Cookbook.name).all()
 
     if request.method == 'POST':
+        # Eerst vastleggen hoe de lijst er nu voor staat, vóór welke wijziging
+        # dan ook: autoflush laat de metingen anders al het nieuwe aantal
+        # personen zien. Dan verklaart een afgeronde week zich weer lopend
+        # (chili serves 2 -> 1 opende op de live-data 13 regels uit maart-
+        # september) en ziet het meegroeien geen groei.
+        nog_open = lopende_weken()
+        voor = momentopname(recipe)
+
         recipe.name = request.form['name']
         serves_val = request.form.get('serves', '').strip()
         recipe.serves = int(serves_val) if serves_val else None
@@ -498,11 +506,6 @@ def edit_recipe(id):
             # beeld hoort er niet meer bij.
             recipe.original_image_path = None
 
-        # Vastleggen welke weken nog lopen voordat de oude regels sneuvelen:
-        # daarna is de week van dit recept per definitie leeg en zou elke
-        # afgeronde week zich weer lopend verklaren.
-        nog_open = lopende_weken()
-        voor = momentopname(recipe)
         RecipeIngredient.query.filter_by(recipe_id=recipe.id).delete()
         _lees_ingredient_rijen(recipe, nog_open, voor)
 

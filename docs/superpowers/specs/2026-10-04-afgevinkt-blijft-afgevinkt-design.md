@@ -68,7 +68,10 @@ weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
   `afgehandeld.vul_hoeveelheden_aan()` (via de ORM, na de migratie, net als
   `herstel_verloren_jobs`) elke bestaande rij met wat er op dat moment nodig
   is voor dat ingrediënt in die week, en wist de vlag. Een rij voor een
-  ingrediënt dat die week niet (meer) nodig is krijgt `{}`. Voor uitsluitingen alleen het
+  ingrediënt dat die week niet (meer) nodig is krijgt `{}`, behalve in een week
+  die geweest is: daar blijft hij `NULL` (dicht). Anders ging een oude week
+  open zodra zo'n ingrediënt de voorraad uit ging (eindreview: ketjap manis,
+  week 33–41). Voor uitsluitingen alleen het
   receptdeel, niet de losse items: die werden ook nu nooit door een ✕
   verborgen (BUG 4 FIX). Gevolg: de lijst ziet er na de migratie precies zo uit
   als ervoor. Dat wordt gemeten op een kopie van de live-database.
@@ -107,6 +110,12 @@ weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
   mee en de server maakt een tweede QuickAddItem. Staat het recept die week al
   in het weekmenu (niet als los recept), dan vraagt + Recept niets en komt het
   erbij: dat was de echte chili-week (dinsdag gepland, extra set via + Recept).
+  Wegklikken (Escape, naast het venster) is in de receptenplanner en bij
+  + Recept annuleren: er wordt niets gepland of toegevoegd. In het weekmenu
+  staat het recept dan al in het vak en komt het erbij. Klikken binnen 300 ms
+  na openen tellen niet, zodat een dubbelklik niet voor je kiest. Overnemen
+  kan alleen een los recept van hetzelfde recept dat echt in het opgeslagen
+  menu staat.
 - **Recept bewerken** (`routes/recipes.py::_laat_de_geplande_weken_kloppen`):
   sinds 7486c95 (0.8.2-beta) slaat bewerken lopende weken al over en roept het
   voor afgeronde weken `houd_de_week_afgerond` aan. In het nieuwe model:
@@ -133,6 +142,13 @@ weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
   kar") en worden per eenheid opgeteld bij die van de winnaar. Dat vervangt de
   drie gevallen in de huidige docstring.
 - **Week wissen / lijst wissen**: ongewijzigd.
+- **Eén tegelijk**: afvinken en wegklikken tellen op bij wat er al lag, dus
+  de schrijvende lijstgebaren (afvinken, ✕, terugzetten, alles afvinken, naar
+  de AH, + Recept, + Los item, plannen, week opslaan) draaien één tegelijk
+  (`afgehandeld.een_tegelijk`). Een dubbele tik op ✕ legde anders 400 g weg
+  waar 200 g open stond. De app is één proces, dus een slot volstaat.
+- **Los item**: telt alleen op bij een los item in dezelfde eenheid (2 stuks
+  sjalot plus 500 g werd '502 stuks').
 
 ### Uitzondering: uit de voorraad halen
 

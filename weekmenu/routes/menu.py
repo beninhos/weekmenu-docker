@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from weekmenu.extensions import db
 from weekmenu.models import MenuItem, Recipe, Settings
 from weekmenu.constants import DAYS, MEAL_TYPES
+from weekmenu.services import afgehandeld
 from weekmenu.services.shopping import losse_recepten
 from weekmenu.services.menu import (
     plan_recipe, update_week_menu, clear_week,
@@ -115,6 +116,7 @@ def week_menu_print(year, week):
 
 
 @bp.route('/update_menu', methods=['POST'])
+@afgehandeld.een_tegelijk
 def update_menu():
     try:
         data = request.get_json()
@@ -127,6 +129,7 @@ def update_menu():
 
 
 @bp.route('/api/planner/plan', methods=['POST'])
+@afgehandeld.een_tegelijk
 def planner_plan():
     try:
         data = request.get_json()

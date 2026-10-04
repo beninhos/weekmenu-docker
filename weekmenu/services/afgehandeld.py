@@ -9,7 +9,9 @@ de lijst staat per week: nodig - afgevinkt - weggehaald (services/shopping.py).
 er later bij komt: zo bleven rijen van voor v23 werken, en zo houdt
 sluit_af een week die geweest is dicht.
 """
+import functools
 import json
+import threading
 from datetime import date, datetime
 
 from weekmenu.extensions import db
@@ -17,6 +19,22 @@ from weekmenu.models import ShoppingCheck, ShoppingListExclusion
 
 ALLES = None
 EPS = 1e-6
+
+# Afvinken en wegklikken tellen op bij wat er al lag. Twee verzoeken die
+# dezelfde lijst lazen tellen dus dubbel: een dubbele tik op ✕ legde 200 g
+# gehakt twee keer weg, en een later gepland recept viel daarna stil van de
+# lijst. De app draait als één proces (app.py, use_reloader=False), dus een
+# slot in het proces houdt de schrijvende gebaren één voor één.
+_slot = threading.RLock()
+
+
+def een_tegelijk(view):
+    """Laat een schrijvend lijstgebaar pas lezen als het vorige klaar is."""
+    @functools.wraps(view)
+    def omhulsel(*args, **kwargs):
+        with _slot:
+            return view(*args, **kwargs)
+    return omhulsel
 
 
 def lees(rij):
@@ -137,21 +155,29 @@ def vul_hoeveelheden_aan():
     is: de lijst ziet er na het vullen precies zo uit als ervoor. Pas daarna
     zet een toevoeging alleen het nieuwe erop. Een vinkje dekt nodig, een
     kruisje het receptdeel (losse items verborg het nooit). Een rij voor iets
-    wat die week niet (meer) nodig is krijgt {}.
+    wat die week niet (meer) nodig is krijgt {} -- behalve in een week die
+    geweest is: die blijft 'alles' en dus dicht.
     """
     from weekmenu.models import Settings
     from weekmenu.services.shopping import omrekening, week_nodig
     vlag = Settings.query.filter_by(key='afgehandeld_vullen').first()
     if vlag is None:
         return 0
+    iso = date.today().isocalendar()
+    deze_week = (iso[0], iso[1])
     omr, per_week, gevuld = omrekening(), {}, 0
     for model, deel in ((ShoppingCheck, 0), (ShoppingListExclusion, 1)):
         for rij in model.query.filter(model.hoeveelheden.is_(None)).all():
             wk = (rij.year, rij.week_number)
             if wk not in per_week:
                 per_week[wk] = week_nodig(wk[0], wk[1], omr)
-            bron = per_week[wk][deel]
-            _schrijf(rij, {u: h for (i, u), h in bron.items() if i == rij.ingredient_id})
+            per = {u: h for (i, u), h in per_week[wk][deel].items() if i == rij.ingredient_id}
+            if not per and wk < deze_week:
+                # Toen niet nodig (meestal: stond in de voorraad) in een week die
+                # geweest is: 'alles' laten, anders gaat die week open zodra het
+                # de kast uit gaat.
+                continue
+            _schrijf(rij, per)
             gevuld += 1
     db.session.delete(vlag)
     db.session.commit()
