@@ -809,8 +809,9 @@ def test_het_vinkje_van_de_verliezer_blijft_als_de_winnaar_die_week_niets_had(ap
     assert 'Knoflook' not in namen        # ligt al in de kar, hoort niet terug te komen
 
 
-def test_het_vinkje_van_de_winnaar_vervalt_als_de_verliezer_nog_open_stond(app):
-    """De regel wordt groter dan wat je afvinkte; dan mag hij niet verdwijnen."""
+def test_het_vinkje_van_de_winnaar_blijft_en_alleen_het_deel_van_de_verliezer_staat_open(app):
+    """Gekocht is gekocht: de 2 teen van de winnaar liggen al in de kar. Na het
+    samenvoegen staan alleen de 2 teen van de verliezer open, niet alle 4."""
     winnaar, verliezer = _knoflookpaar()
     _twee_recepten_in_het_menu(winnaar, verliezer)
     jaar, week = _week_van(VANDAAG)
@@ -819,9 +820,10 @@ def test_het_vinkje_van_de_winnaar_vervalt_als_de_verliezer_nog_open_stond(app):
 
     voeg_samen(verliezer.id, winnaar.id)
 
-    assert ShoppingCheck.query.count() == 0
-    namen = [x['name'] for x in build_combined_shopping_list(today=VANDAAG)['open']]
-    assert 'Knoflook' in namen
+    assert ShoppingCheck.query.count() == 1
+    rij = next(x for x in build_combined_shopping_list(today=VANDAAG)['open']
+               if x['name'] == 'Knoflook')
+    assert (rij['amount'], rij['unit']) == (2, 'teen')
 
 
 def test_het_vinkje_van_de_winnaar_blijft_in_een_week_zonder_de_verliezer(app):

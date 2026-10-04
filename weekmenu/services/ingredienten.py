@@ -26,6 +26,7 @@ werk in deze module naartoe:
     Zie _wis_weekbesluiten, en _voorraad_volgt_de_winnaar voor dezelfde
     afweging bij de voorraadkast.
 """
+import json
 import re
 from collections import defaultdict
 
@@ -37,6 +38,8 @@ from weekmenu.models import (
     QuickAddItem, RecipeIngredient, ShoppingCheck, ShoppingListExclusion,
     ShoppingListOverride, VariantApart,
 )
+from weekmenu.services.afgehandeld import ALLES, lees
+from weekmenu.services.shopping import omrekening, week_nodig
 from weekmenu.services.units import (
     _convert_unit_for_agg, _getal, _norm_unit, _normalize_ingredient,
 )
@@ -162,15 +165,14 @@ def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
     verliezer_canoniek = verliezer.name
 
     try:
-        # Eerst de weken vastleggen waarin de verliezer op de lijst stond, want
-        # zodra zijn receptregels verhuisd zijn is dat niet meer te zien.
-        weken_verliezer = weken_op_de_lijst(verliezer_id)
-        weken_winnaar = weken_op_de_lijst(winnaar_id)
-
-        # Dan de betekenis van de regels vastzetten, vóór de conversietabellen
+        # Eerst de betekenis van de regels vastzetten, vóór de conversietabellen
         # samengaan — anders leest de winnaar ze met zijn eigen omrekening.
         omgerekend = _bevries_eenheden(verliezer, winnaar)
         db.session.flush()
+
+        # Vinkjes zonder getal ('alles') omzetten naar wat er die week nodig
+        # was, zolang verliezer en winnaar nog apart te tellen zijn.
+        _maak_vinkjes_concreet((verliezer_id, winnaar_id))
 
         verplaatst = _verhuis_receptregels(verliezer_id, winnaar_id)
 
@@ -183,7 +185,7 @@ def voeg_samen(verliezer_id, winnaar_id, ah_van_id=None):
             _verhuis_unieke_rijen(model, sleutelvelden, verliezer_id, winnaar_id)
 
         _voorraad_volgt_de_winnaar(verliezer_id)
-        _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer, weken_winnaar)
+        _wis_weekbesluiten(verliezer_id, winnaar_id)
 
         # Handmatige boodschappen hebben geen UNIQUE: twee rijen voor dezelfde
         # week zouden blijven staan en dubbel meetellen. Optellen dus.
@@ -420,58 +422,54 @@ def weken_op_de_lijst(ingredient_id):
     return weken
 
 
-def _wis_weekbesluiten(verliezer_id, winnaar_id, weken_verliezer, weken_winnaar):
-    """Weekbesluiten gaan over een regel op de lijst, niet over een ingredient.
+def _maak_vinkjes_concreet(ingredient_ids):
+    """Een vinkje zonder getal betekent 'alles'; bij samenvoegen moet het een
+    getal worden, anders dekt het straks ook het deel van de andere."""
+    omr = omrekening()
+    for rij in ShoppingCheck.query.filter(ShoppingCheck.ingredient_id.in_(ingredient_ids)).all():
+        if lees(rij) is ALLES:
+            nodig = week_nodig(rij.year, rij.week_number, omr)[0]
+            rij.hoeveelheden = json.dumps({u: h for (i, u), h in nodig.items()
+                                           if i == rij.ingredient_id})
 
-    De regel van de verliezer verdwijnt met deze samenvoeging, dus verdwijnen
-    zijn besluiten mee. 'Bosui deze week niet nodig' is geen 'Lente-Ui deze week
-    niet nodig': verhuizen maakt een besluit dat je nooit genomen hebt, en doet
-    dat onzichtbaar — de regel valt gewoon van de lijst en je merkt het pas in
-    de winkel. Weggooien laat hooguit iets terugkomen dat je al weggeklikt had;
-    dát zie je, en wegklikken kost één tik.
 
-    De besluiten van de winnaar blijven staan. Die regel bestaat nog, onder
-    dezelfde naam, en 'deze week even niet' of 'ik koop er drie' gaat over het
-    product — precies wat je met het samenvoegen bevestigt.
+def _wis_weekbesluiten(verliezer_id, winnaar_id):
+    """Besluiten gaan over een regel, vinkjes over wat er in de kar ligt.
 
-    Afvinken ligt nét anders. Een vinkje is geen besluit over de lijst maar een
-    feit: dit ligt al in de kar. De vraag is dus niet van wie het vinkje was,
-    maar of het de regel dekt die na de samenvoeging overblijft.
+    Een ✕ of een aantal van de verliezer gaat weg met zijn regel: 'Bosui deze
+    week niet nodig' is geen 'Lente-Ui deze week niet nodig'. Verhuizen maakt
+    een besluit dat je nooit genomen hebt, en doet dat onzichtbaar — de regel
+    valt gewoon van de lijst en je merkt het pas in de winkel. Weggooien laat
+    hooguit iets terugkomen dat je al weggeklikt had; dát zie je, en
+    wegklikken kost één tik.
 
-    Drie gevallen, en ze volgen allemaal uit die ene vraag:
-    - Allebei afgevinkt: samen dekken ze de hele regel. Eén vinkje blijft.
-    - De winnaar afgevinkt terwijl de verliezer die week nog open stond: de
-      regel wordt groter dan wat je afvinkte, dus het vinkje dekt hem niet meer
-      en gaat eraf — anders verdwijnt het deel dat je nog moet halen uit zicht.
-    - De verliezer afgevinkt terwijl de WINNAAR die week niets had: dan is de
-      samengevoegde regel letterlijk de regel van de verliezer, even groot, en
-      dekt zijn vinkje hem precies. Het verhuist mee. Gemeten op de echte data
-      ging het bij alle vijf de kaarten die een vinkje wisten om juist dit
-      geval: er kwam telkens iets terug op de lijst dat allang in de kar lag.
+    Een vinkje is een feit: dit ligt al in de kar. Het telt daarom per eenheid
+    op bij dat van de winnaar. Zo blijft gekocht gekocht en staat alleen het
+    deel open dat nog niemand afvinkte; dat vervangt de drie gevallen die nodig
+    waren zolang een vinkje geen getal had. Een leeg vinkje (de verliezer had
+    die week niets meer nodig) is een overblijfsel en gaat weg.
     """
     for model in _WEEKBESLUITEN:
         for rij in model.query.filter_by(ingredient_id=verliezer_id).all():
             db.session.delete(rij)
 
-    van_winnaar = {(r.year, r.week_number) for r
-                   in ShoppingCheck.query.filter_by(ingredient_id=winnaar_id).all()}
-
-    afgevinkt = set()
     for rij in ShoppingCheck.query.filter_by(ingredient_id=verliezer_id).all():
-        week = (rij.year, rij.week_number)
-        afgevinkt.add(week)
-        # Alleen meeverhuizen als het vinkje een regel dekt die er straks nog
-        # is: de verliezer stond die week op de lijst en de winnaar niet.
-        # Zonder regel is een vinkje een overblijfsel en gaat het gewoon weg.
-        if week in weken_verliezer and week not in weken_winnaar and week not in van_winnaar:
-            rij.ingredient_id = winnaar_id      # zelfde regel, zelfde vinkje
-        else:
+        per = lees(rij)
+        if not per:
             db.session.delete(rij)
-
-    for rij in ShoppingCheck.query.filter_by(ingredient_id=winnaar_id).all():
-        week = (rij.year, rij.week_number)
-        if week in weken_verliezer and week not in afgevinkt:
-            db.session.delete(rij)
+            continue
+        doel = ShoppingCheck.query.filter_by(year=rij.year, week_number=rij.week_number,
+                                             ingredient_id=winnaar_id).first()
+        if doel is None:
+            rij.ingredient_id = winnaar_id
+            continue
+        som = dict(lees(doel))
+        for eenheid, hoeveel in per.items():
+            som[eenheid] = som.get(eenheid, 0) + hoeveel
+        doel.hoeveelheden = json.dumps(som)
+        doel.checked_at = max(doel.checked_at, rij.checked_at)
+        doel.via_ah = bool(doel.via_ah) or bool(rij.via_ah)
+        db.session.delete(rij)
 
 
 def _voorraad_volgt_de_winnaar(verliezer_id):
