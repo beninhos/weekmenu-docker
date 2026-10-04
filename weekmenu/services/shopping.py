@@ -185,6 +185,17 @@ def _week_stand(jaar, week, omr, checks, excls):
     return stand, bronnen
 
 
+def losse_recepten(jaar=None, week=None):
+    """De losse recepten (+ Recept) zoals de pagina's ze nodig hebben, eventueel
+    van één week: voor de vraag 'is dit dezelfde maaltijd?'."""
+    query = QuickAddItem.query
+    if jaar is not None:
+        query = query.filter_by(year=jaar, week_number=week)
+    return [{'id': qi.id, 'recipe_id': qi.recipe_id, 'recipe_name': qi.recipe.name,
+             'people_count': qi.people_count, 'year': qi.year, 'week': qi.week_number}
+            for qi in query.order_by(QuickAddItem.id).all() if qi.recipe]
+
+
 def weken_van_recept(recipe):
     """De weken waarin dit recept boodschappen levert."""
     weken = {(mi.year, mi.week_number) for mi in
@@ -330,15 +341,7 @@ def build_combined_shopping_list(today=None):
         row.update(soort=soort, via_ah=b['via_ah'], checked_at=b['checked_at'])
         checked_rows.append(row)
 
-    quick_add = []
-    if weken:
-        for qi in QuickAddItem.query.filter(
-                db.tuple_(QuickAddItem.year, QuickAddItem.week_number).in_(weken)).all():
-            if qi.recipe:
-                quick_add.append({'id': qi.id, 'recipe_id': qi.recipe_id,
-                                  'recipe_name': qi.recipe.name,
-                                  'people_count': qi.people_count,
-                                  'year': qi.year, 'week': qi.week_number})
+    quick_add = losse_recepten()
 
     return {'open': open_rows, 'checked': checked_rows,
             'open_per_week': dict(open_per_week),

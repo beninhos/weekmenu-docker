@@ -72,6 +72,17 @@ function fillDayDates(week, year) {
 
 // ── Menu opslaan ────────────────────────────────────────────────────────────
 
+// Losse recepten die bij het opslaan opgaan in het weekmenu ('zelfde maaltijd').
+const teOvernemen = new Set();
+
+// Een vak kreeg een recept: staat het deze week al als los recept op de
+// boodschappenlijst, vraag dan of het dezelfde maaltijd is.
+async function vraagBijLosRecept(recipeId, naam) {
+    const los = losRecept(_pageData.losseRecepten, recipeId, _pageData.year, _pageData.week);
+    if (!los || teOvernemen.has(los.id)) return;
+    if ((await vraagZelfdeMaaltijd(naam, los.people_count)) === 'zelfde') teOvernemen.add(los.id);
+}
+
 const updateMenu = async () => {
     const menu = [];
     for (let day = 0; day < 7; day++) {
@@ -91,9 +102,14 @@ const updateMenu = async () => {
         const response = await fetch('/update_menu', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ week: _pageData.week, year: _pageData.year, menu: menu })
+            body: JSON.stringify({ week: _pageData.week, year: _pageData.year, menu: menu,
+                                   neem_los_recept_over: [...teOvernemen] })
         });
-        if (response.ok) showSaveStatus();
+        if (response.ok) {
+            _pageData.losseRecepten = _pageData.losseRecepten.filter(q => !teOvernemen.has(q.id));
+            teOvernemen.clear();
+            showSaveStatus();
+        }
         else console.error('Error saving menu');
     } catch (error) {
         console.error('Error:', error);
@@ -156,7 +172,7 @@ function showDropdown(searchInput, filteredRecipes) {
     dropdown.classList.remove('hidden');
 
     dropdown.querySelectorAll('.recipe-option').forEach(option => {
-        option.addEventListener('click', () => {
+        option.addEventListener('click', async () => {
             const recipeId     = option.dataset.recipeId;
             const recipeName   = option.dataset.recipeName;
             const cookbookAbbr = option.dataset.cookbookAbbr;
@@ -170,6 +186,7 @@ function showDropdown(searchInput, filteredRecipes) {
             updateRecipeInfo(searchInput, cookbookAbbr, page);
 
             dropdown.classList.add('hidden');
+            await vraagBijLosRecept(recipeId, recipeName);
             debouncedUpdate();
         });
     });
@@ -303,22 +320,23 @@ document.getElementById('cancelModal').addEventListener('click', () => {
 });
 
 document.querySelectorAll('.meal-select-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        if (!selectedRecipeForModal) return;
+    btn.addEventListener('click', async () => {
+        const gekozen = selectedRecipeForModal;
+        if (!gekozen) return;
+        selectedRecipeForModal = null;
+        document.getElementById('recipeModal').classList.add('hidden');
         const day  = parseInt(btn.dataset.day);
         const meal = btn.dataset.meal;
         const searchInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].recipe-search`);
         const hiddenInput = document.querySelector(`[data-day="${day}"][data-meal="${meal}"].meal-input`);
-        if (searchInput && hiddenInput) {
-            searchInput.value = selectedRecipeForModal.name;
-            hiddenInput.value = selectedRecipeForModal.id;
-            searchInput.classList.add('has-recipe');
-            setPeopleCount(searchInput, selectedRecipeForModal.id);
-            updateRecipeInfo(searchInput, selectedRecipeForModal.cookbook_abbr, selectedRecipeForModal.page);
-            debouncedUpdate();
-        }
-        document.getElementById('recipeModal').classList.add('hidden');
-        selectedRecipeForModal = null;
+        if (!searchInput || !hiddenInput) return;
+        searchInput.value = gekozen.name;
+        hiddenInput.value = gekozen.id;
+        searchInput.classList.add('has-recipe');
+        setPeopleCount(searchInput, gekozen.id);
+        updateRecipeInfo(searchInput, gekozen.cookbook_abbr, gekozen.page);
+        await vraagBijLosRecept(gekozen.id, gekozen.name);
+        debouncedUpdate();
     });
 });
 

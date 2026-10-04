@@ -204,8 +204,10 @@
 { "recipes":       {{ recipes_json | safe }},
   "defaultServes": {{ default_serves or 'null' }},
   "year":          {{ year }},
-  "week":          {{ week }} }
+  "week":          {{ week }},
+  "losseRecepten": {{ losse_recepten | tojson }} }
 </script>
+<script src="{{ url_for('static', filename='js/zelfde-maaltijd.js') }}"></script>
 <script src="{{ url_for('static', filename='js/week_menu.js') }}"></script>
 {% endblock %}
 

@@ -85,11 +85,24 @@ async function addExtra() {
     }
     if (!recipeId) { alert('Kies een recept uit de suggesties'); return; }
     const people = parseInt(document.getElementById('extraPeople').value) || 4;
+    // Staat dit recept deze week al als los recept op de lijst? Dan vragen:
+    // zelfde maaltijd past het aantal aan, anders komt er een tweede bij.
+    let erbij = false;
+    const los = losRecept(_pageData.losseRecepten, recipeId, _pageData.year, _pageData.week);
+    if (los) {
+        const naam = (RECIPES.find(r => r.id === recipeId) || {}).name || los.recipe_name;
+        erbij = (await vraagZelfdeMaaltijd(naam, los.people_count)) !== 'zelfde';
+    }
     const resp = await fetch('/api/boodschappen/extra', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipe_id: recipeId, people_count: people }),
+        body: JSON.stringify({ recipe_id: recipeId, people_count: people, erbij }),
     });
+    if (resp.ok) location.reload();
+}
+
+async function terugzetten(ingredientId) {
+    const resp = await fetch(`/api/boodschappen/item/${ingredientId}/terugzetten`, { method: 'POST' });
     if (resp.ok) location.reload();
 }
 

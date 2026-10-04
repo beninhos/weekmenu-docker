@@ -16,7 +16,8 @@ from weekmenu.models import (
 from weekmenu.constants import PRODUCT_CATEGORIES, RECIPE_MEAL_TYPES
 from weekmenu.services import afgehandeld
 from weekmenu.services.shopping import (
-    lopende_weken, momentopname, omrekening, week_nodig, weken_van_recept,
+    losse_recepten, lopende_weken, momentopname, omrekening, week_nodig,
+    weken_van_recept,
 )
 from weekmenu.services.units import (
     _normalize_ingredient, _guess_ingredient_category, _normalize_ri_unit,
@@ -99,6 +100,7 @@ def receptenplanner():
     return render_template('receptenplanner.html',
                            recipes_json=recipes_json,
                            current_week=current_week,
+                           losse_recepten=losse_recepten(),
                            current_year=current_year,
                            default_serves=default_serves,
                            meal_types=RECIPE_MEAL_TYPES)

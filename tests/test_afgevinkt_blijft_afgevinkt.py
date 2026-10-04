@@ -442,3 +442,22 @@ def test_een_afgesloten_week_verschijnt_na_vullen_niet_in_het_afgevinkt_blok(app
     _vlag()
     afgehandeld.vul_hoeveelheden_aan()
     assert not build_combined_shopping_list()['checked']
+
+
+# ── Het scherm ────────────────────────────────────────────────────────────
+
+def test_de_pagina_geeft_de_losse_recepten_van_die_week_mee(app, client):
+    r = _chili()
+    client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 12})
+    for pad in (f'/week/{JAAR}/{WEEK}', '/boodschappen', '/receptenplanner'):
+        html = client.get(pad).get_data(as_text=True)
+        assert '"recipe_id": %d' % r.id in html, pad
+        assert 'zelfde-maaltijd.js' in html, pad
+
+
+def test_het_afgevinkt_blok_toont_weggehaald_met_een_terugzetknop(app, client):
+    r = _chili()
+    _plan(r, 2)
+    client.post(f'/api/boodschappen/item/{_ing("rundergehakt").id}/remove')
+    html = client.get('/boodschappen').get_data(as_text=True)
+    assert 'weggehaald</span>' in html and 'terugzetten(%d)' % _ing('rundergehakt').id in html

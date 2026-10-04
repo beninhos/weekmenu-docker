@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from weekmenu.extensions import db
 from weekmenu.models import MenuItem, Recipe, Settings
 from weekmenu.constants import DAYS, MEAL_TYPES
+from weekmenu.services.shopping import losse_recepten
 from weekmenu.services.menu import (
     plan_recipe, update_week_menu, clear_week,
 )
@@ -48,6 +49,7 @@ def week_menu(year, week):
         next_year=next_monday.isocalendar()[0], next_week=next_monday.isocalendar()[1],
         current_year=iso_now[0], current_week=iso_now[1],
         is_current_week=(year == iso_now[0] and week == iso_now[1]),
+        losse_recepten=losse_recepten(year, week),
     )
 
     resp = make_response(render_template('week_menu.html',

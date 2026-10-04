@@ -212,14 +212,20 @@
         <div id="checkedBlock" class="hidden mt-2">
             {% for item in checked_items %}
             <div class="flex items-center gap-2 py-2 border-b border-[#E8E4DC]">
+                {% if item.soort == 'afgevinkt' %}
                 <input type="checkbox" checked class="cursor-pointer shrink-0"
                        onchange="checkItem({{ item.ingredient_id }}, this.checked)">
+                {% endif %}
                 <span class="text-sm line-through text-[#9CA3AF]">
                     {{ item.amount_display }}{% if item.unit %} {{ item.unit }}{% endif %} {{ item.name }}
                     {% if item.recipes %}· {{ item.recipes | join(', ') }}{% endif %}
                 </span>
-                {% if item.via_ah %}
-                <span class="bg-green-100 text-green-800 rounded-full px-2 text-xs">via AH</span>
+                {% if item.soort == 'weggehaald' %}
+                <span class="bg-[#F3F0EA] text-[#6B6B6B] rounded-full px-2 text-xs shrink-0">weggehaald</span>
+                <button onclick="terugzetten({{ item.ingredient_id }})"
+                        class="ml-auto shrink-0 text-xs underline text-[#2C2C2C]">Terugzetten</button>
+                {% elif item.via_ah %}
+                <span class="bg-green-100 text-green-800 rounded-full px-2 text-xs shrink-0">via AH</span>
                 {% endif %}
             </div>
             {% endfor %}
@@ -271,8 +277,10 @@
 { "recipes":            {{ recipes_json | safe }},
   "weeksByIngredient":  {{ weeks_by_ingredient_json | safe }},
   "year":               {{ current_year }},
-  "week":               {{ current_week }} }
+  "week":               {{ current_week }},
+  "losseRecepten":      {{ losse_recepten_json | safe }} }
 </script>
+<script src="{{ url_for('static', filename='js/zelfde-maaltijd.js') }}"></script>
 <script src="{{ url_for('static', filename='js/boodschappen.js') }}"></script>
 {% endblock %}
 
