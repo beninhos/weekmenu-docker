@@ -58,11 +58,17 @@ weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
 - `shopping_check.hoeveelheden` en `shopping_list_exclusion.hoeveelheden`:
   JSON-tekst `{"<eenheid>": hoeveelheid}`, met dezelfde eenheidssleutels als de
   uitvoer van `_build_shopping_dict`. De unieke sleutel (jaar, week,
-  ingrediënt) blijft.
+  ingrediënt) blijft. `NULL` betekent "alles", ook wat er later bij komt
+  (voor een ✕: alles van het receptdeel). Dat is precies de betekenis van een
+  rij van vóór v23, en het is hoe een afgeronde week dicht blijft.
 - `shopping_list_exclusion.weggehaald_op` (datetime), zodat weggehaalde regels
   net als afgevinkte 14 dagen in het afgevinkt-blok staan.
-- **Vullen bij de migratie:** elke bestaande rij krijgt wat er op dat moment
-  nodig is voor dat ingrediënt in die week. Voor uitsluitingen alleen het
+- **Vullen na de migratie:** v23 voegt alleen de kolommen toe en zet, als er
+  rijen zijn, een vlag in `settings`. Bij de eerstvolgende start vult
+  `afgehandeld.vul_hoeveelheden_aan()` (via de ORM, na de migratie, net als
+  `herstel_verloren_jobs`) elke bestaande rij met wat er op dat moment nodig
+  is voor dat ingrediënt in die week, en wist de vlag. Een rij voor een
+  ingrediënt dat die week niet (meer) nodig is krijgt `{}`. Voor uitsluitingen alleen het
   receptdeel, niet de losse items: die werden ook nu nooit door een ✕
   verborgen (BUG 4 FIX). Gevolg: de lijst ziet er na de migratie precies zo uit
   als ervoor. Dat wordt gemeten op een kopie van de live-database.
@@ -80,7 +86,10 @@ weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
   gewoon bovenop.
 - **Terugzetten** (afgevinkt-blok): afgevinkt resp. weggehaald voor dat
   ingrediënt naar nul, voor precies de week-rijen waarvan het blok de
-  hoeveelheid toont (de laatste 14 dagen). Oudere weken blijven dicht.
+  hoeveelheid toont (de laatste 14 dagen). Oudere weken blijven dicht. Nu
+  wist het vinkje uitzetten álle weken: gemeten op een kopie van de
+  live-database kwam kidneybonen daarna terug als 9 + 1 blik (week 13, 18, 33
+  en 40) in plaats van 7.
 - **Plannen met uitgevinkte ingrediënten** (`plan_recipe`, "heb ik al"):
   `weggehaald += de hoeveelheid van dít recept`, niet meer de hele week.
 - **Plannen, + Recept, + Los item, week opslaan** (`plan_recipe`,
@@ -101,8 +110,9 @@ weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
 - **Recept bewerken** (`routes/recipes.py::_laat_de_geplande_weken_kloppen`):
   sinds 7486c95 (0.8.2-beta) slaat bewerken lopende weken al over en roept het
   voor afgeronde weken `houd_de_week_afgerond` aan. In het nieuwe model:
-  - afgeronde week: `houd_de_week_afgerond` vult afgevinkt aan tot wat nodig
-    is, zodat er niets uit augustus opduikt;
+  - afgeronde week: `houd_de_week_afgerond` zet het vinkje op "alles"
+    (`NULL`, met de maandag van die week als datum), zodat er niets uit
+    augustus opduikt en het niet in het afgevinkt-blok verschijnt;
   - lopende week: zonder ingreep zou de rekenregel een grotere hoeveelheid
     vanzelf als open tonen. Daarom groeit het al afgehandelde deel mee: stond
     het ingrediënt al in het recept en wordt het meer, dan krijgt afgevinkt er
@@ -155,9 +165,14 @@ weggehaald voor dat ingrediënt wissen (het enige resterende gebruik van
   recept waarvoor je het wegklikte verdwijnt.
 - **Eenheid veranderd.** Komt een opgeslagen eenheid niet meer voor (andere
   voorkeurseenheid, conversie aangepast), dan rekent de app om via dezelfde
-  conversietabel als de lijst. Lukt dat niet, dan telt het vinkje voor de hele
-  week van dat ingrediënt (dicht) en schrijft de app een logregel. Liever een
-  regel te weinig in beeld dan iets kopen wat al in de kar lag.
+  conversietabel als de lijst; zijn het allebei gewichts- of volume-eenheden,
+  dan telt hij mee zoals de lijst ze ook samenvoegt. Lukt dat niet, dan telt
+  dat deel van het vinkje niet mee en schrijft de app een logregel. Liever een
+  regel die je nog eens afvinkt dan een regel die stil verdwijnt: dezelfde
+  keuze als in `_wis_weekbesluiten` ("dát zie je, en wegklikken kost één
+  tik"). Voorbeeld waar 'dekt alles' misgaat: 2 ui (stuks, los item)
+  afgevinkt, los item weg, recept met 100 g ui erbij — dan zou de ui stil
+  wegvallen.
 
 ## Opruimen (schone code)
 
