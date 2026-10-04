@@ -74,7 +74,7 @@ weggehaald juist laat meegroeien, zodat "gekocht is gekocht" ook dan geldt
   nu. `checked_at` wordt nu. De aantal-override (`ShoppingListOverride`) van die
   week vervalt: die hoorde bij wat nu gekocht is. Het bestel-log krijgt, zoals
   nu, de open hoeveelheid.
-- **✕ weghalen** (`boodschappen_remove`, `exclude_shopping_item`):
+- **✕ weghalen** (`boodschappen_remove`):
   `weggehaald += open`, `weggehaald_op` wordt nu. Losse items worden niet
   meer verwijderd; het getal dekt ze. Een later toegevoegd los item komt dan
   gewoon bovenop.
@@ -158,6 +158,24 @@ weggehaald voor dat ingrediënt wissen (het enige resterende gebruik van
   conversietabel als de lijst. Lukt dat niet, dan telt het vinkje voor de hele
   week van dat ingrediënt (dicht) en schrijft de app een logregel. Liever een
   regel te weinig in beeld dan iets kopen wat al in de kar lag.
+
+## Opruimen (schone code)
+
+Gevonden bij de controle van 4 okt op `main` (61965fb), in het deel dat dit
+ontwerp toch omgooit:
+
+- **Dode routes**, zonder aanroeper in de frontend of de tests:
+  `exclude_shopping_item` (`/api/shopping-list/<j>/<w>/item/<id>/exclude`) en
+  `clear_shopping_list` (`/api/shopping-list/<j>/<w>/clear`), plus
+  `services/menu.py::clear_shopping_list`. Ze schrijven uitsluitingen buiten
+  de nieuwe rekenregel om; ze gaan eruit in de eerste commit.
+- `window_weeks(today)` gebruikt `today` niet meer (`del today`): parameter
+  weg, aanroepers mee.
+- Docstrings en commentaar die de oude regel uitleggen (`window_weeks`,
+  `zet_terug_op_de_lijst`, `update_week_menu`, `boodschappen_extra_add`)
+  herschrijven naar de nieuwe regel.
+- `routes/ah.py` (AH-winkelmand) leest ook `build_combined_shopping_list()['open']`.
+  Daar telt straks vanzelf alleen het open deel; een test legt dat vast.
 
 ## Tests
 
