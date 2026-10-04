@@ -81,6 +81,10 @@ def create_app():
         db.create_all()
         from weekmenu.migrations import migrate_db
         migrate_db()
+        # v23 voegde getallen toe aan vinkjes en kruisjes; bestaande rijen
+        # krijgen eenmalig wat er toen nodig was (zie services/afgehandeld.py).
+        from weekmenu.services.afgehandeld import vul_hoeveelheden_aan
+        vul_hoeveelheden_aan()
         # Als de vorige start midden in een dump-batch is afgebroken, laat de
         # dump-pagina niet eeuwig staan te polten op een dode thread.
         from weekmenu.services.dump import herstel_verloren_jobs

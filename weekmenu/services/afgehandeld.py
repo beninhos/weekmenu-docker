@@ -128,3 +128,32 @@ def groei_mee(jaar, week, ingredient_id, eenheid, extra, nodig_oud):
         per = lees(rij)
         per[eenheid] = deel + erbij * deel / totaal
         _schrijf(rij, per)
+
+
+def vul_hoeveelheden_aan():
+    """Eenmalig na v23: elke rij zonder getal krijgt wat er toen nodig was.
+
+    Een rij van voor v23 betekende 'alles' en blijft dat doen tot hij gevuld
+    is: de lijst ziet er na het vullen precies zo uit als ervoor. Pas daarna
+    zet een toevoeging alleen het nieuwe erop. Een vinkje dekt nodig, een
+    kruisje het receptdeel (losse items verborg het nooit). Een rij voor iets
+    wat die week niet (meer) nodig is krijgt {}.
+    """
+    from weekmenu.models import Settings
+    from weekmenu.services.shopping import omrekening, week_nodig
+    vlag = Settings.query.filter_by(key='afgehandeld_vullen').first()
+    if vlag is None:
+        return 0
+    omr, per_week, gevuld = omrekening(), {}, 0
+    for model, deel in ((ShoppingCheck, 0), (ShoppingListExclusion, 1)):
+        for rij in model.query.filter(model.hoeveelheden.is_(None)).all():
+            wk = (rij.year, rij.week_number)
+            if wk not in per_week:
+                per_week[wk] = week_nodig(wk[0], wk[1], omr)
+            bron = per_week[wk][deel]
+            _schrijf(rij, {u: h for (i, u), h in bron.items() if i == rij.ingredient_id})
+            gevuld += 1
+    db.session.delete(vlag)
+    db.session.commit()
+    print(f'[afgehandeld] {gevuld} vinkjes en kruisjes gevuld met hun hoeveelheid')
+    return gevuld

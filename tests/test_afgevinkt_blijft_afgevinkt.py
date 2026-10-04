@@ -394,3 +394,51 @@ def test_recept_inkorten_zet_niets_terug(app, client):
     client.post('/api/boodschappen/check-all')
     _bewerk(client, r, [('kidneybonen', 0.5, 'blik'), ('rundergehakt', 200, 'g')])
     assert _open('kidneybonen') == 0 and _open('rundergehakt') == 0
+
+
+# ── Eenmalig vullen na v23 ────────────────────────────────────────────────
+
+def _vlag():
+    from weekmenu.models import Settings
+    db.session.add(Settings(key='afgehandeld_vullen', value='1'))
+    db.session.commit()
+
+
+def test_vullen_laat_de_lijst_gelijk_en_toevoegen_zet_daarna_alleen_het_nieuwe_erop(app):
+    from weekmenu.models import Settings
+    r = _chili()
+    _plan(r, 2)
+    db.session.add(ShoppingCheck(year=JAAR, week_number=WEEK,
+                                 ingredient_id=_ing('kidneybonen').id))
+    db.session.add(ShoppingListExclusion(year=JAAR, week_number=WEEK,
+                                         ingredient_id=_ing('rundergehakt').id))
+    db.session.commit()
+    _vlag()
+    voor = build_combined_shopping_list()['open']
+
+    assert afgehandeld.vul_hoeveelheden_aan() == 2
+
+    assert build_combined_shopping_list()['open'] == voor
+    assert Settings.query.filter_by(key='afgehandeld_vullen').first() is None
+    _plan(r, 12, dag=6)
+    assert _open('kidneybonen') == 6
+    assert _open('rundergehakt') == 1200
+
+
+def test_vullen_zonder_vlag_doet_niets(app):
+    db.session.add(ShoppingCheck(year=JAAR, week_number=WEEK, ingredient_id=1))
+    db.session.commit()
+    assert afgehandeld.vul_hoeveelheden_aan() == 0
+    assert afgehandeld.lees(ShoppingCheck.query.one()) is afgehandeld.ALLES
+
+
+def test_een_afgesloten_week_verschijnt_na_vullen_niet_in_het_afgevinkt_blok(app):
+    r = _chili()
+    _plan(r, 2, week=32, jaar=2026)
+    db.session.add(ShoppingCheck(year=2026, week_number=32,
+                                 ingredient_id=_ing('kidneybonen').id,
+                                 checked_at=datetime(2026, 8, 3, 12)))
+    db.session.commit()
+    _vlag()
+    afgehandeld.vul_hoeveelheden_aan()
+    assert not build_combined_shopping_list()['checked']
