@@ -13,7 +13,6 @@ from weekmenu.services.shopping import (
 )
 from weekmenu.services import afgehandeld
 from weekmenu.services.units import _normalize_ri_unit
-from weekmenu.services.menu import zet_terug_op_de_lijst
 
 bp = Blueprint('shopping', __name__)
 
@@ -211,10 +210,11 @@ def boodschappen_extra_add():
         return jsonify({'status': 'error', 'message': 'Recept niet gevonden'}), 404
     iso = date.today().isocalendar()
     personen = body.get('people_count') or recipe.serves or 4
-    # Hetzelfde recept nog eens toevoegen in dezelfde week is 'laat me opnieuw
-    # kijken', geen tweede portie: stapelen verdubbelde stil de hoeveelheden
-    # juist in het gebaar waarmee je ze wilde controleren.
-    qi = QuickAddItem.query.filter_by(
+    # Staat het recept deze week al als los recept op de lijst, dan vroeg de
+    # client of het dezelfde maaltijd is: ja past het aantal personen aan, nee
+    # (erbij) maakt een tweede los recept. Toevoegen zet alleen het nieuwe op
+    # de lijst; wat al afgevinkt of weggehaald is blijft dat.
+    qi = None if body.get('erbij') else QuickAddItem.query.filter_by(
         recipe_id=recipe.id, year=iso[0], week_number=iso[1]).first()
     if qi:
         qi.people_count = personen
@@ -222,11 +222,6 @@ def boodschappen_extra_add():
         qi = QuickAddItem(recipe_id=recipe.id, people_count=personen,
                           year=iso[0], week_number=iso[1])
         db.session.add(qi)
-    # Toevoegen is 'opnieuw erop zetten', net als plannen: een eerder afgevinkt
-    # of weggehaald ingredient hoort weer open te staan. Zonder dit verdween een
-    # zojuist toegevoegd recept regelrecht in het afgevinkt-blok, of helemaal.
-    for ri in recipe.ingredients:
-        zet_terug_op_de_lijst(iso[0], iso[1], ri.ingredient_id)
     db.session.commit()
     return jsonify({'status': 'success', 'id': qi.id})
 

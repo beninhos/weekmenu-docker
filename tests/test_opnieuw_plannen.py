@@ -1,14 +1,17 @@
-"""Rutgers regel: 'alles wat ik afvink gaat van de lijst — tot ik het opnieuw
-erop zet.' Een recept (opnieuw) plannen moet zijn ingrediënten dus terug op
-de open lijst zetten, ook als ze in die week al afgevinkt of uitgesloten waren.
-En de recepthint hoort alleen recepten te noemen waarvoor de regel nog open is.
+"""Plannen en de lijst: wat afgevinkt is blijft dat, de recepthint klopt.
+
+Sinds 4 okt 2026 zet opnieuw plannen niets meer terug (Rutger: 'Voeg ik iets
+opnieuw toe, moet dat geen impact hebben op wat ik eerder heb gedaan'); de
+gedragstests daarvoor staan in test_afgevinkt_blijft_afgevinkt.py. Hier blijft
+wat daaromheen hoort: een week opnieuw opslaan, de recepthint, de winkelmand,
+alles afvinken in één pas, en de grens tussen weken.
 """
 from weekmenu.extensions import db
 from weekmenu.models import (
     Ingredient, MenuItem, Recipe, RecipeIngredient,
-    ShoppingCheck, ShoppingListExclusion,
+    ShoppingCheck,
 )
-from weekmenu.services.menu import plan_recipe, update_week_menu
+from weekmenu.services.menu import update_week_menu
 from weekmenu.services.shopping import build_combined_shopping_list
 
 
@@ -35,18 +38,6 @@ def _menu(day, recipe_id):
     return [{'day': day, 'meals': {'diner': {'recipe_id': recipe_id, 'people_count': 2}}}]
 
 
-def test_nieuw_recept_via_weekmenu_maakt_afgevinkt_ingredient_weer_open(app):
-    r, ing = _mk_recipe('Nasi', 'kroepoek', 75)
-    # Week 38 al naar de AH gestuurd: kroepoek staat afgevinkt.
-    db.session.add(ShoppingCheck(year=2026, week_number=38, ingredient_id=ing.id, via_ah=True))
-    db.session.commit()
-    assert ing.id not in _open_ids(build_combined_shopping_list())
-
-    update_week_menu(38, 2026, _menu(1, r.id))
-
-    assert ing.id in _open_ids(build_combined_shopping_list())
-
-
 def test_week_opnieuw_opslaan_zonder_nieuw_recept_laat_afgevinkt_staan(app):
     r, ing = _mk_recipe('Nasi', 'kroepoek', 75)
     update_week_menu(38, 2026, _menu(1, r.id))
@@ -57,18 +48,6 @@ def test_week_opnieuw_opslaan_zonder_nieuw_recept_laat_afgevinkt_staan(app):
     update_week_menu(38, 2026, _menu(3, r.id))
 
     assert ing.id not in _open_ids(build_combined_shopping_list())
-
-
-def test_plan_recipe_maakt_afgevinkt_en_uitgesloten_ingredient_weer_open(app):
-    r, ing = _mk_recipe('Nasi', 'sambal', 2, unit='el')
-    ri = r.ingredients[0]
-    db.session.add(ShoppingCheck(year=2026, week_number=38, ingredient_id=ing.id, via_ah=True))
-    db.session.add(ShoppingListExclusion(year=2026, week_number=38, ingredient_id=ing.id))
-    db.session.commit()
-
-    plan_recipe(r.id, 1, 'diner', 38, 2026, 2, [ri.id])
-
-    assert ing.id in _open_ids(build_combined_shopping_list())
 
 
 def test_recepthint_noemt_alleen_recepten_waarvoor_de_regel_open_is(app):
@@ -110,18 +89,6 @@ def test_winkelmand_nodig_volgt_de_open_boodschappenlijst(app, client, monkeypat
     assert needed == {ing_nieuw.id}, 'afgevinkte orzo van week 37 hoort niet als "nog nodig"'
 
 
-def test_ander_aantal_personen_zet_afgevinkt_recept_terug_op_de_lijst(app):
-    r, ing = _mk_recipe('Nasi', 'kroepoek', 75)
-    update_week_menu(38, 2026, _menu(1, r.id))
-    db.session.add(ShoppingCheck(year=2026, week_number=38, ingredient_id=ing.id, via_ah=True))
-    db.session.commit()
-
-    update_week_menu(38, 2026, [{'day': 1, 'meals': {'diner': {'recipe_id': r.id, 'people_count': 4}}}])
-
-    row = next((x for x in build_combined_shopping_list()['open'] if x['ingredient_id'] == ing.id), None)
-    assert row is not None and row['amount'] == 75
-
-
 def test_alles_afvinken_bouwt_de_lijst_een_keer_en_vinkt_alles_af(app, client, monkeypatch):
     from weekmenu.routes import shopping as route
     r1, ing1 = _mk_recipe('Nasi', 'kroepoek', 75)
@@ -144,69 +111,14 @@ def test_alles_afvinken_bouwt_de_lijst_een_keer_en_vinkt_alles_af(app, client, m
 
 
 # ── Opnieuw toevoegen vanaf de boodschappenlijst zelf ──────────────────────
-# Dezelfde regel geldt voor de gebaren op /boodschappen: afvinken of weghalen
-# is geen blijvend oordeel. Rutger haalt een regel juist weg om hem opnieuw toe
-# te voegen en zo te controleren wat er nodig is; dat gebaar moet altijd werken.
+# Toevoegen zet alleen de nieuwe hoeveelheid op de lijst, ook voor een los item.
 
 def _iso():
     from datetime import date
     return date.today().isocalendar()
 
 
-def test_los_recept_toevoegen_zet_afgevinkt_ingredient_weer_open(app, client):
-    r, ing = _mk_recipe('Mexicaanse soep', 'tortillachips', 200)
-    jaar, week = _iso()[0], _iso()[1]
-    db.session.add(ShoppingCheck(year=jaar, week_number=week, ingredient_id=ing.id))
-    db.session.commit()
-
-    assert client.post('/api/boodschappen/extra',
-                       json={'recipe_id': r.id, 'people_count': 4}).status_code == 200
-
-    assert ing.id in _open_ids(build_combined_shopping_list())
-
-
-def test_los_recept_toevoegen_haalt_de_uitsluiting_van_zijn_ingredient_weg(app, client):
-    r, ing = _mk_recipe('Mexicaanse soep', 'jalapeno', 1, unit='stuks')
-    jaar, week = _iso()[0], _iso()[1]
-    db.session.add(ShoppingListExclusion(year=jaar, week_number=week, ingredient_id=ing.id))
-    db.session.commit()
-
-    assert client.post('/api/boodschappen/extra',
-                       json={'recipe_id': r.id, 'people_count': 4}).status_code == 200
-
-    assert ing.id in _open_ids(build_combined_shopping_list())
-
-
-def test_afvinken_en_opnieuw_toevoegen_is_gewoon_een_rondje(app, client):
-    r, ing = _mk_recipe('Mexicaanse soep', 'cheddar', 100)
-    qid = client.post('/api/boodschappen/extra',
-                      json={'recipe_id': r.id, 'people_count': 4}).get_json()['id']
-    assert ing.id in _open_ids(build_combined_shopping_list())
-
-    client.post(f'/api/boodschappen/item/{ing.id}/check', json={'checked': True})
-    assert ing.id not in _open_ids(build_combined_shopping_list())
-
-    client.delete(f'/api/boodschappen/extra/{qid}')
-    client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 4})
-
-    assert ing.id in _open_ids(build_combined_shopping_list())
-
-
-def test_weggehaalde_regel_komt_terug_door_het_recept_opnieuw_toe_te_voegen(app, client):
-    r, ing = _mk_recipe('Mexicaanse soep', 'verse koriander', 1, unit='stuks')
-    qid = client.post('/api/boodschappen/extra',
-                      json={'recipe_id': r.id, 'people_count': 4}).get_json()['id']
-
-    client.post(f'/api/boodschappen/item/{ing.id}/remove')
-    assert ing.id not in _open_ids(build_combined_shopping_list())
-
-    client.delete(f'/api/boodschappen/extra/{qid}')
-    client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 4})
-
-    assert ing.id in _open_ids(build_combined_shopping_list())
-
-
-def test_handmatig_item_opnieuw_toevoegen_na_afvinken_staat_weer_open(app, client):
+def test_handmatig_item_opnieuw_toevoegen_zet_alleen_het_nieuwe_erop(app, client):
     ing = Ingredient(name='limoen', display_name='Limoen', category='groente')
     db.session.add(ing)
     db.session.commit()
@@ -221,7 +133,8 @@ def test_handmatig_item_opnieuw_toevoegen_na_afvinken_staat_weer_open(app, clien
     assert client.post(pad, json={'ingredient_id': ing.id, 'amount': 2,
                                   'unit': 'stuks'}).status_code == 200
 
-    assert ing.id in _open_ids(build_combined_shopping_list())
+    row = next(x for x in build_combined_shopping_list()['open'] if x['ingredient_id'] == ing.id)
+    assert row['amount'] == 2, 'alleen het nieuwe, niet ook de al afgevinkte 2'
 
 
 def test_opnieuw_toevoegen_laat_de_boodschappen_van_een_andere_week_afgevinkt(app, client):

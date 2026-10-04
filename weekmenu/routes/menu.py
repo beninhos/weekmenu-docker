@@ -116,7 +116,8 @@ def week_menu_print(year, week):
 def update_menu():
     try:
         data = request.get_json()
-        update_week_menu(data['week'], data['year'], data['menu'])
+        update_week_menu(data['week'], data['year'], data['menu'],
+                         data.get('neem_los_recept_over') or [])
         return jsonify({'status': 'success'})
     except Exception as e:
         db.session.rollback()
@@ -135,7 +136,8 @@ def planner_plan():
         people_count = int(data.get('people_count') or 4)
         ingredient_ids = [int(i) for i in data.get('ingredient_ids', [])]
 
-        plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_ids)
+        plan_recipe(recipe_id, day, meal_type, week, year, people_count, ingredient_ids,
+                    data.get('neem_los_recept_over') or [])
         return jsonify({'status': 'success'})
 
     except Exception as e:

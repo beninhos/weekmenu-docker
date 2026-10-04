@@ -393,7 +393,7 @@ def _laat_de_geplande_weken_kloppen(recipe, nog_open=None):
     In een week die geweest is hoort hij dicht te blijven: een ingredient dat je
     nu toevoegt zou daar als losse regel uit augustus op de lijst verschijnen.
     """
-    from weekmenu.services.menu import houd_de_week_afgerond
+    from weekmenu.services import afgehandeld
 
     weken = {(mi.year, mi.week_number) for mi
              in MenuItem.query.filter_by(recipe_id=recipe.id).all()
@@ -409,7 +409,7 @@ def _laat_de_geplande_weken_kloppen(recipe, nog_open=None):
         if (jaar, week) in nog_open:
             continue
         for ri in recipe.ingredients:
-            houd_de_week_afgerond(jaar, week, ri.ingredient_id)
+            afgehandeld.sluit_af(jaar, week, ri.ingredient_id)
     db.session.commit()
 
 

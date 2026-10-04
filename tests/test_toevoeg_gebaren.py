@@ -1,9 +1,9 @@
-"""Elk gebaar waarmee je iets op de lijst zet, zet het ook echt terug.
+"""De gebaren rond de lijst: los recept, bewerken, voorraad.
 
-Rutgers regel: afvinken of weghalen is geen blijvend oordeel. Voegt hij het
-daarna opnieuw toe, dan staat het er weer. Dat geldt niet alleen voor plannen
-en voor de knoppen op /boodschappen, maar ook voor de twee gebaren die er
-zijdelings hetzelfde doen: een recept bewerken, en iets uit de voorraad halen.
+Sinds 4 okt 2026 zet toevoegen alleen het nieuwe op de lijst; wat afgevinkt of
+weggehaald is blijft dat (zie test_afgevinkt_blijft_afgevinkt.py). Bewerken
+zet niets terug van wat al gekocht is. Uit de voorraad halen is het enige
+gebaar dat alles weer opent: 'ik heb het toch niet in huis'.
 
 De grens is de week: een week waarvoor je al boodschappen hebt gedaan blijft
 dicht. Anders komt de kapsalon van week 32 terug zodra je in september een

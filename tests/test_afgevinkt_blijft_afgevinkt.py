@@ -255,3 +255,95 @@ def test_terugzetten_haalt_alleen_het_kruisje_weg(app, client):
     assert client.post(f'/api/boodschappen/item/{gehakt}/terugzetten').status_code == 200
     assert _open('rundergehakt') == 200
     assert client.post(f'/api/boodschappen/item/{gehakt}/terugzetten').status_code == 404
+
+
+# ── Toevoegen zet alleen het nieuwe op de lijst ───────────────────────────
+
+def test_chili_week_los_recept_erbij_geeft_alleen_de_nieuwe_hoeveelheid(app, client):
+    r = _chili()
+    _plan(r, 2)
+    client.post('/api/boodschappen/check-all')       # dinsdag gekocht
+    assert client.post('/api/boodschappen/extra',
+                       json={'recipe_id': r.id, 'people_count': 12}).status_code == 200
+    assert _open('kidneybonen') == 6
+    assert _open('rundergehakt') == 1200
+
+
+def test_plannen_met_uitgevinkt_ingredient_haalt_alleen_dat_receptdeel_weg(app):
+    from weekmenu.services.menu import plan_recipe
+    r = _chili()
+    _plan(r, 2)
+    andere = [ri.id for ri in r.ingredients if ri.ingredient.name != 'rundergehakt']
+    plan_recipe(r.id, 6, 'diner', WEEK, JAAR, 12, andere)
+    assert _open('rundergehakt') == 200     # dinsdag nog nodig, zondag 'heb ik al'
+
+
+def test_personen_erbij_zet_alleen_het_verschil_erop(app, client):
+    from weekmenu.services.menu import update_week_menu
+
+    def menu(p):
+        return [{'day': 1, 'meals': {'diner': {'recipe_id': r.id, 'people_count': p}}}]
+
+    r = _chili()
+    update_week_menu(WEEK, JAAR, menu(2))
+    client.post('/api/boodschappen/check-all')
+    update_week_menu(WEEK, JAAR, menu(4))
+    assert _open('kidneybonen') == 1
+    update_week_menu(WEEK, JAAR, menu(2))
+    assert _open('kidneybonen') == 0
+
+
+def test_zelfde_maaltijd_neemt_het_losse_recept_over(app, client):
+    r = _chili()
+    qid = client.post('/api/boodschappen/extra',
+                      json={'recipe_id': r.id, 'people_count': 12}).get_json()['id']
+    resp = client.post('/update_menu', json={
+        'week': WEEK, 'year': JAAR, 'neem_los_recept_over': [qid],
+        'menu': [{'day': 6, 'meals': {'diner': {'recipe_id': r.id, 'people_count': 12}}}]})
+    assert resp.status_code == 200
+    assert QuickAddItem.query.count() == 0
+    assert _open('kidneybonen') == 6
+
+
+def test_zelfde_maaltijd_via_de_receptenplanner(app, client):
+    r = _chili()
+    qid = client.post('/api/boodschappen/extra',
+                      json={'recipe_id': r.id, 'people_count': 12}).get_json()['id']
+    resp = client.post('/api/planner/plan', json={
+        'recipe_id': r.id, 'day': 6, 'meal_type': 'diner', 'week': WEEK, 'year': JAAR,
+        'people_count': 12, 'ingredient_ids': [ri.id for ri in r.ingredients],
+        'neem_los_recept_over': [qid]})
+    assert resp.status_code == 200
+    assert QuickAddItem.query.count() == 0
+    assert _open('kidneybonen') == 6
+
+
+def test_een_los_recept_uit_een_andere_week_wordt_nooit_overgenomen(app, client):
+    r = _chili()
+    qi = QuickAddItem(recipe_id=r.id, people_count=12, year=JAAR, week_number=WEEK)
+    db.session.add(qi)
+    db.session.commit()
+    andere_week = WEEK + 1 if WEEK < 52 else 1
+    client.post('/update_menu', json={
+        'week': andere_week, 'year': JAAR, 'neem_los_recept_over': [qi.id],
+        'menu': [{'day': 6, 'meals': {'diner': {'recipe_id': r.id, 'people_count': 12}}}]})
+    assert QuickAddItem.query.count() == 1
+
+
+def test_plus_recept_erbij_maakt_een_tweede_los_recept(app, client):
+    r = _chili()
+    client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 12})
+    client.post('/api/boodschappen/extra',
+                json={'recipe_id': r.id, 'people_count': 4, 'erbij': True})
+    assert QuickAddItem.query.count() == 2
+    assert _open('kidneybonen') == 8
+
+
+def test_gekocht_blijft_in_huis_als_het_losse_recept_weg_en_terug_komt(app, client):
+    r = _chili()
+    qid = client.post('/api/boodschappen/extra',
+                      json={'recipe_id': r.id, 'people_count': 12}).get_json()['id']
+    client.post('/api/boodschappen/check-all')
+    client.delete(f'/api/boodschappen/extra/{qid}')
+    client.post('/api/boodschappen/extra', json={'recipe_id': r.id, 'people_count': 12})
+    assert _open('kidneybonen') == 0
