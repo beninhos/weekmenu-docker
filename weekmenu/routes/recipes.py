@@ -382,15 +382,18 @@ def _lees_ingredient_rijen(recipe, nog_open=None):
 
 
 def _laat_de_geplande_weken_kloppen(recipe, nog_open=None):
-    """Een gewijzigd recept verandert de boodschappen van elke week waarin het staat.
+    """Een gewijzigd recept zet niets terug op de lijst.
 
-    In een week waarvoor je nog boodschappen moet doen hoort de wijziging
-    zichtbaar te worden -- anders pas je het recept aan en verandert er niets.
+    Rutger, 4 okt 2026: 'alleen ingrediënten toevoegen als ik iets op het menu
+    plan.' Wat in een lopende week al afgevinkt of weggehaald is, blijft dat;
+    een ingredient dat er nieuw bij komt heeft nooit een vinkje gehad en staat
+    vanzelf open. Eerder zette bewerken alle regels van het recept terug: het
+    inkorten van Patatje oorlog haalde de al gekochte ui en aardappelen terug,
+    en via die gedeelde regels ook het deel van de zuurkoolstamppot.
     In een week die geweest is hoort hij dicht te blijven: een ingredient dat je
-    nu toevoegt heeft daar nooit een vinkje gehad en zou als losse regel uit
-    augustus op de lijst verschijnen.
+    nu toevoegt zou daar als losse regel uit augustus op de lijst verschijnen.
     """
-    from weekmenu.services.menu import stem_af_op_de_week
+    from weekmenu.services.menu import houd_de_week_afgerond
 
     weken = {(mi.year, mi.week_number) for mi
              in MenuItem.query.filter_by(recipe_id=recipe.id).all()
@@ -403,8 +406,10 @@ def _laat_de_geplande_weken_kloppen(recipe, nog_open=None):
     if nog_open is None:
         nog_open = lopende_weken()
     for (jaar, week) in weken:
+        if (jaar, week) in nog_open:
+            continue
         for ri in recipe.ingredients:
-            stem_af_op_de_week(jaar, week, ri.ingredient_id, nog_open)
+            houd_de_week_afgerond(jaar, week, ri.ingredient_id)
     db.session.commit()
 
 

@@ -128,7 +128,26 @@ def test_hetzelfde_recept_in_een_nieuwe_week_krijgt_wel_een_eigen_regel(app, cli
 
 # ── Recept bewerken ───────────────────────────────────────────────────────
 
-def test_recept_bewerken_zet_de_gewijzigde_regel_weer_op_de_lijst(app, client):
+def test_recept_bewerken_zet_niets_terug_wat_al_afgevinkt_is(app, client):
+    # Rutger, 4 okt 2026: 'alleen ingrediënten toevoegen als ik iets op het
+    # menu plan.' Patatje oorlog stond die week gepland en was via de AH
+    # gekocht; het inkorten van de ingrediëntenlijst zette ui, komkommer,
+    # aardappelen en sperziebonen terug -- en via de gedeelde ui- en
+    # aardappelregel ook het deel van de zuurkoolstamppot.
+    jaar, week = _huidige()
+    r = _recept('Patatje', [('ui', 1), ('komkommer', 1), ('pindakaas', 2)])
+    _plan(r, jaar, week)
+    client.post('/api/boodschappen/check-all')
+    assert _open_ids() == set()
+
+    _post_edit(client, r, [('ui', 1), ('komkommer', 1)])
+
+    assert _open_ids() == set()
+
+
+def test_recept_bewerken_laat_afgevinkt_staan_en_een_nieuw_ingredient_verschijnt(app, client):
+    # Een ingredient dat er nieuw bij komt is nooit afgevinkt; dat staat open
+    # omdat het recept gepland is, niet omdat bewerken iets terugzet.
     jaar, week = _huidige()
     r = _recept('Kapsalon', [('kipgehakt', 300)])
     _plan(r, jaar, week)
@@ -137,7 +156,7 @@ def test_recept_bewerken_zet_de_gewijzigde_regel_weer_op_de_lijst(app, client):
 
     _post_edit(client, r, [('kipgehakt', 300), ('feta', 100)])
 
-    assert {_ing('kipgehakt').id, _ing('feta').id} <= _open_ids()
+    assert _open_ids() == {_ing('feta').id}
 
 
 def test_recept_bewerken_laat_een_afgeronde_week_dicht(app, client):
