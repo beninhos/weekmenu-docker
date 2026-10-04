@@ -276,7 +276,7 @@ def test_home_ignores_cookie_week_invalid_for_year(app, client):
     assert f'/week/{iso[0]}/{iso[1]}' in resp.headers['Location']
 
 
-def test_remove_endpoint_removes_custom_item(app, client):
+def test_weghalen_haalt_een_los_item_van_de_lijst(app, client):
     ing = Ingredient(name='verwijdertest', display_name='verwijdertest', category='overig')
     db.session.add(ing)
     db.session.commit()

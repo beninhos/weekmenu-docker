@@ -198,3 +198,60 @@ def test_een_ingredient_zonder_hoeveelheid_staat_open_tot_je_het_afvinkt(app):
     assert not [x for x in lijst['open'] if x['ingredient_id'] == olie]
     assert [(x['soort'], x['amount']) for x in lijst['checked']
             if x['ingredient_id'] == olie] == [('afgevinkt', 0)]
+
+
+# ── Gebaren op /boodschappen ──────────────────────────────────────────────
+
+def test_afvinken_legt_de_open_hoeveelheid_vast_en_wist_de_aantal_override(app, client):
+    from weekmenu.models import ShoppingListOverride
+    r = _chili()
+    _plan(r, 2)
+    kb = _ing('kidneybonen')
+    db.session.add(ShoppingListOverride(year=JAAR, week_number=WEEK, ingredient_id=kb.id, qty=3))
+    db.session.commit()
+    assert client.post(f'/api/boodschappen/item/{kb.id}/check',
+                       json={'checked': True}).status_code == 200
+    assert afgehandeld.lees(ShoppingCheck.query.filter_by(ingredient_id=kb.id).one()) == {'blik': 1}
+    assert ShoppingListOverride.query.count() == 0
+    _plan(r, 12, dag=6)
+    assert _open('kidneybonen') == 6
+
+
+def test_weghalen_dekt_ook_een_los_item_zonder_het_te_verwijderen(app, client):
+    ui = _ing('ui')
+    pad = f'/api/shopping-list/{JAAR}/{WEEK}/add-item'
+    client.post(pad, json={'ingredient_id': ui.id, 'amount': 2, 'unit': 'stuks'})
+    client.post(f'/api/boodschappen/item/{ui.id}/remove')
+    assert _open('ui') == 0
+    assert CustomShoppingIngredient.query.count() == 1
+    client.post(pad, json={'ingredient_id': ui.id, 'amount': 1, 'unit': 'stuks'})
+    assert _open('ui') == 1
+
+
+def test_vinkje_uitzetten_opent_alleen_de_weken_van_de_laatste_14_dagen(app, client):
+    # Op de live-data opende dit week 13, 18 en 33 mee: 9 + 1 blik i.p.v. 7.
+    r = _chili()
+    _plan(r, 2, week=13, jaar=2026)
+    db.session.add(ShoppingCheck(year=2026, week_number=13,
+                                 ingredient_id=_ing('kidneybonen').id,
+                                 checked_at=datetime(2026, 3, 23, 12)))
+    _plan(r, 14)
+    kb = _ing('kidneybonen').id
+    client.post(f'/api/boodschappen/item/{kb}/check', json={'checked': True})
+    assert _open('kidneybonen') == 0
+    assert client.post(f'/api/boodschappen/item/{kb}/check',
+                       json={'checked': False}).status_code == 200
+    assert _open('kidneybonen') == 7
+
+
+def test_terugzetten_haalt_alleen_het_kruisje_weg(app, client):
+    r = _chili()
+    _plan(r, 2)
+    gehakt = _ing('rundergehakt').id
+    client.post(f'/api/boodschappen/item/{gehakt}/remove')
+    blok = build_combined_shopping_list()['checked']
+    assert [(x['soort'], x['amount']) for x in blok
+            if x['ingredient_id'] == gehakt] == [('weggehaald', 200)]
+    assert client.post(f'/api/boodschappen/item/{gehakt}/terugzetten').status_code == 200
+    assert _open('rundergehakt') == 200
+    assert client.post(f'/api/boodschappen/item/{gehakt}/terugzetten').status_code == 404

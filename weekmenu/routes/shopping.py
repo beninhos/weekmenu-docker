@@ -5,14 +5,13 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 
 from weekmenu.extensions import db
 from weekmenu.models import (
-    Ingredient, Recipe, ShoppingListOverride,
-    ShoppingListExclusion, CustomShoppingIngredient,
-    ShoppingCheck, QuickAddItem,
+    Ingredient, Recipe, ShoppingListOverride, CustomShoppingIngredient, QuickAddItem,
 )
 from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET, BRONNEN
 from weekmenu.services.shopping import (
     send_dict_to_ah, build_combined_shopping_list,
 )
+from weekmenu.services import afgehandeld
 from weekmenu.services.units import _normalize_ri_unit
 from weekmenu.services.menu import zet_terug_op_de_lijst
 
@@ -59,37 +58,28 @@ def boodschappen():
                                                 key=lambda x: x['checked_at'] or datetime.min,
                                                 reverse=True),
                            quick_add=data['quick_add'],
+                           losse_recepten_json=json.dumps(data['quick_add']),
                            recipes_json=recipes_json,
                            weeks_by_ingredient_json=weeks_json,
                            current_year=iso_now[0],
                            current_week=iso_now[1])
 
 
-def _set_checks(ingredient_id, checked, via_ah=False, data=None, commit=True):
-    """Zet de afvinkstatus voor élke week waarin het ingredient op de lijst staat.
+def _vink_af(ingredient_id, data, via_ah=False):
+    """Vink af wat er van dit ingredient open staat; geeft de weken terug.
 
-    `data` mag een al gebouwde gecombineerde lijst zijn: bulk-aanroepers
-    (alles afvinken, versturen naar AH) bouwen hem één keer en committen één
-    keer. Per regel opnieuw bouwen kostte zes seconden op de echte data, en
-    de knop gaf ondertussen geen teken van leven.
+    `data` is de al gebouwde lijst: bulk-aanroepers (alles afvinken, naar de
+    AH sturen) bouwen hem één keer en committen één keer. Per regel opnieuw
+    bouwen kostte zes seconden op de echte data. De aantal-override van die
+    week hoort bij wat nu gekocht is en vervalt: anders bepaalt hij straks het
+    aantal voor iets wat er later bij komt.
     """
-    data = data or build_combined_shopping_list()
-    weeks = (data['weeks_by_ingredient'] if checked else data['afgevinkt_weken']).get(ingredient_id)
-    if not weeks:
-        return False
-    nieuw_afgevinkt = []
-    for (y, w) in weeks:
-        existing = ShoppingCheck.query.filter_by(
-            year=y, week_number=w, ingredient_id=ingredient_id).first()
-        if checked and not existing:
-            db.session.add(ShoppingCheck(year=y, week_number=w,
-                                         ingredient_id=ingredient_id, via_ah=via_ah))
-            nieuw_afgevinkt.append((y, w))
-        elif not checked and existing:
-            db.session.delete(existing)
-    if commit:
-        db.session.commit()
-    return nieuw_afgevinkt if checked else True
+    weken = data['open_per_week'].get(ingredient_id, {})
+    for (y, w), per_eenheid in weken.items():
+        afgehandeld.vink_af(y, w, ingredient_id, per_eenheid, via_ah=via_ah)
+        ShoppingListOverride.query.filter_by(
+            year=y, week_number=w, ingredient_id=ingredient_id).delete()
+    return list(weken)
 
 
 def _log_handmatig(row, weken):
@@ -107,35 +97,52 @@ def _log_handmatig(row, weken):
 @bp.route('/api/boodschappen/item/<int:ingredient_id>/check', methods=['POST'])
 def boodschappen_check(ingredient_id):
     body = request.get_json(silent=True) or {}
-    checked = bool(body.get('checked', True))
     data = build_combined_shopping_list()
-    row = next((r for r in data['open'] if r['ingredient_id'] == ingredient_id), None)
-    weken = _set_checks(ingredient_id, checked, data=data)
-    if weken is False:
+    if body.get('checked', True):
+        row = next((r for r in data['open'] if r['ingredient_id'] == ingredient_id), None)
+        weken = _vink_af(ingredient_id, data)
+        if not weken:
+            return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
+        db.session.commit()
+        if row:
+            _log_handmatig(row, weken)
+        return jsonify({'status': 'success'})
+    # Uitzetten in het afgevinkt-blok: alleen de weken die het blok toont. Alle
+    # weken wissen zette op de live-data ook week 13, 18 en 33 weer open.
+    weken = data['afgevinkt_weken'].get(ingredient_id, [])
+    if not weken:
         return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
-    if checked and row and weken:
-        _log_handmatig(row, weken)
+    for (y, w) in weken:
+        afgehandeld.vinkje_eraf(y, w, ingredient_id)
+    db.session.commit()
     return jsonify({'status': 'success'})
 
 
 @bp.route('/api/boodschappen/item/<int:ingredient_id>/remove', methods=['POST'])
 def boodschappen_remove(ingredient_id):
-    """Verwijder een regel volledig: handmatige items weg, rest via exclusion.
+    """✕: wat nu open staat hoeft niet gekocht te worden.
 
-    Exclusions verbergen bewust géén CustomShoppingIngredients (BUG 4 FIX in
-    _build_shopping_dict), dus die rijen moeten echt verwijderd worden.
+    Losse items blijven bestaan; het getal dekt ze, en wat er later bij komt
+    staat gewoon open. Weg is weg (Rutger, 4 okt 2026); terugzetten kan via
+    het afgevinkt-blok.
     """
-    data = build_combined_shopping_list()
-    weeks = data['weeks_by_ingredient'].get(ingredient_id)
-    if not weeks:
+    weken = build_combined_shopping_list()['open_per_week'].get(ingredient_id, {})
+    if not weken:
         return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
-    for (y, w) in weeks:
-        CustomShoppingIngredient.query.filter_by(
-            year=y, week_number=w, ingredient_id=ingredient_id).delete()
-        if not ShoppingListExclusion.query.filter_by(
-                year=y, week_number=w, ingredient_id=ingredient_id).first():
-            db.session.add(ShoppingListExclusion(
-                year=y, week_number=w, ingredient_id=ingredient_id))
+    for (y, w), per_eenheid in weken.items():
+        afgehandeld.haal_weg(y, w, ingredient_id, per_eenheid)
+    db.session.commit()
+    return jsonify({'status': 'success'})
+
+
+@bp.route('/api/boodschappen/item/<int:ingredient_id>/terugzetten', methods=['POST'])
+def boodschappen_terugzetten(ingredient_id):
+    """Een weggehaalde regel terug op de lijst; alleen de weken die het blok toont."""
+    weken = build_combined_shopping_list()['weggehaald_weken'].get(ingredient_id, [])
+    if not weken:
+        return jsonify({'status': 'error', 'message': 'Item niet gevonden'}), 404
+    for (y, w) in weken:
+        afgehandeld.kruisje_eraf(y, w, ingredient_id)
     db.session.commit()
     return jsonify({'status': 'success'})
 
@@ -143,10 +150,10 @@ def boodschappen_remove(ingredient_id):
 @bp.route('/api/boodschappen/check-all', methods=['POST'])
 def boodschappen_check_all():
     data = build_combined_shopping_list()
-    per_regel = []
+    per_ingredient = {}
     for row in data['open']:
-        per_regel.append((row, _set_checks(row['ingredient_id'], True,
-                                           data=data, commit=False)))
+        per_ingredient.setdefault(row['ingredient_id'], row)
+    per_regel = [(row, _vink_af(ing_id, data)) for ing_id, row in per_ingredient.items()]
     db.session.commit()
     for row, weken in per_regel:
         if weken:
@@ -171,7 +178,7 @@ def boodschappen_send_to_ah():
     payload, status, sent_ids = send_dict_to_ah(open_dict, qty_overrides)
     if status == 200 and payload.get('status') == 'success' and sent_ids:
         for ing_id in sent_ids:
-            _set_checks(ing_id, True, via_ah=True, data=data, commit=False)
+            _vink_af(ing_id, data, via_ah=True)
         db.session.commit()
         _leg_de_bestelling_vast(payload.get('order_id'), weken)
     return jsonify(payload), status
@@ -283,8 +290,6 @@ def add_shopping_item(year, week):
     raw_amount = float(data.get('amount', 1))
     raw_unit = data.get('unit', 'stuks')
     unit, amount = _normalize_ri_unit(ing, raw_unit, raw_amount)
-
-    zet_terug_op_de_lijst(year, week, ingredient_id)
 
     existing = CustomShoppingIngredient.query.filter_by(
         year=year, week_number=week, ingredient_id=ingredient_id
