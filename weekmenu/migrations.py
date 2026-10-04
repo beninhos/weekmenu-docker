@@ -725,6 +725,33 @@ def _migrate_v22(conn):
 
 
 
+def _migrate_v23(conn):
+    """Vinkjes en kruisjes onthouden hoeveel, niet alleen dat.
+
+    Rutger, 4 okt 2026: 'Voeg ik iets opnieuw toe, moet dat geen impact hebben
+    op wat ik eerder heb gedaan.' Met alleen een status moest de app bij elke
+    toevoeging kiezen tussen alles dicht of alles open; in week 40 gaf dat 7
+    blik kidneybonen waar 6 klopte. Een rij zonder getal blijft 'alles'
+    betekenen, precies zoals voorheen. Het vullen met echte getallen gebeurt
+    na de migratie via de ORM (afgehandeld.vul_hoeveelheden_aan): daarvoor is
+    de rekenkant van de lijst nodig, en die hoort niet in een migratie.
+    """
+    for tabel, kolommen in (('shopping_check', (('hoeveelheden', 'TEXT'),)),
+                            ('shopping_list_exclusion', (('hoeveelheden', 'TEXT'),
+                                                         ('weggehaald_op', 'DATETIME')))):
+        bestaand = {r[1] for r in conn.execute(text(f'PRAGMA table_info({tabel})')).fetchall()}
+        for naam, soort in kolommen:
+            if naam not in bestaand:
+                conn.execute(text(f'ALTER TABLE {tabel} ADD COLUMN {naam} {soort}'))
+
+    rijen = conn.execute(text(
+        'SELECT (SELECT COUNT(*) FROM shopping_check) + '
+        '(SELECT COUNT(*) FROM shopping_list_exclusion)')).scalar()
+    if rijen:
+        conn.execute(text("DELETE FROM settings WHERE key = 'afgehandeld_vullen'"))
+        conn.execute(text("INSERT INTO settings (key, value) VALUES ('afgehandeld_vullen', '1')"))
+
+
 def migrate_db():
     with db.engine.connect() as conn:
         conn.execute(text('''
@@ -784,8 +811,10 @@ def migrate_db():
             _migrate_v21(conn)
         if current < 22:
             _migrate_v22(conn)
+        if current < 23:
+            _migrate_v23(conn)
 
-        target = 22
+        target = 23
         if current < target:
             if row:
                 conn.execute(

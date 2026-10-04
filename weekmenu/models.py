@@ -214,6 +214,10 @@ class ShoppingListExclusion(db.Model):
     year          = db.Column(db.Integer, nullable=False)
     week_number   = db.Column(db.Integer, nullable=False)
     ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
+    # JSON {eenheid: hoeveelheid}; NULL = alles van het receptdeel (rijen van
+    # vóór v23). Zie services/afgehandeld.py.
+    hoeveelheden  = db.Column(db.Text, nullable=True)
+    weggehaald_op = db.Column(db.DateTime, nullable=True)
 
 
 class DumpJob(db.Model):
@@ -263,6 +267,8 @@ class ShoppingCheck(db.Model):
     ingredient_id = db.Column(db.Integer, db.ForeignKey('ingredient.id'), nullable=False)
     checked_at    = db.Column(db.DateTime, default=datetime.now, nullable=False)
     via_ah        = db.Column(db.Boolean, default=False, nullable=False)
+    # JSON {eenheid: hoeveelheid}; NULL = alles, ook wat er later bij komt.
+    hoeveelheden  = db.Column(db.Text, nullable=True)
 
 
 class Bestelling(db.Model):
