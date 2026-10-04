@@ -14,9 +14,7 @@ from weekmenu.services.shopping import (
     send_dict_to_ah, build_combined_shopping_list,
 )
 from weekmenu.services.units import _normalize_ri_unit
-from weekmenu.services.menu import (
-    clear_shopping_list as _clear_shopping_list, zet_terug_op_de_lijst,
-)
+from weekmenu.services.menu import zet_terug_op_de_lijst
 
 bp = Blueprint('shopping', __name__)
 
@@ -239,16 +237,6 @@ def shopping_list(year, week):
     return redirect(url_for('shopping.boodschappen'), code=301)
 
 
-@bp.route('/api/shopping-list/<int:year>/<int:week>/clear', methods=['POST'])
-def clear_shopping_list(year, week):
-    try:
-        _clear_shopping_list(week, year)
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-
 @bp.route('/api/shopping-list/<int:year>/<int:week>/item/<int:ingredient_id>/qty',
            methods=['POST'])
 def update_shopping_qty(year, week, ingredient_id):
@@ -279,20 +267,6 @@ def update_shopping_qty(year, week, ingredient_id):
         ))
     db.session.commit()
     return jsonify({'status': 'success', 'qty': new_qty})
-
-
-@bp.route('/api/shopping-list/<int:year>/<int:week>/item/<int:ingredient_id>/exclude',
-           methods=['POST'])
-def exclude_shopping_item(year, week, ingredient_id):
-    existing = ShoppingListExclusion.query.filter_by(
-        year=year, week_number=week, ingredient_id=ingredient_id
-    ).first()
-    if not existing:
-        db.session.add(ShoppingListExclusion(
-            year=year, week_number=week, ingredient_id=ingredient_id
-        ))
-        db.session.commit()
-    return jsonify({'status': 'success'})
 
 
 @bp.route('/api/shopping-list/<int:year>/<int:week>/add-item', methods=['POST'])

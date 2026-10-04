@@ -101,7 +101,7 @@ def _build_shopping_dict(year, week, with_sources=False):
     return merged
 
 
-def window_weeks(today=None):
+def window_weeks():
     """Alle weken waarvoor iets gepland staat.
 
     Rutgers regel, letterlijk: 'alles wat ik afvink gaat van de lijst. Tot ik
@@ -112,7 +112,6 @@ def window_weeks(today=None):
     (zie _set_checks) → item weg. Een nieuw recept plannen zet een nieuwe
     (jaar, week) op de kaart die nog niet in ShoppingCheck staat → item terug.
     """
-    del today                       # nog in de signature; laat de aanroepers ongewijzigd
     weken = set()
     for model in (MenuItem, QuickAddItem, CustomShoppingIngredient):
         for y, w in db.session.query(model.year, model.week_number).distinct():
@@ -173,7 +172,7 @@ def _row_base(ing, unit, amount, recipe_names=None):
 
 def build_combined_shopping_list(today=None):
     """Combineer de per-week-lijsten van het venster tot één lijst met afvink-status."""
-    weeks = window_weeks(today)
+    weeks = window_weeks()
     per_week = {}
     sources_per_week = {}
     for wk in weeks:

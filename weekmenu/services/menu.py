@@ -167,14 +167,3 @@ def clear_week(week, year):
     ShoppingListExclusion.query.filter_by(week_number=week, year=year).delete()
     ShoppingListOverride.query.filter_by(week_number=week, year=year).delete()
     db.session.commit()
-
-
-def clear_shopping_list(week, year):
-    """Wis de boodschappenlijst: verberg items zonder recepten te verwijderen."""
-    MenuItem.query.filter_by(
-        week_number=week, year=year, skip_shopping_list=False
-    ).update({'skip_shopping_list': True})
-    CustomShoppingIngredient.query.filter_by(week_number=week, year=year).delete()
-    ShoppingListExclusion.query.filter_by(week_number=week, year=year).delete()
-    ShoppingListOverride.query.filter_by(week_number=week, year=year).delete()
-    db.session.commit()
