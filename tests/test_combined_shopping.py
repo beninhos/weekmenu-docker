@@ -147,8 +147,8 @@ def test_send_dict_to_ah_returns_sent_ids(app, monkeypatch):
         def put(self, *a, **kw): return FakeResp()
     monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
 
-    from weekmenu.services.shopping import _build_shopping_dict, send_dict_to_ah
-    payload, status, sent_ids = send_dict_to_ah(_build_shopping_dict(2026, 28), {})
+    from weekmenu.services.shopping import send_dict_to_ah, week_nodig
+    payload, status, sent_ids = send_dict_to_ah(week_nodig(2026, 28)[0], {})
     assert status == 200
     assert payload['status'] == 'success'
     assert ing.id in sent_ids

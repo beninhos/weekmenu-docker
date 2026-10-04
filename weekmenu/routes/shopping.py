@@ -74,7 +74,7 @@ def _set_checks(ingredient_id, checked, via_ah=False, data=None, commit=True):
     de knop gaf ondertussen geen teken van leven.
     """
     data = data or build_combined_shopping_list()
-    weeks = data['weeks_by_ingredient'].get(ingredient_id)
+    weeks = (data['weeks_by_ingredient'] if checked else data['afgevinkt_weken']).get(ingredient_id)
     if not weeks:
         return False
     nieuw_afgevinkt = []

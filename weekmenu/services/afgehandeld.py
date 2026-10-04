@@ -32,8 +32,10 @@ def _schrijf(rij, per_eenheid):
     if per_eenheid is ALLES:
         rij.hoeveelheden = None
     else:
+        # Een eenheid met 0 blijft staan: zo onthoudt een vinkje ook een regel
+        # zonder hoeveelheid ('naar smaak').
         rij.hoeveelheden = json.dumps(
-            {u: round(a, 6) for u, a in sorted(per_eenheid.items()) if a > EPS})
+            {u: round(max(a, 0.0), 9) for u, a in sorted(per_eenheid.items()) if a > -EPS})
 
 
 def _tel_op(oud, erbij):

@@ -64,7 +64,7 @@ def _plan(recept, jaar, week, dag=1):
 def _sluit(jaar, week):
     """Week afgerond: alles wat hij aanlevert staat afgevinkt."""
     for (ing_id, _unit) in list(__import__(
-            'weekmenu.services.shopping', fromlist=['x'])._build_shopping_dict(jaar, week)):
+            'weekmenu.services.shopping', fromlist=['x']).week_nodig(jaar, week)[0]):
         db.session.add(ShoppingCheck(year=jaar, week_number=week, ingredient_id=ing_id))
     db.session.commit()
 

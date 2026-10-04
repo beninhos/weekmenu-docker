@@ -226,7 +226,7 @@ def _conversietabel(ing):
     """De eigen omrekeningen van een ingredient: from_unit -> (to_unit, factor).
 
     Sleutel op from_unit zoals de boodschappenlijst hem opzoekt, dus zonder
-    _norm_unit eroverheen — precies wat _build_shopping_dict doet.
+    _norm_unit eroverheen — precies wat week_nodig doet.
 
     Bewust een eigen query en niet ing.unit_conversions: die backref laadt de
     collectie op het ingredient, en dan draait SQLAlchemy bij het verwijderen
@@ -254,7 +254,7 @@ def _eigen_weten(conversies, eenheid):
     niet mee — anders zou een samenvoeging 1,2 kg voor 1,2 g aanzien.
 
     Opgezocht zoals de boodschappenlijst hem opzoekt: de genormaliseerde eenheid
-    tegen de rauwe from_unit, precies wat _build_shopping_dict doet.
+    tegen de rauwe from_unit, precies wat week_nodig doet.
     """
     van = _norm_unit(eenheid)
     naar, factor = conversies.get(van, (None, None))
@@ -947,7 +947,7 @@ def _gespleten_eenheden(a, b, tabellen, gebruikt):
 
     Eén uitzondering: eenheden waarvan je er altijd één koopt (gram, milliliter,
     eetlepels) smelt de lijst zelf al samen tot één regel, zie _UNIT_BUY_ONE in
-    _build_shopping_dict. Daar valt dus niets te melden.
+    week_nodig. Daar valt dus niets te melden.
 
     Verzinnen doen we niets: hoeveel bosuitjes er in een bosje gaan weet alleen
     de gebruiker. Bij precies twee eenheden vraagt de kaart het hem, en

@@ -1,117 +1,194 @@
-from collections import defaultdict
-from datetime import date, datetime, timedelta
+import logging
+from collections import defaultdict, namedtuple
+from datetime import date, datetime, time, timedelta
 
 import requests
 from weekmenu.extensions import db
 from weekmenu.models import (
     MenuItem, QuickAddItem, CustomShoppingIngredient,
-    Ingredient, IngredientUnitConversion, ShoppingListExclusion, PantryIngredient,
-    ShoppingCheck, ShoppingListOverride,
+    Ingredient, IngredientUnitConversion, PantryIngredient,
+    ShoppingCheck, ShoppingListExclusion, ShoppingListOverride,
 )
 from weekmenu.constants import _UNIT_BUY_ONE
+from weekmenu.services.afgehandeld import ALLES, EPS, lees
 from weekmenu.services.units import (
     _norm_unit, _calc_multiplier, _convert_unit_for_agg, _calc_ah_qty, format_amount,
 )
 from weekmenu.services.ah import ah_get_access_token
 
+log = logging.getLogger(__name__)
+_al_gemeld = set()
 
-def _build_shopping_dict(year, week, with_sources=False):
-    """Bouw geaggregeerde boodschappendict voor een week.
 
-    Returns dict met key (ingredient_id, normalized_unit) -> totaal_hoeveelheid.
-    Met with_sources=True wordt een tweede dict teruggegeven:
-    ingredient_id -> set van receptnamen die dat ingrediënt deze week aanleveren
-    (voor de "hoort bij recept X"-hint op de boodschappenlijst).
-
-    BUG 4 FIX: Custom items worden toegevoegd NA de exclusion filter,
-    zodat handmatig toegevoegde items nooit verborgen worden door exclusions.
-    """
-    conversions = {}
-    for conv in IngredientUnitConversion.query.all():
-        conversions[(conv.ingredient_id, conv.from_unit)] = (conv.to_unit, conv.factor)
-    preferred_units = {
-        ing.id: ing.preferred_unit
-        for ing in Ingredient.query.filter(Ingredient.preferred_unit.isnot(None)).all()
-    }
-
-    shopping_dict = {}
-    sources = defaultdict(set)
-
-    def _tel_receptregels_op(item, sla_over=False):
-        if sla_over or not item.recipe:
-            return
-        m = _calc_multiplier(item.recipe.serves, item.people_count)
-        for ri in item.recipe.ingredients:
-            norm = _norm_unit(ri.unit)
-            amount = ri.amount * m
-            norm, amount = _convert_unit_for_agg(ri.ingredient_id, norm, amount, conversions, preferred_units)
-            shopping_dict[(ri.ingredient_id, norm)] = shopping_dict.get((ri.ingredient_id, norm), 0) + amount
-            sources[ri.ingredient_id].add(item.recipe.name)
-
-    # 1. Recepten uit weekmenu
-    for item in MenuItem.query.filter_by(week_number=week, year=year).all():
-        _tel_receptregels_op(item, sla_over=item.skip_shopping_list)
-
-    # 2. Quick-add items
-    for qi in QuickAddItem.query.filter_by(week_number=week, year=year).all():
-        _tel_receptregels_op(qi)
-
-    # 3a. Pantry filter — ingrediënten die altijd in huis zijn nooit op de lijst
+def omrekening():
+    """Wat elke weekberekening nodig heeft; een keer ophalen per lijst."""
+    conversions = {(c.ingredient_id, c.from_unit): (c.to_unit, c.factor)
+                   for c in IngredientUnitConversion.query.all()}
+    preferred_units = {i.id: i.preferred_unit for i in
+                       Ingredient.query.filter(Ingredient.preferred_unit.isnot(None)).all()}
     pantry_ids = {p.ingredient_id for p in PantryIngredient.query.all()}
-    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in pantry_ids}
-    for pid in pantry_ids:
-        sources.pop(pid, None)
+    return conversions, preferred_units, pantry_ids
 
-    # 3. Exclusion filter — VOOR custom items (BUG 4 FIX)
-    excluded_ids = {
-        e.ingredient_id
-        for e in ShoppingListExclusion.query.filter_by(year=year, week_number=week).all()
-    }
-    shopping_dict = {k: v for k, v in shopping_dict.items() if k[0] not in excluded_ids}
-    for eid in excluded_ids:
-        sources.pop(eid, None)
 
-    # 4. Custom shopping items — NA exclusion filter, zodat ze altijd zichtbaar zijn
-    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=year).all():
-        norm = _norm_unit(ci.unit)
-        amount = ci.amount
-        norm, amount = _convert_unit_for_agg(ci.ingredient_id, norm, amount, conversions, preferred_units)
-        shopping_dict[(ci.ingredient_id, norm)] = shopping_dict.get((ci.ingredient_id, norm), 0) + amount
+def bijdrage_van_regel(ri, serves, people_count, omr):
+    """(ingredient, eenheid, hoeveelheid) van één receptregel voor zoveel personen."""
+    conversions, preferred_units, _ = omr
+    eenheid, hoeveel = _convert_unit_for_agg(
+        ri.ingredient_id, _norm_unit(ri.unit),
+        ri.amount * _calc_multiplier(serves, people_count),
+        conversions, preferred_units)
+    return ri.ingredient_id, eenheid, hoeveel
 
-    # 5. Merge buy-one entries
-    by_ing = defaultdict(list)
-    for (ing_id, unit), amount in shopping_dict.items():
-        by_ing[ing_id].append((unit, amount))
 
-    merged = {}
-    for ing_id, entries in by_ing.items():
-        if len(entries) == 1:
-            unit, amount = entries[0]
-            merged[(ing_id, unit)] = amount
-        elif all(u in _UNIT_BUY_ONE for u, _ in entries):
-            best_unit, best_amount = max(entries, key=lambda e: e[1])
-            total = sum(a for _, a in entries)
-            merged[(ing_id, best_unit)] = total
+def _voeg_samen_per_ingredient(per_sleutel):
+    """Gewichts- en volume-eenheden van één ingredient tot één regel, zoals altijd."""
+    per_ing = defaultdict(list)
+    for (ing_id, eenheid), hoeveel in per_sleutel.items():
+        per_ing[ing_id].append((eenheid, hoeveel))
+    uit = {}
+    for ing_id, regels in per_ing.items():
+        if len(regels) > 1 and all(u in _UNIT_BUY_ONE for u, _ in regels):
+            beste, _ = max(regels, key=lambda r: r[1])
+            uit[(ing_id, beste)] = sum(h for _, h in regels)
         else:
-            for unit, amount in entries:
-                merged[(ing_id, unit)] = amount
+            for eenheid, hoeveel in regels:
+                uit[(ing_id, eenheid)] = hoeveel
+    return uit
 
-    if with_sources:
-        return merged, sources
-    return merged
+
+def week_nodig(jaar, week, omr=None):
+    """Wat een week vraagt, per (ingredient, eenheid), na voorraad en omrekening.
+
+    Geeft (nodig, receptdeel, bronnen). Het receptdeel is nodig zonder losse
+    items: een kruisje van voor v23 verborg alleen dat deel (BUG 4 FIX).
+    Afgevinkt en weggehaald gaan er hier nog niet af; dat doet _week_stand.
+    """
+    omr = omr or omrekening()
+    conversions, preferred_units, pantry_ids = omr
+    recept = defaultdict(float)
+    bronnen = defaultdict(set)
+
+    def tel(item):
+        if not item.recipe:
+            return
+        for ri in item.recipe.ingredients:
+            if ri.ingredient_id in pantry_ids:
+                continue
+            ing, eenheid, hoeveel = bijdrage_van_regel(
+                ri, item.recipe.serves, item.people_count, omr)
+            recept[(ing, eenheid)] += hoeveel
+            bronnen[ing].add(item.recipe.name)
+
+    for mi in MenuItem.query.filter_by(week_number=week, year=jaar).all():
+        if not mi.skip_shopping_list:
+            tel(mi)
+    for qi in QuickAddItem.query.filter_by(week_number=week, year=jaar).all():
+        tel(qi)
+
+    alles = defaultdict(float, recept)
+    for ci in CustomShoppingIngredient.query.filter_by(week_number=week, year=jaar).all():
+        eenheid, hoeveel = _convert_unit_for_agg(
+            ci.ingredient_id, _norm_unit(ci.unit), ci.amount, conversions, preferred_units)
+        alles[(ci.ingredient_id, eenheid)] += hoeveel
+
+    return _voeg_samen_per_ingredient(alles), _voeg_samen_per_ingredient(recept), bronnen
+
+
+def _doeleenheid(ing_id, eenheid, hoeveel, nodig_ing, omr):
+    if eenheid in nodig_ing:
+        return eenheid, hoeveel
+    conversions, preferred_units, _ = omr
+    naar, omgerekend = _convert_unit_for_agg(ing_id, eenheid, hoeveel,
+                                             conversions, preferred_units)
+    if naar in nodig_ing:
+        return naar, omgerekend
+    gewicht = [u for u in nodig_ing if u in _UNIT_BUY_ONE]
+    if eenheid in _UNIT_BUY_ONE and len(gewicht) == 1:
+        return gewicht[0], hoeveel
+    return None
+
+
+def _gedekt(jaar, week, ing_id, nodig_ing, per, bij_alles, omr):
+    """Hoeveel van nodig_ing (per eenheid) een vinkje of kruisje dekt.
+
+    Geeft (gedekt per eenheid, eenheden die het vinkje noemt). Dat tweede is
+    nodig voor een regel zonder hoeveelheid: daar dekt een vinkje niets, maar
+    handelt het de regel wel af. Een eenheid die niet meer te plaatsen is telt
+    niet mee: liever een regel die je nog eens afvinkt dan een regel die stil
+    verdwijnt (zelfde keuze als in services/ingredienten.py::_wis_weekbesluiten).
+    """
+    if per is ALLES:
+        return ({u: min(nodig_ing[u], bij_alles.get(u, 0)) for u in nodig_ing},
+                {u for u in nodig_ing if u in bij_alles})
+    gedekt = dict.fromkeys(nodig_ing, 0.0)
+    genoemd = set()
+    for eenheid, hoeveel in per.items():
+        doel = _doeleenheid(ing_id, eenheid, hoeveel, nodig_ing, omr)
+        if doel is None:
+            sleutel = (jaar, week, ing_id, eenheid)
+            if nodig_ing and sleutel not in _al_gemeld:
+                _al_gemeld.add(sleutel)
+                log.warning('Afgehandeld in %s telt niet mee voor de lijst: %s %s (nodig: %s)',
+                            sleutel[:3], hoeveel, eenheid, sorted(nodig_ing))
+            continue
+        gedekt[doel[0]] += doel[1]
+        genoemd.add(doel[0])
+    return {u: min(nodig_ing[u], gedekt[u]) for u in nodig_ing}, genoemd
+
+
+def _afhandeling(weken):
+    """Vinkjes, kruisjes en aantal-overrides van deze weken, per (jaar, week, ingredient)."""
+    if not weken:
+        return {}, {}, {}
+
+    def per_sleutel(model):
+        return {(r.year, r.week_number, r.ingredient_id): r for r in model.query.filter(
+            db.tuple_(model.year, model.week_number).in_(list(weken))).all()}
+
+    overrides = {k: r.qty for k, r in per_sleutel(ShoppingListOverride).items()}
+    return per_sleutel(ShoppingCheck), per_sleutel(ShoppingListExclusion), overrides
+
+
+# Eén eenheid van één ingredient in één week. `staat_open` en de twee
+# toon-vlaggen zijn er voor regels zonder hoeveelheid ('naar smaak'): die staan
+# open tot je ze afvinkt of wegklikt, ook al is open daar altijd 0.
+Regel = namedtuple('Regel', 'open afgevinkt weggehaald staat_open '
+                            'toon_afgevinkt toon_weggehaald')
+
+
+def _week_stand(jaar, week, omr, checks, excls):
+    """Per ingredient per eenheid een Regel: open = nodig - afgevinkt - weggehaald."""
+    nodig, receptdeel, bronnen = week_nodig(jaar, week, omr)
+    per_ing, recept_ing = defaultdict(dict), defaultdict(dict)
+    for (ing, u), h in nodig.items():
+        per_ing[ing][u] = h
+    for (ing, u), h in receptdeel.items():
+        recept_ing[ing][u] = h
+    stand = {}
+    for ing, nodig_ing in per_ing.items():
+        afg, afg_genoemd = _gedekt(jaar, week, ing, nodig_ing,
+                                   lees(checks.get((jaar, week, ing))), nodig_ing, omr)
+        rest = {u: nodig_ing[u] - afg[u] for u in nodig_ing}
+        weg, weg_genoemd = _gedekt(jaar, week, ing, rest,
+                                   lees(excls.get((jaar, week, ing))),
+                                   recept_ing.get(ing, {}), omr)
+        stand[ing] = {}
+        for u in nodig_ing:
+            open_ = max(0.0, rest[u] - weg[u])
+            zonder = nodig_ing[u] <= EPS
+            stand[ing][u] = Regel(
+                open_, afg[u], weg[u],
+                staat_open=(not (u in afg_genoemd or u in weg_genoemd)) if zonder else open_ > EPS,
+                toon_afgevinkt=(u in afg_genoemd) if zonder else afg[u] > EPS,
+                toon_weggehaald=(u in weg_genoemd and u not in afg_genoemd) if zonder
+                else weg[u] > EPS)
+    return stand, bronnen
 
 
 def window_weeks():
-    """Alle weken waarvoor iets gepland staat.
-
-    Rutgers regel, letterlijk: 'alles wat ik afvink gaat van de lijst. Tot ik
-    het opnieuw erop zet. Vink ik het niet af — of schiet het niet naar de
-    Appie maar naar de markt — dan blijft het staan.' Geen tijdsvenster dus;
-    de lijst is ALLE open receptregels ongeacht welke week. Afvinken schrijft
-    voor élke week waarin het ingredient staat een ShoppingCheck-rij weg
-    (zie _set_checks) → item weg. Een nieuw recept plannen zet een nieuwe
-    (jaar, week) op de kaart die nog niet in ShoppingCheck staat → item terug.
-    """
+    """Alle weken waarvoor iets gepland staat. Welke daarvan nog iets open
+    hebben rekent build_combined_shopping_list uit: wat afgevinkt of weggehaald
+    is blijft dat, ook als er later iets bij komt (Rutger, 4 okt 2026)."""
     weken = set()
     for model in (MenuItem, QuickAddItem, CustomShoppingIngredient):
         for y, w in db.session.query(model.year, model.week_number).distinct():
@@ -122,30 +199,26 @@ def window_weeks():
 def lopende_weken(today=None):
     """De weken waar een zijdelingse wijziging nog in mag doorwerken.
 
-    Een week loopt nog als er iets open staat, of als hij niet achter ons ligt.
-    Die tweede helft is nodig omdat 'alles afgevinkt' niet hetzelfde is als
-    'klaar': heb je deze week alles afgevinkt en haal je dan iets uit de
-    voorraad, dan heb je het alsnog nodig. Andersom is een week van twee
-    maanden terug waarin niets meer open staat echt geweest, en hoort een
+    Een week loopt als hij niet achter ons ligt, of als er nog iets open staat.
+    Wat afgevinkt of weggehaald is telt als klaar. Andersom is een week van
+    twee maanden terug waarin niets meer open staat echt geweest, en hoort een
     receptwijziging daar niets meer te openen -- dat was de kapsalon van week 32.
-
     De kalender beantwoordt hier alleen de vraag 'ligt deze week achter ons'.
-    Hij bepaalt nooit voor welke week de lijst geldt; dat blijft window_weeks.
     """
     iso = (today or date.today()).isocalendar()
     nu = (iso[0], iso[1])
-    checks = {(c.year, c.week_number, c.ingredient_id)
-              for c in ShoppingCheck.query.all()}
-    weken = set()
-    for (y, w) in window_weeks():
-        if (y, w) >= nu:
-            weken.add((y, w))
+    weken = window_weeks()
+    omr = omrekening()
+    checks, excls, _ = _afhandeling(weken)
+    lopend = set()
+    for wk in weken:
+        if wk >= nu:
+            lopend.add(wk)
             continue
-        for (ing_id, _unit) in _build_shopping_dict(y, w):
-            if (y, w, ing_id) not in checks:
-                weken.add((y, w))
-                break
-    return weken
+        stand, _ = _week_stand(wk[0], wk[1], omr, checks, excls)
+        if any(r.staat_open for per in stand.values() for r in per.values()):
+            lopend.add(wk)
+    return lopend
 
 
 def _row_base(ing, unit, amount, recipe_names=None):
@@ -170,95 +243,93 @@ def _row_base(ing, unit, amount, recipe_names=None):
     }
 
 
+
+
 def build_combined_shopping_list(today=None):
-    """Combineer de per-week-lijsten van het venster tot één lijst met afvink-status."""
-    weeks = window_weeks()
-    per_week = {}
-    sources_per_week = {}
-    for wk in weeks:
-        d, srcs = _build_shopping_dict(wk[0], wk[1], with_sources=True)
-        per_week[wk] = d
-        sources_per_week[wk] = srcs
+    """De boodschappenlijst over alle weken: open = nodig - afgevinkt - weggehaald.
 
-    checks = {}
-    for c in ShoppingCheck.query.filter(
-            db.tuple_(ShoppingCheck.year, ShoppingCheck.week_number)
-              .in_([(y, w) for (y, w) in weeks])).all():
-        checks[(c.year, c.week_number, c.ingredient_id)] = c
+    Het afgevinkt-blok toont wat er de laatste veertien dagen is afgevinkt of
+    weggehaald, met de hoeveelheid van dat moment -- niet de som van alle weken
+    ooit (kidneybonen stond er als 9 blik: week 13 + 33 + 40).
+    """
+    grens = datetime.combine(today or date.today(), time.min) - timedelta(days=14)
+    weken = window_weeks()
+    omr = omrekening()
+    checks, excls, overrides = _afhandeling(weken)
+    ingredienten = {}
 
-    overrides = {}
-    for o in ShoppingListOverride.query.filter(
-            db.tuple_(ShoppingListOverride.year, ShoppingListOverride.week_number)
-              .in_([(y, w) for (y, w) in weeks])).all():
-        overrides[(o.year, o.week_number, o.ingredient_id)] = o.qty
+    def ingredient(ing_id):
+        if ing_id not in ingredienten:
+            ingredienten[ing_id] = db.session.get(Ingredient, ing_id)
+        return ingredienten[ing_id]
 
-    agg = {}
-    weeks_by_ingredient = {}
-    # Recepthint per ingredient, gesplitst in 'nog open' en 'al afgevinkt':
-    # een open regel noemt alleen de recepten waarvoor je nog moet kopen,
-    # anders staat 'ui' met een recept van drie weken terug erbij.
-    open_sources = defaultdict(set)
-    checked_sources = defaultdict(set)
-    for (y, w), d in per_week.items():
-        for (ing_id, unit), amount in d.items():
-            weeks_by_ingredient.setdefault(ing_id, [])
-            if (y, w) not in weeks_by_ingredient[ing_id]:
-                weeks_by_ingredient[ing_id].append((y, w))
-            row = agg.setdefault((ing_id, unit), {
-                'weeks': [], 'open_amount': 0.0, 'total_amount': 0.0,
-                'checked': [], 'via_ah': False, 'checked_at': None,
-            })
-            row['weeks'].append((y, w))
-            row['total_amount'] += amount
-            c = checks.get((y, w, ing_id))
-            names = sources_per_week[(y, w)].get(ing_id, set())
-            if c:
-                row['checked'].append((y, w))
-                row['via_ah'] = row['via_ah'] or c.via_ah
-                if row['checked_at'] is None or c.checked_at > row['checked_at']:
-                    row['checked_at'] = c.checked_at
-                checked_sources[ing_id] |= names
-            else:
-                row['open_amount'] += amount
-                open_sources[ing_id] |= names
-
-    open_rows, checked_rows = [], []
-    cutoff = datetime.now() - timedelta(days=14)
-    for (ing_id, unit), r in agg.items():
-        ing = db.session.get(Ingredient, ing_id)
-        if not ing:
-            continue
-        fully_checked = len(r['checked']) == len(r['weeks'])
-        if fully_checked:
-            if r['checked_at'] and r['checked_at'] < cutoff:
+    open_agg, blok = {}, {}
+    open_per_week = defaultdict(dict)
+    afgevinkt_weken, weggehaald_weken = defaultdict(list), defaultdict(list)
+    for (y, w) in weken:
+        stand, bronnen = _week_stand(y, w, omr, checks, excls)
+        for ing_id, per_eenheid in stand.items():
+            ing = ingredient(ing_id)
+            if not ing:
                 continue
-            row = _row_base(ing, unit, r['total_amount'], checked_sources.get(ing_id))
-            row['via_ah'] = r['via_ah']
-            row['checked_at'] = r['checked_at']
-            checked_rows.append(row)
-        else:
-            row = _row_base(ing, unit, r['open_amount'], open_sources.get(ing_id))
-            qty = 0
-            for (y, w) in r['weeks']:
-                if (y, w) in r['checked']:
-                    continue
-                wk_amount = per_week[(y, w)].get((ing_id, unit), 0)
-                qty += overrides.get((y, w, ing_id), _calc_ah_qty(ing, wk_amount, unit))
-            row['default_qty'] = _calc_ah_qty(ing, r['open_amount'], unit)
-            row['qty'] = qty
-            open_rows.append(row)
+            check, excl = checks.get((y, w, ing_id)), excls.get((y, w, ing_id))
+            vers_vinkje = bool(check and check.checked_at and check.checked_at >= grens)
+            vers_kruisje = bool(excl and excl.weggehaald_op and excl.weggehaald_op >= grens)
+            for eenheid, r in per_eenheid.items():
+                if r.staat_open:
+                    open_per_week[ing_id].setdefault((y, w), {})[eenheid] = r.open
+                    rij = open_agg.setdefault((ing_id, eenheid),
+                                              {'amount': 0.0, 'qty': 0, 'bronnen': set()})
+                    rij['amount'] += r.open
+                    rij['qty'] += overrides.get((y, w, ing_id)) or _calc_ah_qty(ing, r.open, eenheid)
+                    rij['bronnen'] |= bronnen.get(ing_id, set())
+                for soort, vers, toon, deel, rij_db in (
+                        ('afgevinkt', vers_vinkje, r.toon_afgevinkt, r.afgevinkt, check),
+                        ('weggehaald', vers_kruisje, r.toon_weggehaald, r.weggehaald, excl)):
+                    if not (vers and toon):
+                        continue
+                    b = blok.setdefault((ing_id, eenheid, soort),
+                                        {'amount': 0.0, 'bronnen': set(), 'via_ah': False,
+                                         'checked_at': None})
+                    b['amount'] += deel
+                    b['bronnen'] |= bronnen.get(ing_id, set())
+                    moment = rij_db.checked_at if soort == 'afgevinkt' else rij_db.weggehaald_op
+                    b['checked_at'] = max(m for m in (b['checked_at'], moment) if m)
+                    b['via_ah'] = b['via_ah'] or (soort == 'afgevinkt' and bool(rij_db.via_ah))
+            if vers_vinkje:
+                afgevinkt_weken[ing_id].append((y, w))
+            if vers_kruisje:
+                weggehaald_weken[ing_id].append((y, w))
+
+    open_rows = []
+    for (ing_id, eenheid), r in open_agg.items():
+        row = _row_base(ingredient(ing_id), eenheid, r['amount'], r['bronnen'])
+        row['qty'] = r['qty']
+        row['default_qty'] = _calc_ah_qty(ingredient(ing_id), r['amount'], eenheid)
+        open_rows.append(row)
+
+    checked_rows = []
+    for (ing_id, eenheid, soort), b in blok.items():
+        row = _row_base(ingredient(ing_id), eenheid, b['amount'], b['bronnen'])
+        row.update(soort=soort, via_ah=b['via_ah'], checked_at=b['checked_at'])
+        checked_rows.append(row)
 
     quick_add = []
-    for qi in QuickAddItem.query.filter(
-            db.tuple_(QuickAddItem.year, QuickAddItem.week_number)
-              .in_([(y, w) for (y, w) in weeks])).all():
-        if qi.recipe:
-            quick_add.append({'id': qi.id, 'recipe_id': qi.recipe_id,
-                              'recipe_name': qi.recipe.name,
-                              'people_count': qi.people_count})
+    if weken:
+        for qi in QuickAddItem.query.filter(
+                db.tuple_(QuickAddItem.year, QuickAddItem.week_number).in_(weken)).all():
+            if qi.recipe:
+                quick_add.append({'id': qi.id, 'recipe_id': qi.recipe_id,
+                                  'recipe_name': qi.recipe.name,
+                                  'people_count': qi.people_count,
+                                  'year': qi.year, 'week': qi.week_number})
 
     return {'open': open_rows, 'checked': checked_rows,
-            'weeks_by_ingredient': weeks_by_ingredient, 'quick_add': quick_add}
+            'open_per_week': dict(open_per_week),
+            'weeks_by_ingredient': {i: sorted(wk) for i, wk in open_per_week.items()},
+            'afgevinkt_weken': dict(afgevinkt_weken),
+            'weggehaald_weken': dict(weggehaald_weken),
+            'quick_add': quick_add}
 
 
 def send_dict_to_ah(shopping_dict, qty_overrides):
