@@ -242,7 +242,7 @@ moet 6 blik geven, en de volledige suite blijft groen.
 2. Dev-container herbouwen, scenario doorklikken op dev, ook op 390 px.
 3. Migratie v23 meten op een kopie van de live-database: open lijst voor en na
    gelijk, afgevinkt-blok alleen nog 14 dagen.
-4. Versie 0.9.0-beta (gedragswijziging + schema).
+4. Versie 0.8.3-beta (Rutger, 10 okt: kleine wijziging, geen 0.9).
 5. Live pas na Rutgers akkoord, met back-up vooraf; daarna versie, schema,
    logs en `/boodschappen` op live controleren.
 

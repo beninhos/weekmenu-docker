@@ -8,7 +8,7 @@ gebruikt: wat merk je ervan, niet hoe het gebouwd is.
 
 WIJZIGINGEN = [
     {
-        'versie': '0.9.0-beta',
+        'versie': '0.8.3-beta',
         'datum': '10 oktober 2026',
         'titel': 'Afgevinkt blijft afgevinkt',
         'punten': [
