@@ -87,6 +87,8 @@ De dev-container draait als `app:1000` (matcht host-user beninho), heeft eigen `
 - **minor** (0.x.0): substantiële refactors, nieuwe features, kwaliteitssprongen
 - **major** (x.0.0): incompatible schema-migraties of API-breuk (niet van toepassing zolang de app single-user is)
 
+**Changelog**: bij elke versiebump een regel bovenaan `weekmenu/changelog.py`, in gewone taal voor wie de app gebruikt (wat merk je ervan, niet hoe het gebouwd is). Te zien op `/wat-is-er-nieuw`, gelinkt vanaf de instellingen. `tests/test_changelog.py` faalt als de huidige versie er niet bovenaan staat.
+
 ## Sleutels en secrets
 
 - `SECRET_KEY`: env-var, of anders eenmalig gegenereerd in `data/secret_key` (0600).

@@ -2,12 +2,18 @@ import time
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 
+from weekmenu.changelog import WIJZIGINGEN
 from weekmenu.extensions import db
 from weekmenu.models import Recipe, Cookbook, Ingredient, Settings
 from weekmenu.services.ah import _ah_setting
 from weekmenu.services.gemini import _get_gemini_api_key
 
 bp = Blueprint('settings', __name__)
+
+
+@bp.route('/wat-is-er-nieuw')
+def wat_is_er_nieuw():
+    return render_template('changelog.html', wijzigingen=WIJZIGINGEN)
 
 
 @bp.route('/settings', methods=['GET', 'POST'])

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <div class="flex items-center justify-between gap-4">
+        <h2 class="text-2xl font-extrabold tracking-tight text-[#2C2C2C]">Wat is er nieuw</h2>
+        <a href="{{ url_for('settings.settings_page') }}"
+           class="text-sm text-[#6B6B6B] hover:text-[#2C2C2C] shrink-0">← Instellingen</a>
+    </div>
+
+    {% for versie in wijzigingen %}
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h3 class="text-lg font-bold text-[#2C2C2C]">{{ versie.titel }}</h3>
+            {% if versie.versie == app_version %}
+            <span class="bg-[#2C2C2C] text-white rounded-full px-2 text-xs">deze versie</span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-[#6B6B6B] mt-1">{{ versie.versie }} · {{ versie.datum }}</p>
+        <ul class="mt-3 space-y-2 list-disc pl-5 text-sm text-[#2C2C2C]">
+            {% for punt in versie.punten %}
+            <li>{{ punt }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

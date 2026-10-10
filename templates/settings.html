@@ -34,6 +34,20 @@
         </form>
     </div>
 
+    <!-- Wat is er nieuw -->
+    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
+        <div class="flex items-center justify-between gap-4">
+            <div>
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B] mb-1">Wat is er nieuw</h3>
+                <p class="text-sm text-[#6B6B6B]">Wat er per versie veranderd is. Je gebruikt nu {{ app_version }}.</p>
+            </div>
+            <a href="{{ url_for('settings.wat_is_er_nieuw') }}"
+               class="text-sm bg-[#2C2C2C] text-white px-3 py-1.5 rounded hover:bg-[#2C2C2C] shrink-0">
+                Bekijken →
+            </a>
+        </div>
+    </div>
+
     <!-- Recepten -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">
         <div class="flex items-center justify-between">
