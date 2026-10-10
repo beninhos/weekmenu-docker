@@ -17,7 +17,7 @@ WIJZIGINGEN = [
             'Wat je al had afgevinkt of weggehaald, blijft dat.',
             'Staat een recept al als los recept op je lijst en kies je het opnieuw, '
             'dan vraagt de app of het dezelfde maaltijd is. Zo komt het niet per '
-            'ongeluk dubbel op je lijst. Wegklikken betekent: niets doen.',
+            'ongeluk dubbel op je lijst.',
             'Wat je met ✕ weghaalt, staat onderaan bij Afgevinkt. Met Terugzetten '
             'komt het weer op de lijst.',
             'Afgevinkt toont alleen de laatste 14 dagen, met de hoeveelheid die je '
