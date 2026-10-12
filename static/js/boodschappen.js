@@ -1,6 +1,6 @@
 // Boodschappenlijst-pagina: recept-picker, extra-items, verstuur naar AH, klik-af-flow.
 // Data komt via <script type="application/json" id="page-data"> in het template.
-// Vereist utils.js, ah_common.js, ah_search.js (in die volgorde ingeladen).
+// Vereist utils.js.
 
 const _pageData = JSON.parse(document.getElementById("page-data").textContent);
 

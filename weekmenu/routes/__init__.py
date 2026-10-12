@@ -1,10 +1,13 @@
+import logging
+
 from weekmenu.routes.main import bp as main_bp
 from weekmenu.routes.recipes import bp as recipes_bp
 from weekmenu.routes.menu import bp as menu_bp
 from weekmenu.routes.shopping import bp as shopping_bp
 try:
     from weekmenu_ah import bp as ah_bp  # de AH-connector, een los package naast de app
-except ImportError:  # niet aanwezig: de app draait zonder AH (winkelmodules-onderzoek §5)
+except ImportError as e:  # niet aanwezig: de app draait zonder AH (winkelmodules-onderzoek §5)
+    logging.getLogger(__name__).warning('AH-connector niet geladen: %s', e)
     ah_bp = None
 from weekmenu.routes.settings import bp as settings_bp
 from weekmenu.routes.import_export import bp as import_export_bp
