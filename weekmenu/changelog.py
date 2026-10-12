@@ -15,8 +15,9 @@ WIJZIGINGEN = [
             'In de instellingen kies je wat de knop op de boodschappenpagina doet: '
             'naar je gekoppelde AH-account sturen, je lijst openen op ah.nl zonder '
             'koppeling, of niet versturen en alleen printen.',
-            'Kies je ah.nl, dan opent de app je AH-lijst met de producten erop. Bij '
-            'meer dan 25 producten krijg je een paar links, die je één voor één opent.',
+            'Kies je ah.nl, dan krijg je een link naar je AH-lijst met de producten '
+            'erop; bij meer dan 25 producten een paar links, die je één voor één opent. '
+            'Tik daarna op Klaar: pas dan worden ze op je lijst hier afgevinkt.',
         ],
     },
     {

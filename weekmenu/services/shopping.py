@@ -441,16 +441,17 @@ def _uitgang_ah(merged, name_by_pid, not_linked, sent_ingredient_ids):
              'order_id': order_id, 'message': msg}, 200, sent_ingredient_ids)
 
 
-_DEEPLINK = 'https://www.ah.nl/mijnlijst/add-multiple?p='
+_DEEPLINK = 'https://www.ah.nl/mijnlijst/add-multiple?'
 # AH kapt een add-multiple-link stil af boven ~25 producten (gezien door smart-cart).
-# shortcut: ongetest of die grens per p= of per stuk telt; aanpassen na de handmatige test.
+# shortcut: de grens van 25 is van smart-cart overgenomen, niet zelf gemeten; aanpassen na de handmatige test.
 _DEEPLINK_MAX = 25
 
 
 def _uitgang_deeplink(merged, name_by_pid, not_linked, sent_ingredient_ids):
     """Links naar ah.nl die de producten op je lijst zetten. Geen token, geen netwerk."""
-    paren = [f'{pid}:{qty}' for pid, qty in merged.items()]
-    urls = [_DEEPLINK + ','.join(paren[i:i + _DEEPLINK_MAX])
+    # Elk product een eigen p=, zoals FIU's koopknop en smart-cart de link bouwen.
+    paren = [f'p={pid}:{qty}' for pid, qty in merged.items()]
+    urls = [_DEEPLINK + '&'.join(paren[i:i + _DEEPLINK_MAX])
             for i in range(0, len(paren), _DEEPLINK_MAX)]
     sent = len(merged)
     msg = f'{sent} product{"en" if sent != 1 else ""} klaar voor je AH-lijst'
@@ -478,5 +479,5 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
 
     uitgang = UITGANGEN.get(huidige_uitgang())
     if not uitgang:
-        return ({'status': 'error', 'message': 'Geen uitgang ingesteld'}, 400, [])
+        return ({'status': 'error', 'message': 'Versturen staat uit: de uitgang is "alleen printen"'}, 400, [])
     return uitgang(merged, name_by_pid, not_linked, sent_ingredient_ids)

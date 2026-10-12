@@ -71,8 +71,8 @@ def test_uitvinken_met_id_haalt_wel_uit_de_voorraad(client, app):
 # ── Verstuur naar AH respecteert de bron ────────────────────────────────
 
 def _mock_ah(monkeypatch):
-    """Zonder AH-sessie keert send_dict_to_ah al op regel 1 terug met 401 en
-    kijkt hij niet eens naar de lijst; dan toetst de test niets."""
+    """Zonder AH-sessie geeft _uitgang_ah 401 en bereikt de lijst AH nooit;
+    dan toetst de test niets."""
     from weekmenu.services import shopping as shopping_svc
     monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
 

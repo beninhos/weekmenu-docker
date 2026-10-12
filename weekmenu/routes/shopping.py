@@ -181,7 +181,9 @@ def boodschappen_send_to_ah():
     weken = {wk for row in data['open']
              for wk in data['weeks_by_ingredient'].get(row['ingredient_id'], [])}
     payload, status, sent_ids = send_dict_to_ah(open_dict, qty_overrides)
-    if status == 200 and payload.get('status') == 'success' and sent_ids:
+    # Bij een link is 200 alleen 'link gebouwd': afvinken pas als je op Klaar tikt.
+    afvinken = not payload.get('urls') or body.get('afvinken')
+    if status == 200 and payload.get('status') == 'success' and sent_ids and afvinken:
         for ing_id in sent_ids:
             _vink_af(ing_id, data, via_ah=True)
         db.session.commit()

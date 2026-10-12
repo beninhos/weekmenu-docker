@@ -396,3 +396,35 @@ def test_zonder_instelling_blijft_ah_de_uitgang(app, client, monkeypatch):
     resp = client.post('/api/boodschappen/send-to-ah', json={})
     assert resp.status_code == 200 and 'urls' not in resp.get_json()
     assert gestuurd and gestuurd[0]['items'][0]['productId'] == 777
+
+
+def test_deeplink_zet_elk_product_in_een_eigen_p(app, monkeypatch):
+    # Zo bouwen FIU's koopknop, smart-cart en slimmandje-recepten de link.
+    from weekmenu.services.shopping import send_dict_to_ah
+    _geen_netwerk(monkeypatch)
+    _zet_uitgang('deeplink')
+    _, a = _mk_recipe('PA', 'prei', 1, unit='stuks')
+    _, b = _mk_recipe('PB', 'wortel', 1, unit='stuks')
+    a.ah_product_id, b.ah_product_id = 11, 22
+    db.session.commit()
+
+    payload, _, _ = send_dict_to_ah({(a.id, 'stuks'): 1, (b.id, 'stuks'): 1}, {a.id: 2, b.id: 3})
+    assert payload['urls'] == ['https://www.ah.nl/mijnlijst/add-multiple?p=11:2&p=22:3']
+
+
+def test_deeplink_vinkt_pas_af_na_klaar(app, client, monkeypatch):
+    _geen_netwerk(monkeypatch)
+    _zet_uitgang('deeplink')
+    r, ing = _mk_recipe('Dal-link', 'linzen-link', 200)
+    ing.ah_product_id = 777
+    iso = (date.today() + timedelta(days=1)).isocalendar()
+    _plan(r, iso[0], iso[1])
+    db.session.commit()
+
+    resp = client.post('/api/boodschappen/send-to-ah', json={})
+    assert resp.status_code == 200 and resp.get_json()['urls']
+    assert ShoppingCheck.query.count() == 0
+
+    resp = client.post('/api/boodschappen/send-to-ah', json={'afvinken': True})
+    assert resp.status_code == 200
+    assert ShoppingCheck.query.filter_by(ingredient_id=ing.id).count() == 1
