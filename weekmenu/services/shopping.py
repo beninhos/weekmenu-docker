@@ -349,9 +349,6 @@ def build_combined_shopping_list(today=None):
             'quick_add': quick_add}
 
 
-UITGANG_KEUZES = ('ah', 'deeplink', 'papier')
-
-
 def huidige_uitgang():
     """Waar 'Verstuur' de boodschappen heen stuurt: Settings-sleutel `uitgang`.
 
@@ -397,8 +394,18 @@ _DEEPLINK = 'https://www.ah.nl/mijnlijst/add-multiple?'
 _DEEPLINK_MAX = 25
 
 
-def _uitgang_deeplink(merged, name_by_pid, not_linked, sent_ingredient_ids):
+def geen_ah_producten(not_linked):
+    """Het antwoord van een AH-uitgang als niets in de lijst een AH-product heeft."""
+    return ({'status': 'success', 'sent': 0, 'not_linked': not_linked,
+             'message': 'Geen gekoppelde AH-producten in de lijst. '
+                        'Koppel ze eerst via AH-producten.'}, 200, [])
+
+
+def _uitgang_deeplink(shopping_dict, qty_overrides):
     """Links naar ah.nl die de producten op je lijst zetten. Geen token, geen netwerk."""
+    merged, name_by_pid, not_linked, sent_ingredient_ids = _mandje(shopping_dict, qty_overrides)
+    if not merged:
+        return geen_ah_producten(not_linked)
     # Elk product een eigen p=, zoals FIU's koopknop en smart-cart de link bouwen.
     paren = [f'p={pid}:{qty}' for pid, qty in merged.items()]
     urls = [_DEEPLINK + '&'.join(paren[i:i + _DEEPLINK_MAX])
@@ -412,8 +419,14 @@ def _uitgang_deeplink(merged, name_by_pid, not_linked, sent_ingredient_ids):
              'message': niet_gekoppeld(msg, not_linked)}, 200, sent_ingredient_ids)
 
 
-# De AH-connector (package weekmenu_ah) zet hier bij import 'ah' bij.
+# Elke uitgang krijgt (shopping_dict, qty_overrides) en geeft (payload, status,
+# sent_ingredient_ids). De connectors (weekmenu_ah, weekmenu_picnic) zetten hier
+# bij import hun eigen sleutel bij.
 UITGANGEN = {'deeplink': _uitgang_deeplink}
+
+# Per uitgang: order_id → order-dict voor het bestel-log (leg_ah_order_vast).
+# Alleen de connectors vullen dit; de deeplink heeft geen bestelling om te lezen.
+BESTELLING_LEZERS = {}
 
 
 def send_dict_to_ah(shopping_dict, qty_overrides):
@@ -422,13 +435,7 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
         return ({'status': 'success', 'sent': 0, 'not_linked': [],
                  'message': 'Boodschappenlijst is leeg'}, 200, [])
 
-    merged, name_by_pid, not_linked, sent_ingredient_ids = _mandje(shopping_dict, qty_overrides)
-    if not merged:
-        return ({'status': 'success', 'sent': 0, 'not_linked': not_linked,
-                 'message': 'Geen gekoppelde AH-producten in de lijst. '
-                            'Koppel ze eerst via AH-producten.'}, 200, [])
-
     uitgang = UITGANGEN.get(huidige_uitgang())
     if not uitgang:
         return ({'status': 'error', 'message': 'Versturen staat uit: de uitgang is "alleen printen"'}, 400, [])
-    return uitgang(merged, name_by_pid, not_linked, sent_ingredient_ids)
+    return uitgang(shopping_dict, qty_overrides)

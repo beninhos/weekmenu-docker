@@ -31,6 +31,8 @@ weekmenu/
 
 **AH-connector = los package `weekmenu_ah`** (privé-repo `/pool/apps/weekmenu-ah`, AGPL): AH-API-client, login-proxy, de pagina's `/ah-producten` en `/ah-winkelmand`, het AH-blok op `/settings`, de uitgang 'ah' voor de boodschappenlijst en de ah.nl-receptimporteur. De app doet `from weekmenu_ah import bp` in een try/except (`routes/__init__.py`); het package zet bij import `shopping.UITGANGEN['ah']` en `gemini.IMPORTEURS['ah.nl']`. Templates kennen `ah_beschikbaar`. Zonder package start de app zonder AH en is de ah.nl-link de standaarduitgang (`tests/test_zonder_ah_module.py`). In dev staat de symlink `weekmenu_ah -> /pool/apps/weekmenu-ah` (git- en docker-ignored); in de image komt de connector via de build-context `ah` (`additional_contexts` in docker-compose).
 
+**Picnic-connector = los package `weekmenu_picnic`** (privé-repo `/pool/apps/weekmenu-picnic`, AGPL, op `python-picnic-api2`): account koppelen met 2FA op `/settings`, de uitgang 'picnic' (zoekt per ingrediënt op naam, geen catalogus) en de mand-lezer voor het bestel-log (bron `picnic-mand`). Zelfde ophanging als AH: try-import in `routes/__init__.py`, bij import `shopping.UITGANGEN['picnic']` en `shopping.BESTELLING_LEZERS['picnic']`, template-variabele `picnic_beschikbaar`, symlink in dev/beta, build-context `picnic`, zonder: `docker-compose.zonder-picnic.yml`. Ontwerp: `docs/superpowers/specs/2026-10-12-picnic-connector-design.md`.
+
 **Import-richting**: routes importeren services, services importeren models. Nooit andersom. Als je een import van route ➔ route ziet: fix.
 
 **Services die de kern dragen**:
@@ -41,7 +43,7 @@ weekmenu/
 - `services/kaart.py` + `services/kaartsignaturen.py`: alles wat merkspecifiek is aan een receptkaart (HelloFresh-logo, "Zelf toevoegen"-kop, "Bereidingstijd: N min"). Merkloos ontwerp: een nieuw merk is een nieuw dict in `MERKEN`, geen nieuwe code.
 - `services/verpakking.py`: de vraag "1 tomaat weegt hoeveel gram" — brug tussen telbare recepteenheid en gewichtsverpakking.
 - `services/pantry.py`: voorraadhints + review-lijsten voor `/twijfelgevallen`.
-- `services/shopping.py`: aggregatie van receptregels naar de boodschappenlijst, en `send_dict_to_ah` als dispatcher over `UITGANGEN` (deeplink in de app, 'ah' uit de connector) met `papier` als uit-stand. Per week: `open = nodig − afgevinkt − weggehaald` (`week_nodig`, `_week_stand`). `window_weeks()` geeft alle geplande weken, `lopende_weken()` de weken waarin een zijdelingse wijziging nog mag doorwerken — die tweede is de grens tussen 'nog mee bezig' en 'geweest'.
+- `services/shopping.py`: aggregatie van receptregels naar de boodschappenlijst, en `send_dict_to_ah` als dispatcher over `UITGANGEN` (deeplink in de app, 'ah' en 'picnic' uit de connectors; elke uitgang krijgt `(shopping_dict, qty_overrides)`) met `papier` als uit-stand; `BESTELLING_LEZERS` per uitgang voor het bestel-log. Per week: `open = nodig − afgevinkt − weggehaald` (`week_nodig`, `_week_stand`). `window_weeks()` geeft alle geplande weken, `lopende_weken()` de weken waarin een zijdelingse wijziging nog mag doorwerken — die tweede is de grens tussen 'nog mee bezig' en 'geweest'.
 - `services/afgehandeld.py`: wat er per week per ingredient al afgevinkt of weggehaald is, als hoeveelheid per eenheid (NULL = alles). Toevoegen raakt dit nooit aan: wat afgevinkt is blijft afgevinkt, alleen het nieuwe komt op de lijst (Rutger, 4 okt 2026). Uitzonderingen: uit de voorraad halen zet terug, een voorbije week wordt afgesloten, en recept bewerken laat het afgehandelde deel naar rato meegroeien.
 - `services/bestellingen.py`: het bestel-log. Eén pot per week, AH-regels teruggelezen uit de order (niet wat de app stuurde), handmatig afgevinkte regels in dezelfde pot.
 - `services/gemini.py`: Gemini-integratie voor URL- en foto-imports (los van de OCR-dump).
@@ -55,7 +57,7 @@ weekmenu/
 - **Template-data doorgeven aan JS**: `<script type="application/json" id="data-x">{{ x|tojson }}</script>` + `JSON.parse(document.getElementById('data-x').textContent)`. **Niet** `window.__DATA` — vervuilt de namespace.
 - **Migraties**: `weekmenu/migrations.py` bevat 23 versies achter `schema_version`-guards. Nieuw = `_migrate_vN()` erbij, oude nooit wijzigen. Migraties zijn additief; ze rollen niet terug.
 - **AH-tokens en API-sleutels**: via `/settings` in de database (of via env-var als fallback). Nooit hardcoden.
-- **Testen**: `python3 -m pytest -q tests weekmenu_ah/tests` (app + connector), ~620 tests, Nederlandse gedragsnamen (`test_zondag_valt_niet_buiten_de_printmarge`). Fixtures in `tests/conftest.py`, mocks op de netwerkrand (Cloud Vision, Gemini, AH). In-memory sqlite, geen echte DB-writes.
+- **Testen**: `python3 -m pytest -q tests weekmenu_ah/tests weekmenu_picnic/tests` (app + connectors), ~640 tests, Nederlandse gedragsnamen (`test_zondag_valt_niet_buiten_de_printmarge`). Fixtures in `tests/conftest.py`, mocks op de netwerkrand (Cloud Vision, Gemini, AH). In-memory sqlite, geen echte DB-writes.
 
 ## Ontwikkelen en draaien
 
@@ -91,7 +93,7 @@ De dev-container draait als `app:1000` (matcht host-user beninho), heeft eigen `
 
 **Debug-mode**: aan (`app.py:6` — `debug=True`), maar `use_reloader=False`. De Werkzeug-PIN-console is toegankelijk bij een crash; **kritiek**: reloader mág niet aan want dat fork-t Flask en breekt de `herstel_verloren_jobs()`-supervisor plus de `threading.Lock` in `weekmenu_ah/ah.py`.
 
-**Version**: `0.8.4-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
+**Version**: `0.8.5-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
 - **patch** (0.8.x): bugfixes zonder gedragsverandering
 - **minor** (0.x.0): substantiële refactors, nieuwe features, kwaliteitssprongen
 - **major** (x.0.0): incompatible schema-migraties of API-breuk (niet van toepassing zolang de app single-user is)
@@ -114,7 +116,7 @@ De dev-container draait als `app:1000` (matcht host-user beninho), heeft eigen `
 
 **Wél**:
 - Kleine, gerichte commits met een Nederlandse commit-boodschap die uitlegt **wat** en **waarom**, niet **hoe**.
-- Tests na elke commit — `python3 -m pytest -q tests weekmenu_ah/tests` moet groen blijven.
+- Tests na elke commit — `python3 -m pytest -q tests weekmenu_ah/tests weekmenu_picnic/tests` moet groen blijven.
 - Verificatie op scenario's: kopieer de DB naar scratchpad en meet erop. Twee van de vier eerdere diagnoses werden door adversariële verificatie omvergegooid.
 - Bij UI-wijzigingen: rebuild dev, open in de browser, klik het scenario door.
 

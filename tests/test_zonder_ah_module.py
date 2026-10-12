@@ -51,7 +51,7 @@ def test_de_app_start_zonder_ah_module_en_elke_pagina_laadt():
 
 def test_zonder_ah_module_is_de_link_naar_ah_nl_de_standaard_uitgang():
     uit = _zonder_ah()
-    assert uit['uitgangen'] == ['deeplink']
+    assert 'ah' not in uit['uitgangen'] and 'deeplink' in uit['uitgangen']
     assert uit['standaard'] == 'deeplink'
     assert 'value="ah"' not in uit['settings_html']
     assert 'value="deeplink"' in uit['settings_html']

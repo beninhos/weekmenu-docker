@@ -9,7 +9,7 @@ from weekmenu.models import (
 )
 from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET, BRONNEN
 from weekmenu.services.shopping import (
-    send_dict_to_ah, build_combined_shopping_list, huidige_uitgang,
+    send_dict_to_ah, build_combined_shopping_list, huidige_uitgang, BESTELLING_LEZERS,
 )
 from weekmenu.services import afgehandeld
 from weekmenu.services.units import _normalize_ri_unit
@@ -199,15 +199,15 @@ def _leg_de_bestelling_vast(order_id, weken):
     snapshot wordt later nog ververst als je de winkelmand opent, want tot de
     sluitingstijd kan de order nog veranderen.
     """
-    if not order_id or not weken:
+    lezer = BESTELLING_LEZERS.get(huidige_uitgang())
+    if not order_id or not weken or not lezer:
         return
-    from weekmenu_ah.ah import ah_get_order  # alleen bereikt als de AH-uitgang een order_id gaf
     from weekmenu.services.bestellingen import leg_ah_order_vast
-    order = ah_get_order(order_id)
+    order = lezer(order_id)
     if not order:
         return
     for (y, w) in weken:
-        leg_ah_order_vast(y, w, order)
+        leg_ah_order_vast(y, w, order, bron=order.get('bron') or 'ah')
 
 
 @bp.route('/api/boodschappen/extra', methods=['POST'])

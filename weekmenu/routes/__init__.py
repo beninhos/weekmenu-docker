@@ -9,6 +9,11 @@ try:
 except ImportError as e:  # niet aanwezig: de app draait zonder AH (winkelmodules-onderzoek §5)
     logging.getLogger(__name__).warning('AH-connector niet geladen: %s', e)
     ah_bp = None
+try:
+    from weekmenu_picnic import bp as picnic_bp  # de Picnic-connector, idem
+except ImportError as e:
+    logging.getLogger(__name__).warning('Picnic-connector niet geladen: %s', e)
+    picnic_bp = None
 from weekmenu.routes.settings import bp as settings_bp
 from weekmenu.routes.import_export import bp as import_export_bp
 from weekmenu.routes.seasons import bp as seasons_bp
@@ -19,7 +24,7 @@ from weekmenu.routes.dump import bp as dump_bp
 
 def register_blueprints(app):
     for blueprint in [main_bp, recipes_bp, menu_bp, shopping_bp,
-                      ah_bp, settings_bp, import_export_bp,
+                      ah_bp, picnic_bp, settings_bp, import_export_bp,
                       seasons_bp, inspiratie_bp, pantry_bp, dump_bp]:
         if blueprint is not None:
             app.register_blueprint(blueprint)

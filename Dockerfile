@@ -32,6 +32,15 @@ COPY --from=ah / /app/weekmenu_ah/
 RUN if [ -f /app/weekmenu_ah/requirements.txt ]; then \
         pip install --no-cache-dir -r /app/weekmenu_ah/requirements.txt; fi
 
+# De Picnic-connector, zelfde patroon (context `picnic`, lege map docker/zonder-picnic).
+# shortcut: python-picnic-api2 eist Python 3.13 maar draait op 3.12; upgraden naar
+# python:3.13-slim zodra SQLAlchemy een 3.13-wheel heeft, dan kan de env-var weg.
+# De import-check laat de build falen, niet de app bij de eerste klik.
+COPY --from=picnic / /app/weekmenu_picnic/
+RUN if [ -f /app/weekmenu_picnic/requirements.txt ]; then \
+        PIP_IGNORE_REQUIRES_PYTHON=1 pip install --no-cache-dir -r /app/weekmenu_picnic/requirements.txt \
+        && python -c "import python_picnic_api2"; fi
+
 # Data-directory en de map waar de uploads overheen gemonteerd worden
 RUN mkdir -p /data /app/static/uploads && chmod -R 755 /app/static/uploads
 

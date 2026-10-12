@@ -6,7 +6,7 @@ from weekmenu.changelog import WIJZIGINGEN
 from weekmenu.extensions import db
 from weekmenu.models import Recipe, Cookbook, Ingredient, Settings
 from weekmenu.services.gemini import _get_gemini_api_key
-from weekmenu.services.shopping import UITGANG_KEUZES, huidige_uitgang
+from weekmenu.services.shopping import UITGANGEN, huidige_uitgang
 
 bp = Blueprint('settings', __name__)
 
@@ -30,7 +30,7 @@ def settings_page():
             if setting:
                 db.session.delete(setting)
         uitgang = request.form.get('uitgang')
-        if uitgang in UITGANG_KEUZES:
+        if uitgang == 'papier' or uitgang in UITGANGEN:
             setting = Settings.query.filter_by(key='uitgang').first()
             if setting:
                 setting.value = uitgang
