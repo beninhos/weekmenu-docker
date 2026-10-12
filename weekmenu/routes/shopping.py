@@ -9,7 +9,7 @@ from weekmenu.models import (
 )
 from weekmenu.constants import CATEGORY_ORDER_SUPERMARKET, BRONNEN
 from weekmenu.services.shopping import (
-    send_dict_to_ah, build_combined_shopping_list,
+    send_dict_to_ah, build_combined_shopping_list, huidige_uitgang,
 )
 from weekmenu.services import afgehandeld
 from weekmenu.services.units import _normalize_ri_unit
@@ -53,6 +53,7 @@ def boodschappen():
                            grouped_open=_grouped(ah_items),
                            grouped_elders=elders,
                            bronnen=BRONNEN,
+                           uitgang=huidige_uitgang(),
                            checked_items=sorted(data['checked'],
                                                 key=lambda x: x['checked_at'] or datetime.min,
                                                 reverse=True),

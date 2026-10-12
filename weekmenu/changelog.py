@@ -8,6 +8,18 @@ gebruikt: wat merk je ervan, niet hoe het gebouwd is.
 
 WIJZIGINGEN = [
     {
+        'versie': '0.8.4-beta',
+        'datum': '12 oktober 2026',
+        'titel': 'Kies waar je boodschappenlijst heen gaat',
+        'punten': [
+            'In de instellingen kies je wat de knop op de boodschappenpagina doet: '
+            'naar je gekoppelde AH-account sturen, je lijst openen op ah.nl zonder '
+            'koppeling, of niet versturen en alleen printen.',
+            'Kies je ah.nl, dan opent de app je AH-lijst met de producten erop. Bij '
+            'meer dan 25 producten krijg je een paar links, die je één voor één opent.',
+        ],
+    },
+    {
         'versie': '0.8.3-beta',
         'datum': '10 oktober 2026',
         'titel': 'Afgevinkt blijft afgevinkt',

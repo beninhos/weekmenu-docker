@@ -82,7 +82,7 @@ De dev-container draait als `app:1000` (matcht host-user beninho), heeft eigen `
 
 **Debug-mode**: aan (`app.py:6` — `debug=True`), maar `use_reloader=False`. De Werkzeug-PIN-console is toegankelijk bij een crash; **kritiek**: reloader mág niet aan want dat fork-t Flask en breekt de `herstel_verloren_jobs()`-supervisor plus de `threading.Lock` in `services/ah.py`.
 
-**Version**: `0.8.3-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
+**Version**: `0.8.4-beta` in `weekmenu/__init__.py`. Zichtbaar in de footer van elke pagina. Bump volgens semver-lite:
 - **patch** (0.8.x): bugfixes zonder gedragsverandering
 - **minor** (0.x.0): substantiële refactors, nieuwe features, kwaliteitssprongen
 - **major** (x.0.0): incompatible schema-migraties of API-breuk (niet van toepassing zolang de app single-user is)

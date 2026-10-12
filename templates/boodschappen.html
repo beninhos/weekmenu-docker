@@ -23,12 +23,15 @@
                     class="border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-50 text-sm">
                 Alles afvinken
             </button>
+            {% if uitgang != 'papier' %}
             <button onclick="sendToAh()" id="sendAhBtn"
                     class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#1a1a1a] text-sm">
-                Verstuur naar AH ({{ grouped_open | map(attribute='producten') | map('length') | sum }})
+                {{ 'Open in AH-lijst' if uitgang == 'deeplink' else 'Verstuur naar AH' }} ({{ grouped_open | map(attribute='producten') | map('length') | sum }})
             </button>
+            {% endif %}
         </div>
     </div>
+    <div id="deeplinks" class="no-print hidden mt-3 p-4 bg-white border border-[#E8E4DC] rounded-lg text-sm"></div>
 
     {% if quick_add %}
     <div class="flex flex-wrap gap-2 items-center text-sm mt-4 mb-2">

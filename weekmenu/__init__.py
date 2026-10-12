@@ -5,7 +5,7 @@ from flask import Flask
 
 from weekmenu.extensions import db
 
-__version__ = '0.8.3-beta'
+__version__ = '0.8.4-beta'
 
 
 def _secret_key():

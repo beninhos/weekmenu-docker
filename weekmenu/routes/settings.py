@@ -7,6 +7,7 @@ from weekmenu.extensions import db
 from weekmenu.models import Recipe, Cookbook, Ingredient, Settings
 from weekmenu.services.ah import _ah_setting
 from weekmenu.services.gemini import _get_gemini_api_key
+from weekmenu.services.shopping import UITGANG_KEUZES, huidige_uitgang
 
 bp = Blueprint('settings', __name__)
 
@@ -29,6 +30,13 @@ def settings_page():
         else:
             if setting:
                 db.session.delete(setting)
+        uitgang = request.form.get('uitgang')
+        if uitgang in UITGANG_KEUZES:
+            setting = Settings.query.filter_by(key='uitgang').first()
+            if setting:
+                setting.value = uitgang
+            else:
+                db.session.add(Settings(key='uitgang', value=uitgang))
         db.session.commit()
         flash('Instellingen opgeslagen')
         return redirect(url_for('settings.settings_page'))
@@ -50,6 +58,7 @@ def settings_page():
     import os as _os
     ah_proxy_port = _os.environ.get('AH_PROXY_PORT', '9002')
     return render_template('settings.html', stats=stats, default_serves=default_serves,
+                           uitgang=huidige_uitgang(),
                            ah_connected=ah_connected, ah_expires_dt=ah_expires_dt,
                            ah_proxy_port=ah_proxy_port)
 

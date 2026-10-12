@@ -7,7 +7,7 @@ from weekmenu.extensions import db
 from weekmenu.models import (
     MenuItem, QuickAddItem, CustomShoppingIngredient,
     Ingredient, IngredientUnitConversion, PantryIngredient,
-    ShoppingCheck, ShoppingListExclusion, ShoppingListOverride,
+    Settings, ShoppingCheck, ShoppingListExclusion, ShoppingListOverride,
 )
 from weekmenu.constants import _UNIT_BUY_ONE
 from weekmenu.services.afgehandeld import ALLES, EPS, lees
@@ -351,23 +351,17 @@ def build_combined_shopping_list(today=None):
             'quick_add': quick_add}
 
 
-def send_dict_to_ah(shopping_dict, qty_overrides):
-    """Stuur een shopping-dict naar AH (lijst of actieve order). Returns (payload, status, sent_ingredient_ids)."""
-    from weekmenu.constants import (_AH_HEADERS, _AH_SHOPPINGLIST_URL,
-                                    _AH_ORDER_ACTIVE_URL, _AH_ORDER_ITEMS_URL)
+UITGANG_KEUZES = ('ah', 'deeplink', 'papier')
 
-    access_token = ah_get_access_token()
-    if not access_token:
-        return ({'status': 'error',
-                 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}, 401, [])
 
-    if not shopping_dict:
-        return ({'status': 'success', 'sent': 0, 'not_linked': [],
-                 'message': 'Boodschappenlijst is leeg'}, 200, [])
+def huidige_uitgang():
+    """Waar 'Verstuur' de boodschappen heen stuurt: Settings-sleutel `uitgang`, standaard AH."""
+    setting = Settings.query.filter_by(key='uitgang').first()
+    return setting.value if setting and setting.value in UITGANG_KEUZES else 'ah'
 
-    headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}',
-               'Content-Type': 'application/json'}
 
+def _mandje(shopping_dict, qty_overrides):
+    """Lijst → {ah_product_id: aantal}; twee ingrediënten op hetzelfde product tellen op."""
     merged = defaultdict(int)
     name_by_pid = {}
     not_linked = []
@@ -383,11 +377,27 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
         merged[ing.ah_product_id] += max(int(qty or 1), 1)
         name_by_pid.setdefault(ing.ah_product_id, ing.display)
         sent_ingredient_ids.append(ing_id)
+    return merged, name_by_pid, not_linked, sent_ingredient_ids
 
-    if not merged:
-        return ({'status': 'success', 'sent': 0, 'not_linked': not_linked,
-                 'message': 'Geen gekoppelde AH-producten in de lijst. '
-                            'Koppel ze eerst via AH-producten.'}, 200, [])
+
+def _niet_gekoppeld(msg, not_linked):
+    if not_linked:
+        msg += f'. {len(not_linked)} nog niet gekoppeld (overgeslagen): {", ".join(not_linked[:5])}'
+    return msg
+
+
+def _uitgang_ah(merged, name_by_pid, not_linked, sent_ingredient_ids):
+    """Via de AH-API in de actieve bestelling, of anders op de AH-boodschappenlijst."""
+    from weekmenu.constants import (_AH_HEADERS, _AH_SHOPPINGLIST_URL,
+                                    _AH_ORDER_ACTIVE_URL, _AH_ORDER_ITEMS_URL)
+
+    access_token = ah_get_access_token()
+    if not access_token:
+        return ({'status': 'error',
+                 'message': 'Geen AH-account gekoppeld. Ga naar Instellingen.'}, 401, [])
+
+    headers = {**_AH_HEADERS, 'Authorization': f'Bearer {access_token}',
+               'Content-Type': 'application/json'}
 
     order_id = None
     try:
@@ -425,8 +435,48 @@ def send_dict_to_ah(shopping_dict, qty_overrides):
                  'message': f'Versturen naar AH mislukt: {e}'}, 502, [])
 
     sent = len(merged)
-    msg = f'{sent} product{"en" if sent != 1 else ""} toegevoegd aan je AH-{target}'
-    if not_linked:
-        msg += f'. {len(not_linked)} nog niet gekoppeld (overgeslagen): {", ".join(not_linked[:5])}'
+    msg = _niet_gekoppeld(
+        f'{sent} product{"en" if sent != 1 else ""} toegevoegd aan je AH-{target}', not_linked)
     return ({'status': 'success', 'sent': sent, 'not_linked': not_linked,
              'order_id': order_id, 'message': msg}, 200, sent_ingredient_ids)
+
+
+_DEEPLINK = 'https://www.ah.nl/mijnlijst/add-multiple?p='
+# AH kapt een add-multiple-link stil af boven ~25 producten (gezien door smart-cart).
+# shortcut: ongetest of die grens per p= of per stuk telt; aanpassen na de handmatige test.
+_DEEPLINK_MAX = 25
+
+
+def _uitgang_deeplink(merged, name_by_pid, not_linked, sent_ingredient_ids):
+    """Links naar ah.nl die de producten op je lijst zetten. Geen token, geen netwerk."""
+    paren = [f'{pid}:{qty}' for pid, qty in merged.items()]
+    urls = [_DEEPLINK + ','.join(paren[i:i + _DEEPLINK_MAX])
+            for i in range(0, len(paren), _DEEPLINK_MAX)]
+    sent = len(merged)
+    msg = f'{sent} product{"en" if sent != 1 else ""} klaar voor je AH-lijst'
+    if len(urls) > 1:
+        msg += f', verdeeld over {len(urls)} links: open ze allemaal'
+    return ({'status': 'success', 'sent': sent, 'not_linked': not_linked,
+             'order_id': None, 'urls': urls,
+             'message': _niet_gekoppeld(msg, not_linked)}, 200, sent_ingredient_ids)
+
+
+UITGANGEN = {'ah': _uitgang_ah, 'deeplink': _uitgang_deeplink}
+
+
+def send_dict_to_ah(shopping_dict, qty_overrides):
+    """Stuur een shopping-dict naar de ingestelde uitgang. Returns (payload, status, sent_ingredient_ids)."""
+    if not shopping_dict:
+        return ({'status': 'success', 'sent': 0, 'not_linked': [],
+                 'message': 'Boodschappenlijst is leeg'}, 200, [])
+
+    merged, name_by_pid, not_linked, sent_ingredient_ids = _mandje(shopping_dict, qty_overrides)
+    if not merged:
+        return ({'status': 'success', 'sent': 0, 'not_linked': not_linked,
+                 'message': 'Geen gekoppelde AH-producten in de lijst. '
+                            'Koppel ze eerst via AH-producten.'}, 200, [])
+
+    uitgang = UITGANGEN.get(huidige_uitgang())
+    if not uitgang:
+        return ({'status': 'error', 'message': 'Geen uitgang ingesteld'}, 400, [])
+    return uitgang(merged, name_by_pid, not_linked, sent_ingredient_ids)

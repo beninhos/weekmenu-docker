@@ -126,8 +126,29 @@ async function sendToAh() {
         body: JSON.stringify({ qty_overrides }),
     });
     const data = await resp.json();
+    // location.assign i.p.v. window.open: na een await houdt de pop-upblokker die tegen.
+    if (data.urls?.length === 1) { location.assign(data.urls[0]); return; }
+    if (data.urls?.length > 1) { toonDeeplinks(data); return; }
     alert(data.message || (resp.ok ? 'Verstuurd' : 'Mislukt'));
     if (resp.ok && data.status === 'success') location.reload(); else btn.disabled = false;
+}
+
+// Meer dan één link: elke link is een eigen tik, dan houdt geen pop-upblokker hem tegen.
+function toonDeeplinks(data) {
+    const box = document.getElementById('deeplinks');
+    box.replaceChildren(Object.assign(document.createElement('p'), { textContent: data.message }));
+    data.urls.forEach((url, i) => {
+        box.append(Object.assign(document.createElement('a'), {
+            href: url, target: '_blank', rel: 'noopener',
+            textContent: `Deel ${i + 1} van ${data.urls.length} openen →`,
+            className: 'block mt-2 underline text-[#2C2C2C]',
+        }));
+    });
+    box.append(Object.assign(document.createElement('a'), {
+        href: location.href, textContent: 'Klaar: lijst verversen',
+        className: 'block mt-3 text-[#6B6B6B]',
+    }));
+    box.classList.remove('hidden');
 }
 
 // Een tweede tik op ✕ terwijl de eerste nog loopt doet niets: het kruisje

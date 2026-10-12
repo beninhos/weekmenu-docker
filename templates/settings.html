@@ -26,6 +26,18 @@
                 <p class="text-[#6B6B6B] text-xs mt-1">Laat leeg om geen standaard in te stellen.</p>
             </div>
             <div>
+                <label for="uitgang" class="block text-sm font-medium text-[#2C2C2C]">
+                    Boodschappenlijst versturen
+                </label>
+                <select id="uitgang" name="uitgang"
+                        class="mt-1 block w-full sm:w-auto rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2">
+                    <option value="ah" {% if uitgang == 'ah' %}selected{% endif %}>Naar je AH-account (bestelling of lijst)</option>
+                    <option value="deeplink" {% if uitgang == 'deeplink' %}selected{% endif %}>Open in je AH-lijst op ah.nl (zonder koppeling)</option>
+                    <option value="papier" {% if uitgang == 'papier' %}selected{% endif %}>Niet versturen, alleen printen</option>
+                </select>
+                <p class="text-[#6B6B6B] text-xs mt-1">Bepaalt wat de knop op de boodschappenpagina doet.</p>
+            </div>
+            <div>
                 <button type="submit"
                         class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
                     Opslaan
