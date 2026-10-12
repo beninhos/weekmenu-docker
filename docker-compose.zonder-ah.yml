@@ -11,3 +11,7 @@ services:
     build:
       additional_contexts:
         ah: ./docker/zonder-ah
+  weekmenu-beta:
+    build:
+      additional_contexts:
+        ah: ./docker/zonder-ah

@@ -59,12 +59,15 @@ weekmenu/
 
 ## Ontwikkelen en draaien
 
-**Twee worktrees** onder `/pool/apps/weekmenu/`:
+**Drie worktrees** onder `/pool/apps/weekmenu/` (sinds 12 okt 2026):
 
-| Worktree | Branch | Container | Poort |
-|---|---|---|---|
-| `live/` | `main` | `weekmenu-live-weekmenu-1` | 5001 |
-| `dev/`  | `stabiliseren-*` (of feature-branch) | `weekmenu-dev-weekmenu-dev-1` | 5002 |
+| Worktree | Branch | Container | Poort | Waarvoor |
+|---|---|---|---|---|
+| `live/` | `main` | `weekmenu-live-weekmenu-1` | 5001 | wat Rutger gebruikt |
+| `dev/`  | `dev` (of feature-branch vanaf main) | `weekmenu-dev-weekmenu-dev-1` | 5002 | gewone fixes, mergen naar main |
+| `beta/` | `winkelmodules` | `weekmenu-beta-weekmenu-beta-1` | 5003 (proxy 9004) | winkelmodules-werk; eigen `data/weekmenu_beta.db`; `docker-compose.beta.yml` |
+
+Let op: `main` is op 12 okt 2026 herschreven (e-mailadres, `backup/voor-email-rewrite`); branches van vóór die datum eerst met cherry-pick op het nieuwe `main` zetten, niet mergen.
 
 **Live rebuilden**:
 ```bash
