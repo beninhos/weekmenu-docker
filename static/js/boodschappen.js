@@ -1,6 +1,6 @@
 // Boodschappenlijst-pagina: recept-picker, extra-items, verstuur naar AH, klik-af-flow.
 // Data komt via <script type="application/json" id="page-data"> in het template.
-// Vereist utils.js, ah_common.js, ah_search.js (in die volgorde ingeladen).
+// Vereist utils.js.
 
 const _pageData = JSON.parse(document.getElementById("page-data").textContent);
 
@@ -126,8 +126,38 @@ async function sendToAh() {
         body: JSON.stringify({ qty_overrides }),
     });
     const data = await resp.json();
+    if (data.urls?.length) { toonDeeplinks(data, qty_overrides); return; }
     alert(data.message || (resp.ok ? 'Verstuurd' : 'Mislukt'));
     if (resp.ok && data.status === 'success') location.reload(); else btn.disabled = false;
+}
+
+// Elke link is een eigen tik, dan houdt geen pop-upblokker hem tegen. Afvinken
+// pas op Klaar: een link bouwen is nog niet de lijst op ah.nl zetten.
+function toonDeeplinks(data, qty_overrides) {
+    const box = document.getElementById('deeplinks');
+    box.replaceChildren(Object.assign(document.createElement('p'), { textContent: data.message }));
+    data.urls.forEach((url, i) => {
+        box.append(Object.assign(document.createElement('a'), {
+            href: url, target: '_blank', rel: 'noopener',
+            textContent: data.urls.length > 1 ? `Deel ${i + 1} van ${data.urls.length} openen →` : 'Openen op ah.nl →',
+            className: 'block mt-2 underline text-[#2C2C2C]',
+        }));
+    });
+    const klaar = Object.assign(document.createElement('button'), {
+        textContent: 'Klaar: geopend, afvinken',
+        className: 'block mt-3 text-[#6B6B6B] underline',
+    });
+    klaar.onclick = async () => {
+        klaar.disabled = true;
+        const resp = await fetch('/api/boodschappen/send-to-ah', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qty_overrides, afvinken: true }),
+        });
+        if (resp.ok) location.reload(); else { alert((await resp.json()).message || 'Mislukt'); klaar.disabled = false; }
+    };
+    box.append(klaar);
+    box.classList.remove('hidden');
 }
 
 // Een tweede tik op ✕ terwijl de eerste nog loopt doet niets: het kruisje

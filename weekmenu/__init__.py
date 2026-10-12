@@ -5,7 +5,7 @@ from flask import Flask
 
 from weekmenu.extensions import db
 
-__version__ = '0.8.3-beta'
+__version__ = '0.8.5-beta'
 
 
 def _secret_key():
@@ -70,7 +70,9 @@ def create_app():
     # er iets voor hoeft door te geven.
     @app.context_processor
     def _versie_in_template():
-        return {'app_version': __version__}
+        return {'app_version': __version__,
+                'ah_beschikbaar': 'ah' in app.blueprints,
+                'picnic_beschikbaar': 'picnic' in app.blueprints}
 
     db.init_app(app)
 

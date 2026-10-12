@@ -14,8 +14,13 @@ from weekmenu.extensions import db
 from weekmenu.models import (
     Bestelling, BestellingRegel, Ingredient, MenuItem, Recipe, RecipeIngredient,
 )
-from weekmenu.services import ah as ah_svc
+try:
+    from weekmenu_ah import ah as ah_svc  # de order-teruglezing zit in de AH-connector
+except ImportError:
+    ah_svc = None
 from weekmenu.services import shopping as shop_svc
+
+met_connector = pytest.mark.skipif(ah_svc is None, reason='AH-connector (weekmenu_ah) niet aanwezig')
 
 
 def _iso():
@@ -75,6 +80,7 @@ def ah(monkeypatch):
     return verzonden
 
 
+@met_connector
 def test_versturen_legt_de_teruggelezen_order_vast(app, client, ah, monkeypatch):
     tomaat = _ing('tomaat', ah_product_id=111)
     _plan(tomaat)
@@ -94,6 +100,7 @@ def test_versturen_legt_de_teruggelezen_order_vast(app, client, ah, monkeypatch)
     assert regel.ingredient_id is None, 'een product dat de app niet kent mag er gewoon in'
 
 
+@met_connector
 def test_zelf_afvinken_komt_in_dezelfde_pot(app, client, ah, monkeypatch):
     tomaat = _ing('tomaat', ah_product_id=111)
     vlees = _ing('half-om-half', bron='slager')
@@ -110,6 +117,7 @@ def test_zelf_afvinken_komt_in_dezelfde_pot(app, client, ah, monkeypatch):
     assert bronnen == {'ah': 'Tomaten', 'slager': 'Half-om-half'}
 
 
+@met_connector
 def test_order_opnieuw_lezen_vervangt_ah_regels_en_laat_handwerk_staan(app, client, ah, monkeypatch):
     tomaat = _ing('tomaat', ah_product_id=111)
     vlees = _ing('half-om-half', bron='slager')

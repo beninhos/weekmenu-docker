@@ -5,8 +5,8 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from weekmenu.changelog import WIJZIGINGEN
 from weekmenu.extensions import db
 from weekmenu.models import Recipe, Cookbook, Ingredient, Settings
-from weekmenu.services.ah import _ah_setting
 from weekmenu.services.gemini import _get_gemini_api_key
+from weekmenu.services.shopping import UITGANGEN, huidige_uitgang
 
 bp = Blueprint('settings', __name__)
 
@@ -29,6 +29,13 @@ def settings_page():
         else:
             if setting:
                 db.session.delete(setting)
+        uitgang = request.form.get('uitgang')
+        if uitgang == 'papier' or uitgang in UITGANGEN:
+            setting = Settings.query.filter_by(key='uitgang').first()
+            if setting:
+                setting.value = uitgang
+            else:
+                db.session.add(Settings(key='uitgang', value=uitgang))
         db.session.commit()
         flash('Instellingen opgeslagen')
         return redirect(url_for('settings.settings_page'))
@@ -40,18 +47,8 @@ def settings_page():
     }
     default_serves_setting = Settings.query.filter_by(key='default_serves').first()
     default_serves = int(default_serves_setting.value) if default_serves_setting and default_serves_setting.value else None
-    ah_refresh = _ah_setting('ah_refresh_token')
-    ah_expires = _ah_setting('ah_token_expires')
-    ah_connected = bool(ah_refresh)
-    ah_expires_dt = None
-    if ah_expires:
-        import datetime as _dt
-        ah_expires_dt = _dt.datetime.fromtimestamp(int(ah_expires)).strftime('%d %b %Y')
-    import os as _os
-    ah_proxy_port = _os.environ.get('AH_PROXY_PORT', '9002')
     return render_template('settings.html', stats=stats, default_serves=default_serves,
-                           ah_connected=ah_connected, ah_expires_dt=ah_expires_dt,
-                           ah_proxy_port=ah_proxy_port)
+                           uitgang=huidige_uitgang())
 
 
 @bp.route('/api/gemini/key', methods=['POST', 'DELETE'])

@@ -68,50 +68,7 @@ def test_uitvinken_met_id_haalt_wel_uit_de_voorraad(client, app):
     assert PantryIngredient.query.count() == 0
 
 
-# ── Verstuur naar AH respecteert de bron ────────────────────────────────
-
-def _mock_ah(monkeypatch):
-    """Zonder AH-sessie keert send_dict_to_ah al op regel 1 terug met 401 en
-    kijkt hij niet eens naar de lijst; dan toetst de test niets."""
-    from weekmenu.services import shopping as shopping_svc
-    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
-
-    class FakeResp:
-        status_code = 404
-        def json(self): return {}
-        def raise_for_status(self): pass
-
-    class FakeReq:
-        def get(self, *a, **kw): return FakeResp()
-        def patch(self, *a, **kw): return FakeResp()
-        def put(self, *a, **kw): return FakeResp()
-
-    monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
-
-
-def test_elders_item_gaat_niet_mee_naar_ah(client, app, monkeypatch):
-    from weekmenu.models import ShoppingCheck
-    _mock_ah(monkeypatch)
-    toko = _ing('sambal oelek', ah_product_id=12345, bron='toko')
-    _plan(toko)
-
-    resp = client.post('/api/boodschappen/send-to-ah', json={})
-    assert resp.status_code == 200
-    # Niet verstuurd, dus ook niet afgevinkt als 'via AH'.
-    assert ShoppingCheck.query.filter_by(ingredient_id=toko.id).first() is None
-
-
-def test_ah_item_wordt_wel_verstuurd_en_afgevinkt(client, app, monkeypatch):
-    from weekmenu.models import ShoppingCheck
-    _mock_ah(monkeypatch)
-    gewoon = _ing('olijfolie', ah_product_id=777)
-    _plan(gewoon)
-
-    resp = client.post('/api/boodschappen/send-to-ah', json={})
-    assert resp.status_code == 200
-    check = ShoppingCheck.query.filter_by(ingredient_id=gewoon.id).first()
-    assert check is not None and check.via_ah is True
-
+# ── Bron ah hoort op de lijst ────────────────────────────────────────────
 
 def test_ah_item_gaat_wel_mee(client, app):
     from weekmenu.services.shopping import build_combined_shopping_list

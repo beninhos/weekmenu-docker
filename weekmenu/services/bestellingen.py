@@ -26,8 +26,8 @@ def pot_voor(jaar, week):
     return pot
 
 
-def leg_ah_order_vast(jaar, week, order):
-    """Vervang de AH-regels van die week door wat er nu in de order staat.
+def leg_ah_order_vast(jaar, week, order, bron='ah'):
+    """Vervang de regels van deze bron voor die week door wat er nu in de order staat.
 
     Vervangen, niet aanvullen: een tweede blik op dezelfde order moet hetzelfde
     resultaat geven, ook als je er in de AH-app intussen iets bij hebt gedaan of
@@ -45,7 +45,7 @@ def leg_ah_order_vast(jaar, week, order):
     pot.besparing = order.get('savings')
     pot.bijgewerkt_op = datetime.now()
 
-    for regel in [r for r in pot.regels if r.bron == 'ah']:
+    for regel in [r for r in pot.regels if r.bron == bron]:
         db.session.delete(regel)
 
     per_product = {
@@ -57,8 +57,8 @@ def leg_ah_order_vast(jaar, week, order):
             pid = item.get('productId')
             db.session.add(BestellingRegel(
                 bestelling_id=pot.id,
-                bron='ah',
-                ingredient_id=per_product.get(pid),
+                bron=bron,
+                ingredient_id=item.get('ingredient_id') or per_product.get(pid),
                 ah_product_id=pid,
                 titel=item.get('title') or '',
                 merk=item.get('brand') or None,

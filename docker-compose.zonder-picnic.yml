@@ -1,0 +1,16 @@
+# Bouw de app zónder Picnic-connector: leg dit over de gewone compose-file heen.
+#   beta: docker compose -p weekmenu-beta -f docker-compose.beta.yml -f docker-compose.zonder-picnic.yml up -d --build weekmenu-beta
+# De lege map docker/zonder-picnic landt dan op /app/weekmenu_picnic en de app start zonder Picnic.
+services:
+  weekmenu:
+    build:
+      additional_contexts:
+        picnic: ./docker/zonder-picnic
+  weekmenu-dev:
+    build:
+      additional_contexts:
+        picnic: ./docker/zonder-picnic
+  weekmenu-beta:
+    build:
+      additional_contexts:
+        picnic: ./docker/zonder-picnic

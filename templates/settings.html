@@ -26,6 +26,19 @@
                 <p class="text-[#6B6B6B] text-xs mt-1">Laat leeg om geen standaard in te stellen.</p>
             </div>
             <div>
+                <label for="uitgang" class="block text-sm font-medium text-[#2C2C2C]">
+                    Boodschappenlijst versturen
+                </label>
+                <select id="uitgang" name="uitgang"
+                        class="mt-1 block w-full sm:w-auto rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2">
+                    {% if ah_beschikbaar %}<option value="ah" {% if uitgang == 'ah' %}selected{% endif %}>Naar je AH-account (bestelling of lijst)</option>{% endif %}
+                    {% if picnic_beschikbaar %}<option value="picnic" {% if uitgang == 'picnic' %}selected{% endif %}>Naar je Picnic-mand (zoekt op naam)</option>{% endif %}
+                    <option value="deeplink" {% if uitgang == 'deeplink' %}selected{% endif %}>Open in je AH-lijst op ah.nl (zonder koppeling)</option>
+                    <option value="papier" {% if uitgang == 'papier' %}selected{% endif %}>Niet versturen, alleen printen</option>
+                </select>
+                <p class="text-[#6B6B6B] text-xs mt-1">Bepaalt wat de knop op de boodschappenpagina doet.</p>
+            </div>
+            <div>
                 <button type="submit"
                         class="bg-[#2C2C2C] text-white px-4 py-2 rounded hover:bg-[#2C2C2C] text-sm">
                     Opslaan
@@ -144,112 +157,8 @@
         </div>
     </div>
 
-    <!-- AH Account -->
-    <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6" id="ah-account">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-sm font-semibold uppercase tracking-wide text-[#6B6B6B]">Albert Heijn</h3>
-            <a href="{{ url_for('ah.ah_products') }}"
-               class="text-sm bg-[#2C2C2C] text-white px-3 py-1.5 rounded hover:bg-[#1a1a1a]">
-                AH Producten →
-            </a>
-        </div>
-
-        {% if ah_connected %}
-        <!-- Verbonden -->
-        <div class="flex items-start justify-between">
-            <div>
-                <p class="font-medium text-[#8B4513]">✓ Verbonden</p>
-                {% if ah_expires_dt %}
-                <p class="text-sm text-[#6B6B6B] mt-0.5">Token verloopt circa {{ ah_expires_dt }}</p>
-                {% endif %}
-                <div id="ahVerifyResult" class="mt-2 text-sm hidden"></div>
-            </div>
-            <div class="flex gap-2 shrink-0">
-                <button onclick="ahVerify()"
-                        class="text-sm text-[#8B4513] hover:text-[#8B4513] border border-[#E8E4DC] px-3 py-2 rounded hover:bg-[#FAF8F5]">
-                    Verbinding testen
-                </button>
-                <button onclick="ahDisconnect()"
-                        class="text-sm text-red-600 hover:text-red-800 border border-red-200 px-3 py-2 rounded hover:bg-red-50">
-                    Ontkoppelen
-                </button>
-            </div>
-        </div>
-
-        {% else %}
-        <!-- Niet verbonden: 3-stappen koppelaar -->
-        <div id="ahStep0">
-            <p class="text-sm text-[#6B6B6B] mb-4">
-                Koppel je AH-account om de boodschappenlijst direct naar de Appie-app te sturen.
-            </p>
-            <button onclick="ahStartLogin()"
-                    id="ahStartBtn"
-                    class="bg-[#2C2C2C] text-white px-5 py-2.5 rounded hover:bg-[#1a1a1a] text-sm font-medium">
-                Start AH-koppelaar
-            </button>
-            <div id="ahStartError" class="hidden mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2"></div>
-        </div>
-
-        <div id="ahStep1" class="hidden space-y-4">
-            <!-- Stap 2: SSH-tunnel -->
-            <div class="bg-[#F5F2ED] rounded-lg p-4">
-                <p class="text-sm font-medium text-[#2C2C2C] mb-2">
-                    <span class="inline-flex items-center justify-center w-5 h-5 bg-[#2C2C2C] text-white rounded-full text-xs mr-1.5">1</span>
-                    Open een SSH-tunnel op je computer:
-                </p>
-                <div class="flex items-center gap-2">
-                    <code class="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono" id="ahSshCmd">
-                        ssh -L {{ ah_proxy_port }}:localhost:{{ ah_proxy_port }} user@server
-                    </code>
-                    <button onclick="ahCopy('ahSshCmd')"
-                            class="shrink-0 text-xs border border-[#D4CEC4] bg-white px-2 py-1.5 rounded hover:bg-[#F5F2ED]">
-                        Kopieer
-                    </button>
-                </div>
-            </div>
-
-            <!-- Stap 3: Inloggen -->
-            <div class="bg-[#F5F2ED] rounded-lg p-4">
-                <p class="text-sm font-medium text-[#2C2C2C] mb-2">
-                    <span class="inline-flex items-center justify-center w-5 h-5 bg-[#2C2C2C] text-white rounded-full text-xs mr-1.5">2</span>
-                    Ga naar deze URL in je browser en log in:
-                </p>
-                <div class="flex items-center gap-2">
-                    <code class="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono" id="ahLoginUrl">
-                        http://localhost:{{ ah_proxy_port }}
-                    </code>
-                    <a href="http://localhost:{{ ah_proxy_port }}" target="_blank"
-                       class="shrink-0 text-xs bg-[#2C2C2C] text-white px-2 py-1.5 rounded hover:bg-[#1a1a1a]">
-                        Openen
-                    </a>
-                </div>
-                <p class="text-xs text-[#6B6B6B] mt-2">Log in met je AH-account. Sluit het tabblad daarna.</p>
-            </div>
-
-            <!-- Wachten -->
-            <div class="flex items-center gap-3 text-sm text-[#6B6B6B]">
-                <svg class="animate-spin h-4 w-4 text-[#8B4513]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                </svg>
-                Wachten op koppeling…
-                <button onclick="ahPollNow()" class="ml-auto text-xs text-[#8B4513] hover:underline">Nu controleren</button>
-            </div>
-        </div>
-
-        <details class="mt-4">
-            <summary class="text-xs text-[#6B6B6B] cursor-pointer hover:text-[#6B6B6B]">Handmatig refresh_token invoeren</summary>
-            <div class="mt-2 flex gap-2">
-                <input type="text" id="ahManualToken" placeholder="refresh_token..."
-                       class="flex-1 rounded-md border-[#D4CEC4] shadow-sm text-xs">
-                <button onclick="ahSaveToken()"
-                        class="text-xs bg-[#F5F2ED] border border-[#D4CEC4] text-[#2C2C2C] px-3 py-1.5 rounded hover:bg-[#E8E4DC]">
-                    Opslaan
-                </button>
-            </div>
-        </details>
-        {% endif %}
-    </div>
+    {% if ah_beschikbaar %}{% include '_ah_instellingen.html' %}{% endif %}
+    {% if picnic_beschikbaar %}{% include '_picnic_instellingen.html' %}{% endif %}
 
     <!-- Statistieken -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">

@@ -1,0 +1,22 @@
+# Derde omgeving: de winkelmodules-branch, naast live (5001) en dev (5002).
+# Gebruik: docker compose -p weekmenu-beta -f docker-compose.beta.yml up -d --build weekmenu-beta
+services:
+  weekmenu-beta:
+    build:
+      context: .
+      additional_contexts:
+        ah: ../../weekmenu-ah   # de AH-connector; zie docker-compose.zonder-ah.yml
+        picnic: ../../weekmenu-picnic   # de Picnic-connector; zie docker-compose.zonder-picnic.yml
+    ports:
+      - "5003:5001"
+      - "9004:9002"
+    volumes:
+      - ./data:/data
+      - ./static/uploads:/app/static/uploads
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_DEBUG=1
+      - DATABASE_URL=sqlite:////data/weekmenu_beta.db
+      - AH_PROXY_PORT=9004
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - SECRET_KEY=${SECRET_KEY:-}

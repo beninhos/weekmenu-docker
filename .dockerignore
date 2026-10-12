@@ -24,6 +24,10 @@ data/
 **/__pycache__/
 *.pyc
 
+# De AH-connector komt via de build-context `ah` binnen, niet via deze symlink
+weekmenu_ah
+weekmenu_picnic
+
 # Tests draaien niet in het image (pytest zit niet in requirements.txt)
 tests/
 

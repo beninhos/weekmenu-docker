@@ -29,5 +29,9 @@ static/uploads/*.jpeg
 static/uploads/*.png
 static/uploads/*.gif
 static/uploads/*.webp
+# Symlink naar de AH-connector (privé-repo /pool/apps/weekmenu-ah)
+weekmenu_ah
+weekmenu_picnic
+
 # Claude Code worktrees
 .claude/worktrees/

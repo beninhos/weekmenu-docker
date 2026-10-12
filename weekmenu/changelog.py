@@ -8,6 +8,33 @@ gebruikt: wat merk je ervan, niet hoe het gebouwd is.
 
 WIJZIGINGEN = [
     {
+        'versie': '0.8.5-beta',
+        'datum': '12 oktober 2026',
+        'titel': 'Boodschappen naar je Picnic-mand',
+        'punten': [
+            'Koppel je eigen Picnic-account in de instellingen (e-mail, wachtwoord en de '
+            'code die Picnic per sms of e-mail stuurt). Je wachtwoord wordt niet bewaard.',
+            'Kies als uitgang "Naar je Picnic-mand": de knop op de boodschappenpagina zoekt '
+            'elk ingrediënt op naam bij Picnic en zet de eerste treffer in je mand. De '
+            'melding daarna laat per regel zien wat het werd; wat niet gevonden is blijft open.',
+            'Wat er na het versturen in je Picnic-mand staat, komt in het bestel-log als '
+            '"picnic-mand": een mand is nog geen bestelling.',
+        ],
+    },
+    {
+        'versie': '0.8.4-beta',
+        'datum': '12 oktober 2026',
+        'titel': 'Kies waar je boodschappenlijst heen gaat',
+        'punten': [
+            'In de instellingen kies je wat de knop op de boodschappenpagina doet: '
+            'naar je gekoppelde AH-account sturen, je lijst openen op ah.nl zonder '
+            'koppeling, of niet versturen en alleen printen.',
+            'Kies je ah.nl, dan krijg je een link naar je AH-lijst met de producten '
+            'erop; bij meer dan 25 producten een paar links, die je één voor één opent. '
+            'Tik daarna op Klaar: pas dan worden ze op je lijst hier afgevinkt.',
+        ],
+    },
+    {
         'versie': '0.8.3-beta',
         'datum': '10 oktober 2026',
         'titel': 'Afgevinkt blijft afgevinkt',
