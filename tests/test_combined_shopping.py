@@ -125,37 +125,6 @@ def test_quick_add_recipe_verschijnt_op_de_boodschappenlijst(app):
     assert any(q['recipe_id'] == r.id for q in result['quick_add'])
 
 
-def test_send_dict_to_ah_returns_sent_ids(app, monkeypatch):
-    from weekmenu.services import shopping as shopping_svc
-
-    r, ing = _mk_recipe('Dal', 'linzen-ah', 200)
-    ing.ah_product_id = 12345
-    _plan(r, 2026, 28)
-    r2, ing2 = _mk_recipe('Soep', 'ongekoppeld-ding', 1, unit='stuks')
-    _plan(r2, 2026, 28)
-    db.session.commit()
-
-    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
-
-    class FakeResp:
-        status_code = 404
-        def json(self): return {}
-        def raise_for_status(self): pass
-    class FakeReq:
-        def get(self, *a, **kw): return FakeResp()
-        def patch(self, *a, **kw): return FakeResp()
-        def put(self, *a, **kw): return FakeResp()
-    monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
-
-    from weekmenu.services.shopping import send_dict_to_ah, week_nodig
-    payload, status, sent_ids = send_dict_to_ah(week_nodig(2026, 28)[0], {})
-    assert status == 200
-    assert payload['status'] == 'success'
-    assert ing.id in sent_ids
-    assert ing2.id not in sent_ids
-    assert 'ongekoppeld-ding' in ' '.join(payload['not_linked'])
-
-
 def test_check_endpoint_zet_ingredient_op_afgevinkt(app, client):
     r, ing = _mk_recipe('A', 'kikkererwten', 200)
     iso = (date.today() + timedelta(days=1)).isocalendar()
@@ -212,31 +181,6 @@ def test_old_urls_redirect(app, client):
     resp = client.get('/quick-add')
     assert resp.status_code == 302
     assert resp.headers['Location'].endswith('/boodschappen')
-
-
-def test_combined_send_to_ah_checks_sent_items(app, client, monkeypatch):
-    from weekmenu.services import shopping as shopping_svc
-    r, ing = _mk_recipe('Dal-ah', 'linzen-combined', 200)
-    ing.ah_product_id = 777
-    iso = (date.today() + timedelta(days=1)).isocalendar()
-    _plan(r, iso[0], iso[1])
-    db.session.commit()
-
-    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
-    class FakeResp:
-        status_code = 404
-        def json(self): return {}
-        def raise_for_status(self): pass
-    class FakeReq:
-        def get(self, *a, **kw): return FakeResp()
-        def patch(self, *a, **kw): return FakeResp()
-        def put(self, *a, **kw): return FakeResp()
-    monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
-
-    resp = client.post('/api/boodschappen/send-to-ah', json={})
-    assert resp.status_code == 200
-    check = ShoppingCheck.query.filter_by(ingredient_id=ing.id).first()
-    assert check is not None and check.via_ah is True
 
 
 def test_week_menu_sets_cookie_and_home_follows_it(app, client):
@@ -309,15 +253,12 @@ def _zet_uitgang(waarde):
 
 
 def _geen_netwerk(monkeypatch):
-    from weekmenu.services import shopping as shopping_svc
+    """Zou de dispatcher toch bij de AH-uitgang uitkomen, dan knalt hij."""
+    from weekmenu.services.shopping import UITGANGEN
 
     def boem(*a, **kw):
         raise AssertionError('deze uitgang hoort geen AH-aanroep te doen')
-
-    class GeenReq:
-        get = patch = put = staticmethod(boem)
-    monkeypatch.setattr(shopping_svc, 'requests', GeenReq())
-    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', boem)
+    monkeypatch.setitem(UITGANGEN, 'ah', boem)
 
 
 def test_deeplink_telt_twee_ingredienten_op_hetzelfde_product_op(app, monkeypatch):
@@ -370,32 +311,6 @@ def test_papier_geeft_400_en_vinkt_niets_af(app, client, monkeypatch):
     assert resp.get_json()['status'] == 'error'
     assert ShoppingCheck.query.count() == 0
     assert 'sendAhBtn' not in client.get('/boodschappen').get_data(as_text=True)
-
-
-def test_zonder_instelling_blijft_ah_de_uitgang(app, client, monkeypatch):
-    from weekmenu.services import shopping as shopping_svc
-    r, ing = _mk_recipe('Dal-standaard', 'linzen-standaard', 200)
-    ing.ah_product_id = 777
-    iso = (date.today() + timedelta(days=1)).isocalendar()
-    _plan(r, iso[0], iso[1])
-    db.session.commit()
-
-    gestuurd = []
-    monkeypatch.setattr(shopping_svc, 'ah_get_access_token', lambda: 'token')
-    class FakeResp:
-        status_code = 404
-        def json(self): return {}
-        def raise_for_status(self): pass
-    class FakeReq:
-        def get(self, *a, **kw): return FakeResp()
-        def patch(self, *a, **kw): gestuurd.append(kw['json']); return FakeResp()
-        def put(self, *a, **kw): return FakeResp()
-    monkeypatch.setattr(shopping_svc, 'requests', FakeReq())
-
-    assert 'Verstuur naar AH' in client.get('/boodschappen').get_data(as_text=True)
-    resp = client.post('/api/boodschappen/send-to-ah', json={})
-    assert resp.status_code == 200 and 'urls' not in resp.get_json()
-    assert gestuurd and gestuurd[0]['items'][0]['productId'] == 777
 
 
 def test_deeplink_zet_elk_product_in_een_eigen_p(app, monkeypatch):

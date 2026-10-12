@@ -1,6 +1,6 @@
 """De app start en werkt zonder de AH-module (stap 2 uit het winkelmodules-
-onderzoek van 12 okt 2026): routes/ah.py en services/ah.py gaan straks naar een
-eigen package. Alles wat ze importeert moet dat dan kunnen missen.
+onderzoek van 12 okt 2026): de connector is het losse package weekmenu_ah,
+en alles wat eraan hangt moet het kunnen missen.
 
 Draait in een subprocess, want in dit proces zijn die modules al geladen en
 een sys.modules-truc achteraf bewijst niets.
@@ -12,8 +12,7 @@ import sys
 
 _SCRIPT = r'''
 import sys
-sys.modules['weekmenu.routes.ah'] = None
-sys.modules['weekmenu.services.ah'] = None
+sys.modules['weekmenu_ah'] = None  # de connector ontbreekt
 import os
 os.environ['DATABASE_URL'] = 'sqlite://'
 from weekmenu import create_app

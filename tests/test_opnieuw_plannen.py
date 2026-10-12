@@ -64,31 +64,6 @@ def test_recepthint_noemt_alleen_recepten_waarvoor_de_regel_open_is(app):
                if x['ingredient_id'] == ing.id)
     assert row['recipes'] == ['Nasi']
     assert row['amount'] == 2
-
-
-def test_winkelmand_nodig_volgt_de_open_boodschappenlijst(app, client, monkeypatch):
-    from weekmenu.services import ah as ah_svc
-    r_oud, ing_oud = _mk_recipe('Orzo', 'orzo', 300)
-    r_nieuw, ing_nieuw = _mk_recipe('Nasi', 'kroepoek', 75)
-    ing_oud.ah_product_id = 111
-    ing_nieuw.ah_product_id = 222
-    db.session.add(MenuItem(day_of_week=1, meal_type='diner', recipe_id=r_oud.id,
-                            week_number=37, year=2026))
-    db.session.add(ShoppingCheck(year=2026, week_number=37, ingredient_id=ing_oud.id, via_ah=True))
-    db.session.add(MenuItem(day_of_week=1, meal_type='diner', recipe_id=r_nieuw.id,
-                            week_number=38, year=2026))
-    db.session.commit()
-
-    monkeypatch.setattr(ah_svc, 'ah_get_order',
-                        lambda oid: {'id': oid, 'editable': True, 'groups': [],
-                                     'productIds': [], 'total': 0, 'savings': 0,
-                                     'itemCount': 0})
-    resp = client.get('/api/ah/order/955')
-    assert resp.status_code == 200
-    needed = {n['ingredientId'] for n in resp.get_json()['needed']}
-    assert needed == {ing_nieuw.id}, 'afgevinkte orzo van week 37 hoort niet als "nog nodig"'
-
-
 def test_alles_afvinken_bouwt_de_lijst_een_keer_en_vinkt_alles_af(app, client, monkeypatch):
     from weekmenu.routes import shopping as route
     r1, ing1 = _mk_recipe('Nasi', 'kroepoek', 75)

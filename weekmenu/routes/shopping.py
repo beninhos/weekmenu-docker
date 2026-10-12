@@ -201,7 +201,7 @@ def _leg_de_bestelling_vast(order_id, weken):
     """
     if not order_id or not weken:
         return
-    from weekmenu.services.ah import ah_get_order
+    from weekmenu_ah.ah import ah_get_order  # alleen bereikt als de AH-uitgang een order_id gaf
     from weekmenu.services.bestellingen import leg_ah_order_vast
     order = ah_get_order(order_id)
     if not order:

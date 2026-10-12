@@ -1,0 +1,13 @@
+# Bouw de app zónder AH-connector: leg dit over de gewone compose-file heen.
+#   dev:  docker compose -p weekmenu-dev -f docker-compose.dev.yml -f docker-compose.zonder-ah.yml up -d --build weekmenu-dev
+#   live: docker compose -p weekmenu-live -f docker-compose.yml -f docker-compose.zonder-ah.yml build weekmenu
+# De lege map docker/zonder-ah landt dan op /app/weekmenu_ah en de app start zonder AH.
+services:
+  weekmenu:
+    build:
+      additional_contexts:
+        ah: ./docker/zonder-ah
+  weekmenu-dev:
+    build:
+      additional_contexts:
+        ah: ./docker/zonder-ah

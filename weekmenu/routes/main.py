@@ -43,7 +43,11 @@ _SW_CACHE = {'inhoud': None}
 def _bouw_sw_inhoud():
     static = current_app.static_folder
     sw_pad = os.path.join(static, 'sw.js')
-    bronnen = sorted(glob.glob(os.path.join(static, 'js', '*.js'))) + [sw_pad]
+    bronnen = sorted(glob.glob(os.path.join(static, 'js', '*.js')))
+    for blauwdruk in current_app.blueprints.values():  # de AH-connector levert eigen JS
+        if blauwdruk.static_folder:
+            bronnen += sorted(glob.glob(os.path.join(blauwdruk.static_folder, 'js', '*.js')))
+    bronnen.append(sw_pad)
     hasher = hashlib.sha1()
     for pad in bronnen:
         with open(pad, 'rb') as fh:

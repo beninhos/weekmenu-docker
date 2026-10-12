@@ -1,6 +1,9 @@
 services:
   weekmenu:
-    build: .
+    build:
+      context: .
+      additional_contexts:
+        ah: ../../weekmenu-ah   # de AH-connector; zie docker-compose.zonder-ah.yml
     ports:
       - "5001:5001"
       - "9002:9002"
