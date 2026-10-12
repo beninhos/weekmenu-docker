@@ -14,7 +14,10 @@ from weekmenu.services.afgehandeld import ALLES, EPS, lees
 from weekmenu.services.units import (
     _norm_unit, _calc_multiplier, _convert_unit_for_agg, _calc_ah_qty, format_amount,
 )
-from weekmenu.services.ah import ah_get_access_token
+try:
+    from weekmenu.services.ah import ah_get_access_token
+except ImportError:  # zonder AH-module geen uitgang 'ah'; de link naar ah.nl blijft
+    ah_get_access_token = None
 
 log = logging.getLogger(__name__)
 _al_gemeld = set()
@@ -355,9 +358,15 @@ UITGANG_KEUZES = ('ah', 'deeplink', 'papier')
 
 
 def huidige_uitgang():
-    """Waar 'Verstuur' de boodschappen heen stuurt: Settings-sleutel `uitgang`, standaard AH."""
+    """Waar 'Verstuur' de boodschappen heen stuurt: Settings-sleutel `uitgang`.
+
+    Standaard AH; zonder AH-module de link naar ah.nl, ook als er nog 'ah' staat.
+    """
     setting = Settings.query.filter_by(key='uitgang').first()
-    return setting.value if setting and setting.value in UITGANG_KEUZES else 'ah'
+    keuze = setting.value if setting else None
+    if keuze == 'papier' or keuze in UITGANGEN:
+        return keuze
+    return 'ah' if 'ah' in UITGANGEN else 'deeplink'
 
 
 def _mandje(shopping_dict, qty_overrides):
@@ -462,7 +471,9 @@ def _uitgang_deeplink(merged, name_by_pid, not_linked, sent_ingredient_ids):
              'message': _niet_gekoppeld(msg, not_linked)}, 200, sent_ingredient_ids)
 
 
-UITGANGEN = {'ah': _uitgang_ah, 'deeplink': _uitgang_deeplink}
+UITGANGEN = {'deeplink': _uitgang_deeplink}
+if ah_get_access_token:
+    UITGANGEN['ah'] = _uitgang_ah
 
 
 def send_dict_to_ah(shopping_dict, qty_overrides):

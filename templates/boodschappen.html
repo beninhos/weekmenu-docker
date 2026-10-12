@@ -156,17 +156,19 @@
                     </div>
                     {% else %}
                     <div class="list-right flex items-center gap-3 w-full md:flex-grow">
+                        {% if ah_beschikbaar %}
                         <button class="ah-badge text-sm text-[#6B6B6B] hover:text-[#8B4513] border border-dashed border-[#D4CEC4] hover:border-[#C9A882] rounded-lg px-3 py-2"
                                 onclick="toggleSearch(this)">
                             + Koppel AH product
                         </button>
+                        {% endif %}
                         <button onclick="excludeItem({{ item.ingredient_id }})" class="shrink-0 text-[#D4CEC4] hover:text-red-400 ml-auto" style="font-size:0.75rem">✕</button>
                     </div>
                     {% endif %}
 
                 </div>
 
-                {% include '_ah_search_panel.html' %}
+                {% if ah_beschikbaar %}{% include '_ah_search_panel.html' %}{% endif %}
             </div>
             {% endfor %}
         </div>
@@ -274,8 +276,10 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+{% if ah_beschikbaar %}
 <script src="{{ url_for('static', filename='js/ah_common.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ah_search.js') }}"></script>
+{% endif %}
 <script type="application/json" id="page-data">
 { "recipes":            {{ recipes_json | safe }},
   "weeksByIngredient":  {{ weeks_by_ingredient_json | safe }},

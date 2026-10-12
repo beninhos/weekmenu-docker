@@ -31,7 +31,7 @@
                 </label>
                 <select id="uitgang" name="uitgang"
                         class="mt-1 block w-full sm:w-auto rounded-md border-[#D4CEC4] shadow-sm text-sm px-3 py-2">
-                    <option value="ah" {% if uitgang == 'ah' %}selected{% endif %}>Naar je AH-account (bestelling of lijst)</option>
+                    {% if ah_beschikbaar %}<option value="ah" {% if uitgang == 'ah' %}selected{% endif %}>Naar je AH-account (bestelling of lijst)</option>{% endif %}
                     <option value="deeplink" {% if uitgang == 'deeplink' %}selected{% endif %}>Open in je AH-lijst op ah.nl (zonder koppeling)</option>
                     <option value="papier" {% if uitgang == 'papier' %}selected{% endif %}>Niet versturen, alleen printen</option>
                 </select>
@@ -156,6 +156,7 @@
         </div>
     </div>
 
+    {% if ah_beschikbaar %}
     <!-- AH Account -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6" id="ah-account">
         <div class="flex items-center justify-between mb-4">
@@ -262,6 +263,7 @@
         </details>
         {% endif %}
     </div>
+    {% endif %}
 
     <!-- Statistieken -->
     <div class="bg-[#F5F2ED] rounded-lg border border-[#E8E4DC] p-6">

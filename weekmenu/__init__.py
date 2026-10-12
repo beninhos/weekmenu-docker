@@ -70,7 +70,8 @@ def create_app():
     # er iets voor hoeft door te geven.
     @app.context_processor
     def _versie_in_template():
-        return {'app_version': __version__}
+        return {'app_version': __version__,
+                'ah_beschikbaar': 'ah' in app.blueprints}
 
     db.init_app(app)
 

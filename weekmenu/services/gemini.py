@@ -258,7 +258,10 @@ def _try_ah_api_recipe(url):
         return None
 
     recipe_id = m.group(1)
-    from weekmenu.services.ah import ah_get_recipe
+    try:
+        from weekmenu.services.ah import ah_get_recipe
+    except ImportError:  # zonder AH-module valt de import terug op de gewone scraper
+        return None
     try:
         recipe = ah_get_recipe(recipe_id)
     except Exception:
